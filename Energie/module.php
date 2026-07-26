@@ -552,8 +552,8 @@ class Energiefluss extends IPSModuleStrict
     /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
-        width: 100%;
-        height: 100%;
+        width: 900px;
+        height: 640px;
         display: __HOUSE_DISPLAY__;
         overflow: hidden;
         box-sizing: border-box;
@@ -564,9 +564,10 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-host {
         position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
+        left: 0;
+        top: 0;
+        width: 900px;
+        height: 640px;
         overflow: hidden;
     }
 
@@ -1626,13 +1627,23 @@ class Energiefluss extends IPSModuleStrict
 
     // ---------- Layout ----------
     let layoutWidth = 540;
-    let layoutMode = 'flow';
-    let layoutShowRightPanel = false;
 
-    function setBaseLayoutWidth(graphWidth, showRightPanel) {
+    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
+
+        let graphWidth = mode === 'house' ? 900 : 540;
+
+        if (mode !== 'house') {
+            const columns = Math.ceil(groupCount / 2);
+
+            if (columns > 0) {
+                graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
+            }
+
+            graphWidth = Math.min(graphWidth, 1080);
+        }
 
         const rightWidth = showRightPanel ? 264 : 0;
         layoutWidth = graphWidth + rightWidth;
@@ -1644,29 +1655,7 @@ class Energiefluss extends IPSModuleStrict
         rootEl.style.width = layoutWidth + 'px';
 
         wrapEl.style.gap = showRightPanel ? '14px' : '0px';
-    }
 
-    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
-        layoutMode = mode;
-        layoutShowRightPanel = showRightPanel;
-
-        if (mode === 'house') {
-            // Die tatsächliche Breite der Hausansicht wird in fit() aus der
-            // jeweils verfügbaren Fenstergröße berechnet. 900 px gibt es hier
-            // bewusst nicht mehr als feste Vorgabe.
-            fit();
-            return;
-        }
-
-        let graphWidth = 540;
-        const columns = Math.ceil(groupCount / 2);
-
-        if (columns > 0) {
-            graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
-        }
-
-        graphWidth = Math.min(graphWidth, 1080);
-        setBaseLayoutWidth(graphWidth, showRightPanel);
         fit();
     }
 
@@ -1870,7 +1859,9 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
+        const baseWidth = layoutWidth;
         const baseHeight = 640;
+
         const availableWidth = host.clientWidth;
         const availableHeight = host.clientHeight;
 
@@ -1878,18 +1869,6 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        if (layoutMode === 'house') {
-            // Hausansicht dynamisch an das aktuelle Seitenverhältnis anpassen.
-            // Dadurch nutzt scale-root nach der proportionalen Skalierung
-            // die gesamte verfügbare Breite UND Höhe.
-            const rightWidth = layoutShowRightPanel ? 264 : 0;
-            const requiredLayoutWidth = baseHeight * (availableWidth / availableHeight);
-            const graphWidth = Math.max(1, requiredLayoutWidth - rightWidth);
-
-            setBaseLayoutWidth(graphWidth, layoutShowRightPanel);
-        }
-
-        const baseWidth = layoutWidth;
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
         const scale = Math.min(scaleX, scaleY);
