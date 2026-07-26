@@ -292,9 +292,30 @@ class Energiefluss extends IPSModuleStrict
         --w-bg: #1b1b19; --w-surface: #272725; --w-text: #f1f1ee;
         --w-text2: #9a9a93; --w-line: #3b3b38; --w-border: #343431;
     }
-    #eflow { border-radius: 12px; padding: 10px; background: var(--w-bg); overflow: hidden; }
-    #scale-host { width: 100%; overflow: hidden; }
-    #scale-root { width: 1344px; height: 640px; transform-origin: 0 0; }
+    html, body { width: 100%; height: 100%; overflow: hidden; }
+    #eflow {
+        width: 100%;
+        height: 100vh;
+        box-sizing: border-box;
+        border-radius: 12px;
+        padding: 10px;
+        background: var(--w-bg);
+        overflow: hidden;
+    }
+    #scale-host {
+        width: 100%;
+        height: 100%;
+        overflow: hidden;
+        position: relative;
+    }
+    #scale-root {
+        width: 1344px;
+        height: 640px;
+        position: absolute;
+        left: 0;
+        top: 0;
+        transform-origin: 0 0;
+    }
     #fit { width: 1080px; flex: 0 0 1080px; overflow: hidden; }
     #stage { position: relative; width: 1080px; height: 640px; }
     #svg { position: absolute; inset: 0; z-index: 1; }
@@ -617,18 +638,34 @@ class Energiefluss extends IPSModuleStrict
 
         const baseWidth = 1344;
         const baseHeight = 640;
-        const availableWidth = host.clientWidth;
 
-        // Nicht über Originalgröße hinaus vergrößern, aber bei kleineren
-        // Kacheln die komplette Darstellung proportional skalieren.
-        const scale = Math.min(1, availableWidth / baseWidth);
+        const availableWidth = host.clientWidth;
+        const availableHeight = host.clientHeight;
+
+        if (availableWidth <= 0 || availableHeight <= 0) return;
+
+        // Sowohl Breite als auch Höhe berücksichtigen.
+        // Der kleinere Faktor bestimmt die Skalierung, damit nichts
+        // horizontal oder vertikal abgeschnitten wird.
+        const scaleX = availableWidth / baseWidth;
+        const scaleY = availableHeight / baseHeight;
+        const scale = Math.min(1, scaleX, scaleY);
 
         root.style.transform = `scale(${scale})`;
-        host.style.height = `${baseHeight * scale}px`;
+
+        // Darstellung innerhalb der verfügbaren Fläche zentrieren.
+        const scaledWidth = baseWidth * scale;
+        const scaledHeight = baseHeight * scale;
+        root.style.left = `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
+        root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
     }
 
-    new ResizeObserver(fit).observe(document.getElementById('scale-host'));
+    const scaleHost = document.getElementById('scale-host');
+    if (scaleHost) {
+        new ResizeObserver(fit).observe(scaleHost);
+    }
     window.addEventListener('resize', fit);
+    window.addEventListener('load', fit);
     fit();
     requestAnimationFrame(frame);
 </script>
