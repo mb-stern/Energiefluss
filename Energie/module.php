@@ -433,6 +433,7 @@ class Energiefluss extends IPSModuleStrict
     #eflow {
         width: 100%;
         height: 100vh;
+        position: relative;
         box-sizing: border-box;
         border-radius: 12px;
         padding: 10px;
@@ -473,7 +474,7 @@ class Energiefluss extends IPSModuleStrict
         top: 6px;
         left: 50%;
         transform: translateX(-50%);
-        z-index: 99999;
+        z-index: 2147483647;
         display: inline-flex;
         gap: 2px;
         padding: 2px;
@@ -481,25 +482,30 @@ class Energiefluss extends IPSModuleStrict
         background: var(--w-surface);
         border: 1px solid var(--w-border);
         box-shadow: 0 1px 6px rgba(0,0,0,.12);
-        pointer-events: auto;
+        pointer-events: auto !important;
+        isolation: isolate;
     }
 
     .view-switch-btn {
+        position: relative;
+        z-index: 1;
         display: block;
         box-sizing: border-box;
         min-width: 0;
         border: 0;
         border-radius: 4px;
-        padding: 4px 7px;
+        padding: 3px 6px;
         margin: 0;
         background: transparent;
         color: var(--w-text2);
         font: inherit;
-        font-size: 11px;
+        font-size: 10px;
         line-height: 1.15;
         cursor: pointer;
-        pointer-events: auto;
+        pointer-events: auto !important;
         touch-action: manipulation;
+        user-select: none;
+        -webkit-user-select: none;
     }
 
     .view-switch-btn.active {
@@ -786,15 +792,15 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="eflow">
+    <div id="view-switch">
+        <button id="view-flow" class="view-switch-btn" type="button" onclick="switchDisplayMode(\'flow\'); return false;">Energiefluss</button>
+        <button id="view-house" class="view-switch-btn" type="button" onclick="switchDisplayMode(\'house\'); return false;">Haus</button>
+    </div>
+
     <div id="scale-host">
         <div id="scale-root">
             <div id="wrap">
                 <div id="fit">
-
-                    <div id="view-switch">
-                        <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
-                        <button id="view-house" class="view-switch-btn" type="button">Haus</button>
-                    </div>
 
                     <!-- Klassische Energieflussansicht -->
                     <div id="stage">
@@ -1908,21 +1914,6 @@ class Energiefluss extends IPSModuleStrict
         }
 
         setState(d);
-    }
-
-    const viewFlowButton = document.getElementById('view-flow');
-    const viewHouseButton = document.getElementById('view-house');
-
-    if (viewFlowButton) {
-        viewFlowButton.addEventListener('click', function () {
-            switchDisplayMode('flow');
-        });
-    }
-
-    if (viewHouseButton) {
-        viewHouseButton.addEventListener('click', function () {
-            switchDisplayMode('house');
-        });
     }
 
     // Wie im Sankey zusätzlich den Message-Kanal anbinden.
