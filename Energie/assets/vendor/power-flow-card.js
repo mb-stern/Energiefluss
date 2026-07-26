@@ -42,25 +42,27 @@ class PowerFlowCard extends LitElement {
         container: "battery",
         pathKey: "battery",
       },
+
+      // Symcon-Anpassung:
+      // Die frühere Grid-Import-Leitung ("primary") wird jetzt
+      // direkt als Wallbox-Leitung verwendet.
       {
         id: "ev",
         type: "ev",
         entity_key: "ev_charge_power",
         reverse: false,
-        container: "ev",
-      },
-      {
-        id: "grid-import",
-        type: "grid-import",
-        entity_key: "grid_import_power",
-        reverse: true,
         container: "primary",
         pathKey: "primary",
       },
+
+      // Symcon-Anpassung:
+      // Nur noch EINE Netzleitung. Der frühere Export-Pfad wird für
+      // Bezug und Einspeisung verwendet. Farbe und Richtung werden
+      // in updateFlow() dynamisch geändert.
       {
-        id: "grid-export",
-        type: "grid-export",
-        entity_key: "grid_export_power",
+        id: "grid",
+        type: "grid-flow",
+        entity_key: "grid_import_power",
         reverse: false,
         container: "out",
         pathKey: "out",
@@ -90,7 +92,6 @@ class PowerFlowCard extends LitElement {
       bg: this.shadowRoot.getElementById("svg-container-bg"),
       solar: this.shadowRoot.getElementById("svg-container-solar"),
       battery: this.shadowRoot.getElementById("svg-container-battery"),
-      ev: this.shadowRoot.getElementById("svg-container-ev"),
       primary: this.shadowRoot.getElementById("svg-container-primary"),
       out: this.shadowRoot.getElementById("svg-container-out"),
     };
@@ -160,7 +161,18 @@ class PowerFlowCard extends LitElement {
       }
 
       if (isBackground) {
-        containerEl.innerHTML = text;
+        // Symcon-Anpassung:
+        // Nur die bisherige feste Wallbox-/Garagenleitung aus dem
+        // Hintergrund entfernen. Alle anderen Original-Leitungen bleiben.
+        const parser = new DOMParser();
+        const doc = parser.parseFromString(text, "image/svg+xml");
+
+        const oldWallboxLine = doc.querySelector("#powerline-house");
+        if (oldWallboxLine) {
+          oldWallboxLine.remove();
+        }
+
+        containerEl.innerHTML = doc.documentElement.outerHTML;
       } else {
         this.processSVGString(text, containerEl, lineType);
       }
@@ -240,6 +252,47 @@ class PowerFlowCard extends LitElement {
             batteryLines.forEach((line) => {
               line.classList.remove("bat-discharge");
               line.classList.add("bat-charge");
+            });
+          }
+        } else if (cfg.type === "grid-flow") {
+          const importEntity = this.config.entities["grid_import_power"];
+          const exportEntity = this.config.entities["grid_export_power"];
+
+          const importState = importEntity ? this._hass.states[importEntity] : null;
+          const exportState = exportEntity ? this._hass.states[exportEntity] : null;
+
+          const importValue = importState ? parseFloat(importState.state) : 0;
+          const exportValue = exportState ? parseFloat(exportState.state) : 0;
+
+          const gridLines = container.querySelectorAll(".anim-line");
+
+          if (importValue > 0) {
+            value = importValue;
+
+            // Der "out"-Pfad ist geometrisch Haus -> Netz.
+            // Für Netzbezug muss die Animation daher rückwärts laufen.
+            reverse = true;
+
+            gridLines.forEach((line) => {
+              line.classList.remove("grid-export");
+              line.classList.add("grid-import");
+            });
+          } else if (exportValue > 0) {
+            value = exportValue;
+            reverse = false;
+
+            gridLines.forEach((line) => {
+              line.classList.remove("grid-import");
+              line.classList.add("grid-export");
+            });
+          } else {
+            value = 0;
+
+            // Bei 0 W neutral auf Exportklasse zurücksetzen;
+            // flow-off blendet die Linie ohnehin aus.
+            gridLines.forEach((line) => {
+              line.classList.remove("grid-import");
+              line.classList.add("grid-export");
             });
           }
         } else {
@@ -485,6 +538,11 @@ class PowerFlowCard extends LitElement {
         opacity: 0.5;
       }
 
+      /* Nur die alte feste Wallbox-/Garagenleitung ausblenden. */
+      #svg-container-bg #powerline-house {
+        display: none !important;
+      }
+
       #descriptor-overlay {
         position: absolute;
         inset: 0;
@@ -622,7 +680,6 @@ class PowerFlowCard extends LitElement {
           <div id="svg-container-bg"></div>
           <div id="svg-container-solar"></div>
           <div id="svg-container-battery"></div>
-          <div id="svg-container-ev"></div>
           <div id="svg-container-primary"></div>
           <div id="svg-container-out"></div>
           <svg id="descriptor-overlay" viewBox="0 0 1139 756" preserveAspectRatio="xMidYMid meet">
