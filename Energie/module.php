@@ -451,6 +451,8 @@ class Energiefluss extends IPSModuleStrict
     /* Browser-Umschaltung */
     #view-switch {
         position: absolute;
+        pointer-events: auto !important;
+        touch-action: none;
         top: 10px;
         left: 50%;
         transform: translateX(-50%);
@@ -469,6 +471,9 @@ class Energiefluss extends IPSModuleStrict
     .view-switch-btn {
         appearance: none;
         border: 0;
+        touch-action: none;
+        -webkit-user-select: none;
+        user-select: none;
         border-radius: 6px;
         background: transparent;
         color: var(--w-text2);
@@ -1632,12 +1637,41 @@ class Energiefluss extends IPSModuleStrict
     const viewFlowButton = document.getElementById('view-flow');
     const viewHouseButton = document.getElementById('view-house');
 
-    if (viewFlowButton) {
-        viewFlowButton.addEventListener('click', () => setBrowserDisplayMode('flow'));
+    function handleViewSwitchPointer(event) {
+        const target = event.target && event.target.closest
+            ? event.target.closest('#view-flow, #view-house')
+            : null;
+
+        if (!target) {
+            return;
+        }
+
+        // Bereits beim Pointer-Down reagieren. Dadurch kann die umgebende
+        // Symcon-Visualisierung das Ereignis nicht zuerst als Tile-Geste schlucken.
+        event.preventDefault();
+        event.stopPropagation();
+        if (typeof event.stopImmediatePropagation === 'function') {
+            event.stopImmediatePropagation();
+        }
+
+        setBrowserDisplayMode(target.id === 'view-house' ? 'house' : 'flow');
     }
-    if (viewHouseButton) {
-        viewHouseButton.addEventListener('click', () => setBrowserDisplayMode('house'));
-    }
+
+    // Capture = true: vor Bubbling-Handlern der umgebenden Visualisierung reagieren.
+    document.addEventListener('pointerdown', handleViewSwitchPointer, true);
+
+    // Fallback für ältere WebViews ohne Pointer Events.
+    document.addEventListener('touchstart', handleViewSwitchPointer, {
+        capture: true,
+        passive: false
+    });
+
+    document.addEventListener('mousedown', function (event) {
+        if (window.PointerEvent) {
+            return;
+        }
+        handleViewSwitchPointer(event);
+    }, true);
 
     // ---------- Regelung / Statistik ----------
     const CFG = [
