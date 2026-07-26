@@ -651,7 +651,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-info-solar {
-        left: 57%;
+        left: 64%;
         top: 7%;
         border-color: rgba(239,160,32,.36);
     }
@@ -664,14 +664,14 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-battery {
         left: 55%;
-        bottom: 3%;
+        bottom: 9%;
         transform: translateX(-50%);
         border-color: rgba(60,160,255,.36);
     }
 
     #pfc-info-wallbox {
         left: 19%;
-        top: 28%;
+        top: 39%;
         bottom: auto;
         border-color: rgba(34,211,208,.36);
     }
@@ -1241,60 +1241,11 @@ class Energiefluss extends IPSModuleStrict
                     font-size: 19px !important;
                 }
 
-                #svg-container-battery .anim-line.bat-discharge {
-                    stroke: #3ca0ff !important;
-                    color: #3ca0ff !important;
-                }
-
-                #svg-container-battery .anim-line.bat-charge {
-                    stroke: #6fd32f !important;
-                    color: #6fd32f !important;
-                }
             `;
             card.shadowRoot.appendChild(style);
         }
     }
 
-    function applyPfcBatteryFlowColor(batteryTotal) {
-        if (!pfcCard || !pfcCard.shadowRoot) {
-            return;
-        }
-
-        const batteryContainer =
-            pfcCard.shadowRoot.getElementById('svg-container-battery');
-
-        if (!batteryContainer) {
-            return;
-        }
-
-        const isDischarge = batteryTotal > 0;
-        const isCharge = batteryTotal < 0;
-        const color = isDischarge ? AC.discharge : AC.charge;
-
-        batteryContainer
-            .querySelectorAll('.anim-line')
-            .forEach(line => {
-                // Die Upstream-Karte lädt den Batteriepfad grundsätzlich
-                // als "bat-charge". Für Symcon schalten wir die Klasse passend
-                // zur tatsächlichen Flussrichtung explizit um.
-                line.classList.toggle('bat-discharge', isDischarge);
-                line.classList.toggle('bat-charge', !isDischarge);
-
-                // Zusätzlich direkt setzen, damit auch ältere/local gepatchte
-                // Versionen der Power-Flow-Card sicher die richtige Farbe nutzen.
-                line.style.setProperty('stroke', color, 'important');
-                line.style.setProperty('color', color, 'important');
-            });
-
-        batteryContainer.style.setProperty(
-            '--pfc-battery-charge-color',
-            AC.charge
-        );
-        batteryContainer.style.setProperty(
-            '--pfc-battery-discharge-color',
-            AC.discharge
-        );
-    }
 
     function applyPfcOptionalLayers(d, batteries, wallbox) {
         if (!pfcCard || !pfcCard.shadowRoot) {
@@ -1572,7 +1523,6 @@ class Energiefluss extends IPSModuleStrict
 
         installPfcShadowOverrides(pfcCard);
         applyPfcOptionalLayers(d, batteries, wallbox);
-        applyPfcBatteryFlowColor(batteryTotal);
 
         // Upstream updateFlow() wird bereits vom hass-Setter ausgelöst.
         // Für den Fall eines noch laufenden Initialisierungszyklus nochmals
@@ -1581,8 +1531,7 @@ class Energiefluss extends IPSModuleStrict
             if (pfcCard && pfcCard.isInitialized && typeof pfcCard.updateFlow === 'function') {
                 pfcCard.updateFlow();
                 applyPfcOptionalLayers(d, batteries, wallbox);
-                applyPfcBatteryFlowColor(batteryTotal);
-            }
+                    }
         });
     }
 
