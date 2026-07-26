@@ -1942,6 +1942,19 @@ class Energiefluss extends IPSModuleStrict
         }
 
         const rootRect = eflowRoot.getBoundingClientRect();
+        const rootStyle = getComputedStyle(eflowRoot);
+
+        // Absolute Kinder von #eflow werden relativ zur Padding-Kante positioniert.
+        // Deshalb müssen Border + Padding aus den Viewport-Koordinaten abgezogen werden.
+        const originLeft =
+            rootRect.left +
+            (parseFloat(rootStyle.borderLeftWidth) || 0) +
+            (parseFloat(rootStyle.paddingLeft) || 0);
+
+        const originTop =
+            rootRect.top +
+            (parseFloat(rootStyle.borderTopWidth) || 0) +
+            (parseFloat(rootStyle.paddingTop) || 0);
 
         [
             [viewFlowButton, viewFlowHit],
@@ -1956,8 +1969,8 @@ class Energiefluss extends IPSModuleStrict
 
             const rect = visible.getBoundingClientRect();
 
-            hit.style.left = (rect.left - rootRect.left) + 'px';
-            hit.style.top = (rect.top - rootRect.top) + 'px';
+            hit.style.left = (rect.left - originLeft) + 'px';
+            hit.style.top = (rect.top - originTop) + 'px';
             hit.style.width = rect.width + 'px';
             hit.style.height = rect.height + 'px';
         });
