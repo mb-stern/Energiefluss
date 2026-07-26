@@ -180,7 +180,7 @@ class Energiefluss extends IPSModuleStrict
                 [
                     'type'    => 'Button',
                     'caption' => 'Werte jetzt aktualisieren',
-                    'onClick' => 'SFV_Refresh($id);',
+                    'onClick' => 'ENERGIE_Refresh($id);',
                 ],
             ],
             'status' => [],
