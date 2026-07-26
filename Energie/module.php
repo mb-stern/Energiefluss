@@ -433,6 +433,7 @@ class Energiefluss extends IPSModuleStrict
     #eflow {
         width: 100%;
         height: 100vh;
+        position: relative;
         box-sizing: border-box;
         border-radius: 12px;
         padding: 10px;
@@ -470,36 +471,28 @@ class Energiefluss extends IPSModuleStrict
 
     #view-switch {
         position: absolute;
-        top: 6px;
+        top: 8px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 99999;
-        display: inline-flex;
-        gap: 2px;
-        padding: 2px;
-        border-radius: 6px;
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 8px;
         background: var(--w-surface);
         border: 1px solid var(--w-border);
-        box-shadow: 0 1px 6px rgba(0,0,0,.12);
-        pointer-events: auto;
+        box-shadow: 0 2px 10px rgba(0,0,0,.15);
     }
 
     .view-switch-btn {
-        display: block;
-        box-sizing: border-box;
-        min-width: 0;
         border: 0;
-        border-radius: 4px;
-        padding: 4px 7px;
-        margin: 0;
+        border-radius: 6px;
+        padding: 6px 10px;
         background: transparent;
         color: var(--w-text2);
         font: inherit;
-        font-size: 11px;
-        line-height: 1.15;
+        font-size: 12px;
         cursor: pointer;
-        pointer-events: auto;
-        touch-action: manipulation;
     }
 
     .view-switch-btn.active {
@@ -507,8 +500,30 @@ class Energiefluss extends IPSModuleStrict
         color: var(--w-surface);
     }
 
-    .view-switch-btn * {
+    /* Die sichtbaren Buttons bleiben unverändert, die eigentliche Mausfläche
+       liegt unskaliert darüber. Das umgeht die fehlerhafte Hitbox bei transform:scale(). */
+    #view-switch,
+    #view-switch .view-switch-btn {
         pointer-events: none;
+    }
+
+    #view-switch-hit {
+        position: absolute;
+        inset: 0;
+        z-index: 2147483647;
+        pointer-events: none;
+    }
+
+    .view-switch-hit-btn {
+        position: absolute;
+        margin: 0;
+        padding: 0;
+        border: 0;
+        background: transparent;
+        cursor: pointer;
+        pointer-events: auto;
+        appearance: none;
+        -webkit-appearance: none;
     }
 
     /* Klassische Ansicht */
@@ -786,14 +801,19 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="eflow">
+    <div id="view-switch-hit" aria-hidden="true">
+        <button id="view-flow-hit" class="view-switch-hit-btn" type="button" tabindex="-1"></button>
+        <button id="view-house-hit" class="view-switch-hit-btn" type="button" tabindex="-1"></button>
+    </div>
+
     <div id="scale-host">
         <div id="scale-root">
             <div id="wrap">
                 <div id="fit">
 
                     <div id="view-switch">
-                        <button id="view-flow" class="view-switch-btn" type="button" onclick="switchDisplayMode('flow'); return false;">Energiefluss</button>
-                        <button id="view-house" class="view-switch-btn" type="button" onclick="switchDisplayMode('house'); return false;">Haus</button>
+                        <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
+                        <button id="view-house" class="view-switch-btn" type="button">Haus</button>
                     </div>
 
                     <!-- Klassische Energieflussansicht -->
@@ -1912,15 +1932,49 @@ class Energiefluss extends IPSModuleStrict
 
     const viewFlowButton = document.getElementById('view-flow');
     const viewHouseButton = document.getElementById('view-house');
+    const viewFlowHit = document.getElementById('view-flow-hit');
+    const viewHouseHit = document.getElementById('view-house-hit');
+    const eflowRoot = document.getElementById('eflow');
 
-    if (viewFlowButton) {
-        viewFlowButton.addEventListener('click', function () {
+    function syncViewSwitchHitboxes() {
+        if (!eflowRoot) {
+            return;
+        }
+
+        const rootRect = eflowRoot.getBoundingClientRect();
+
+        [
+            [viewFlowButton, viewFlowHit],
+            [viewHouseButton, viewHouseHit]
+        ].forEach(function(pair) {
+            const visible = pair[0];
+            const hit = pair[1];
+
+            if (!visible || !hit) {
+                return;
+            }
+
+            const rect = visible.getBoundingClientRect();
+
+            hit.style.left = (rect.left - rootRect.left) + 'px';
+            hit.style.top = (rect.top - rootRect.top) + 'px';
+            hit.style.width = rect.width + 'px';
+            hit.style.height = rect.height + 'px';
+        });
+    }
+
+    if (viewFlowHit) {
+        viewFlowHit.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
             switchDisplayMode('flow');
         });
     }
 
-    if (viewHouseButton) {
-        viewHouseButton.addEventListener('click', function () {
+    if (viewHouseHit) {
+        viewHouseHit.addEventListener('click', function(event) {
+            event.preventDefault();
+            event.stopPropagation();
             switchDisplayMode('house');
         });
     }
@@ -2011,6 +2065,8 @@ class Energiefluss extends IPSModuleStrict
 
         root.style.left = `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
         root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
+
+        requestAnimationFrame(syncViewSwitchHitboxes);
     }
 
     const scaleHost = document.getElementById('scale-host');
@@ -2022,6 +2078,7 @@ class Energiefluss extends IPSModuleStrict
     window.addEventListener('load', fit);
 
     fit();
+    requestAnimationFrame(syncViewSwitchHitboxes);
     requestAnimationFrame(frame);
 </script>
 </body>
