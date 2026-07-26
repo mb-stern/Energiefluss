@@ -447,6 +447,36 @@ class Energiefluss extends IPSModuleStrict
         position: relative;
     }
 
+    #view-switch {
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 20;
+        display: flex;
+        gap: 3px;
+        padding: 3px;
+        border: 0.5px solid var(--w-border);
+        border-radius: 9px;
+        background: color-mix(in srgb, var(--w-surface) 92%, transparent);
+        box-shadow: 0 2px 10px rgba(0,0,0,.10);
+    }
+    .view-switch-btn {
+        border: 0;
+        border-radius: 6px;
+        padding: 5px 10px;
+        background: transparent;
+        color: var(--w-text2);
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+    .view-switch-btn.active {
+        background: var(--w-text);
+        color: var(--w-surface);
+    }
+
     /* Klassische Ansicht */
     #stage {
         position: relative;
@@ -724,6 +754,10 @@ class Energiefluss extends IPSModuleStrict
         <div id="scale-root">
             <div id="wrap">
                 <div id="fit">
+                    <div id="view-switch">
+                        <button id="view-flow" class="view-switch-btn" type="button" onclick="setBrowserDisplayMode('flow')">Energiefluss</button>
+                        <button id="view-house" class="view-switch-btn" type="button" onclick="setBrowserDisplayMode('house')">Haus</button>
+                    </div>
 
                     <!-- Klassische Energieflussansicht -->
                     <div id="stage">
@@ -932,10 +966,10 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function clearDynamicSources() {
-        document.querySelectorAll('.pv-node, .battery-node').forEach(e => e.remove());
+        document.querySelectorAll('.pv-node, .battery-node, .wallbox-node').forEach(e => e.remove());
 
         Object.keys(lineEl)
-            .filter(k => k.startsWith('pv') || k.startsWith('bat'))
+            .filter(k => k.startsWith('pv') || k.startsWith('bat') || k === 'wallbox')
             .forEach(k => {
                 lineEl[k].remove();
                 dotEl[k].forEach(d => d.remove());
@@ -1009,6 +1043,36 @@ class Energiefluss extends IPSModuleStrict
                 batColor
             );
         });
+    }
+
+    function buildWallbox(wallbox, hasWallbox) {
+        if (!hasWallbox) {
+            return;
+        }
+
+        const p = { x: 530, y: 350, r: 38 };
+
+        addNode(
+            'wallbox',
+            {
+                x: p.x,
+                y: p.y,
+                r: p.r,
+                ic: 'charging-station',
+                icc: AC.wallbox,
+                lab: wallbox.name || 'Wallbox',
+                lp: 'bot'
+            },
+            'wallbox-node'
+        );
+
+        document.getElementById('body-wallbox').innerHTML =
+            `<div class="val" style="color:${AC.wallbox}">${fmt(Math.max(wallbox.value || 0, 0))}</div>` +
+            (wallbox.energy
+                ? `<div class="sub" style="font-size:10px;line-height:1.25;">${wallbox.energy}</div>`
+                : '');
+
+        addEdge('wallbox', `M412,350 L${p.x - p.r},350`, AC.wallbox);
     }
 
     function buildGroups(list) {
@@ -1548,10 +1612,34 @@ class Energiefluss extends IPSModuleStrict
         updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
+    let browserDisplayMode = null;
+    let lastLayoutState = { groups: 0, pvs: 0, batteries: 0, showRightPanel: false, hasWallbox: false };
+
     function applyDisplayMode(mode) {
-        const house = mode === 'house';
+        const normalized = mode === 'house' ? 'house' : 'flow';
+        const house = normalized === 'house';
+
         if (stage) stage.style.display = house ? 'none' : 'block';
         if (houseStage) houseStage.style.display = house ? 'block' : 'none';
+
+        const flowButton = document.getElementById('view-flow');
+        const houseButton = document.getElementById('view-house');
+        if (flowButton) flowButton.classList.toggle('active', !house);
+        if (houseButton) houseButton.classList.toggle('active', house);
+    }
+
+    function setBrowserDisplayMode(mode) {
+        browserDisplayMode = mode === 'house' ? 'house' : 'flow';
+        applyDisplayMode(browserDisplayMode);
+
+        updateLayout(
+            lastLayoutState.groups,
+            lastLayoutState.pvs,
+            lastLayoutState.batteries,
+            lastLayoutState.showRightPanel,
+            browserDisplayMode,
+            lastLayoutState.hasWallbox
+        );
     }
 
     // ---------- Regelung / Statistik ----------
@@ -1628,7 +1716,7 @@ class Energiefluss extends IPSModuleStrict
     // ---------- Layout ----------
     let layoutWidth = 540;
 
-    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
+    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow', hasWallbox = false) {
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
@@ -1640,6 +1728,10 @@ class Energiefluss extends IPSModuleStrict
 
             if (columns > 0) {
                 graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
+            }
+
+            if (hasWallbox) {
+                graphWidth = Math.max(graphWidth, 590);
             }
 
             graphWidth = Math.min(graphWidth, 1080);
@@ -1680,6 +1772,7 @@ class Energiefluss extends IPSModuleStrict
         buildPVs(pvs);
         buildBatteries(batteries);
         buildGroups(groups);
+        buildWallbox(wallbox, !!d.hasWallbox);
 
         const gridColor = grid >= 0 ? AC.import : AC.export;
         const gridNode = document.getElementById('n-netz');
@@ -1741,6 +1834,10 @@ class Energiefluss extends IPSModuleStrict
             edgeState['grp' + i] = { w: g.value || 0, rev: false };
         });
 
+        if (d.hasWallbox) {
+            edgeState.wallbox = { w: Math.max(wallbox.value || 0, 0), rev: false };
+        }
+
         for (const k in lineEl) {
             const on = edgeState[k] && edgeState[k].w > 0;
             if (dotEl[k]) {
@@ -1750,7 +1847,11 @@ class Energiefluss extends IPSModuleStrict
 
         // Hausansicht V2.
         buildHouseView(d, grid, haus, pvs, batteries, wallbox);
-        applyDisplayMode(d.displayMode || 'flow');
+
+        if (browserDisplayMode === null) {
+            browserDisplayMode = (d.displayMode || 'flow') === 'house' ? 'house' : 'flow';
+        }
+        applyDisplayMode(browserDisplayMode);
 
         // Statistik.
         const stats = d.stats || [];
@@ -1779,12 +1880,21 @@ class Energiefluss extends IPSModuleStrict
         const showRightPanel = !!(stats.length || hasCfg);
         document.getElementById('cfg').style.display = showRightPanel ? '' : 'none';
 
+        lastLayoutState = {
+            groups: groups.length,
+            pvs: pvs.length,
+            batteries: batteries.length,
+            showRightPanel: showRightPanel,
+            hasWallbox: !!d.hasWallbox
+        };
+
         updateLayout(
             groups.length,
             pvs.length,
             batteries.length,
             showRightPanel,
-            (d.displayMode || 'flow') === 'house' ? 'house' : 'flow'
+            browserDisplayMode,
+            !!d.hasWallbox
         );
     }
 
