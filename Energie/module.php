@@ -1,5 +1,18 @@
 <?php
 
+/*
+ * Zweite Visualisierungsansicht integriert die Open-Source-Karte:
+ * LordGuenni/power-flow-card
+ * https://github.com/LordGuenni/power-flow-card
+ *
+ * Autor: Florian Stamer
+ * Lizenz: MIT (laut package.json des Projekts)
+ *
+ * Die Home-Assistant-Datenanbindung wird hier nicht verwendet.
+ * Stattdessen erzeugt das IP-Symcon-Modul ein kompatibles State-Objekt
+ * aus seinem bestehenden BuildPayload().
+ */
+
 declare(strict_types=1);
 
 class Energiefluss extends IPSModuleStrict
@@ -531,139 +544,99 @@ class Energiefluss extends IPSModuleStrict
         font-family: inherit;
     }
 
-    /* Hausansicht – vollständig selbsttragendes SVG */
+    /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
         width: 900px;
         height: 640px;
         display: __HOUSE_DISPLAY__;
         overflow: hidden;
-        border-radius: 18px;
         box-sizing: border-box;
+        border-radius: 18px;
         border: 1px solid #263443;
         background: #111827;
     }
 
-    #house-svg {
+    #pfc-host {
         position: absolute;
-        inset: 0;
+        left: 0;
+        top: 0;
         width: 900px;
         height: 640px;
-        overflow: visible;
+        overflow: hidden;
     }
 
-    #house-svg .house-shape {
-        fill: #17202c;
-        stroke: #4b5563;
-        stroke-width: 4;
-        stroke-linejoin: round;
+    #pfc-host power-flow-card {
+        display: block;
+        width: 100%;
+        height: 100%;
+        --primary-text-color: #f3f4f6;
+        --secondary-text-color: #9ca3af;
+        --card-background-color: transparent;
+        --ha-card-background: transparent;
+        --energy-solar-color: #EFA020;
+        --energy-grid-consumption-color: #ff4d43;
+        --energy-grid-return-color: #6fd32f;
+        --energy-battery-charge-color: #6fd32f;
+        --energy-battery-discharge-color: #3ca0ff;
+        --energy-car-color: #22d3d0;
     }
 
-    #house-svg .roof-shape {
-        fill: #1f2937;
-        stroke: #5f6b7a;
-        stroke-width: 4;
-        stroke-linejoin: round;
+    #pfc-loading,
+    #pfc-error {
+        position: absolute;
+        inset: 0;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        color: #9ca3af;
+        font-size: 13px;
+        z-index: 5;
+        pointer-events: none;
     }
 
-    #house-svg .garage-shape {
-        fill: #141c27;
-        stroke: #4b5563;
-        stroke-width: 4;
-        stroke-linejoin: round;
+    #pfc-error {
+        display: none;
+        color: #ff6b6b;
+        padding: 30px;
+        text-align: center;
+        box-sizing: border-box;
     }
 
-    #house-svg .window {
-        fill: #243447;
-        stroke: #64748b;
-        stroke-width: 2;
+    #pfc-pv-details {
+        position: absolute;
+        left: 12px;
+        bottom: 12px;
+        z-index: 8;
+        display: flex;
+        gap: 6px;
+        flex-wrap: wrap;
+        max-width: 70%;
+        pointer-events: none;
     }
 
-    #house-svg .panel {
-        fill: #13283f;
-        stroke: #8394aa;
-        stroke-width: 1.6;
+    .pfc-pv-chip {
+        padding: 5px 8px;
+        border-radius: 8px;
+        border: 1px solid rgba(239,160,32,.35);
+        background: rgba(8,13,20,.80);
+        color: #e5e7eb;
+        font-size: 9px;
+        line-height: 1.25;
+        box-shadow: 0 4px 14px rgba(0,0,0,.18);
     }
 
-    #house-svg .panel-line {
-        stroke: #657b95;
-        stroke-width: 1;
-        opacity: .85;
-    }
-
-    #house-svg .device {
-        fill: #1f2937;
-        stroke: #64748b;
-        stroke-width: 2.5;
-    }
-
-    #house-svg .device-light {
-        fill: #dce3e9;
-        stroke: #8492a0;
-        stroke-width: 2.5;
-    }
-
-    #house-svg .base-path {
-        fill: none;
-        stroke: #3b4654;
-        stroke-width: 4;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-        opacity: .7;
-    }
-
-    #house-svg .flow-path {
-        fill: none;
-        stroke-width: 5;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-        opacity: .98;
-        filter: drop-shadow(0 0 3px currentColor);
-    }
-
-    #house-svg .node-box {
-        fill: rgba(15, 23, 34, .94);
-        stroke-width: 1.5;
-    }
-
-    #house-svg .node-title {
-        fill: #9ca3af;
-        font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        font-size: 12px;
-        font-weight: 600;
-    }
-
-    #house-svg .node-value {
-        fill: #fff;
-        font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        font-size: 20px;
+    .pfc-pv-chip b {
+        color: #EFA020;
+        font-size: 10px;
         font-weight: 700;
     }
 
-    #house-svg .node-detail {
-        fill: #9ca3af;
-        font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        font-size: 10px;
-    }
-
-    #house-svg .device-label {
-        fill: #aeb8c3;
-        font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-        font-size: 10px;
-        font-weight: 600;
-        text-anchor: middle;
-    }
-
-    .c-solar { fill: #EFA020 !important; color: #EFA020 !important; }
-    .c-import { fill: #ff4d43 !important; color: #ff4d43 !important; }
-    .c-export { fill: #6fd32f !important; color: #6fd32f !important; }
-    .c-discharge { fill: #3ca0ff !important; color: #3ca0ff !important; }
-    .c-charge { fill: #6fd32f !important; color: #6fd32f !important; }
-    .c-wallbox { fill: #22d3d0 !important; color: #22d3d0 !important; }
-    .c-home { fill: #4d9fff !important; color: #4d9fff !important; }
-
 </style>
 <script src="/icons.js"></script>
+<script type="module"
+        src="https://cdn.jsdelivr.net/gh/LordGuenni/power-flow-card@master/power-flow-card.js">
+</script>
 
 <div id="eflow">
     <div id="scale-host">
@@ -680,144 +653,12 @@ class Energiefluss extends IPSModuleStrict
                         </svg>
                     </div>
 
-                    <!-- Hausansicht: vollständig selbsttragendes SVG -->
+                    <!-- Hausansicht: originale LordGuenni Power Flow Card -->
                     <div id="house-stage">
-                        <svg id="house-svg" viewBox="0 0 900 640" aria-hidden="true">
-                            <!-- Gebäude -->
-                            <g id="house-background">
-                                <path class="house-shape"
-                                      d="M270 260 L450 125 L650 260 L650 500 L270 500 Z"></path>
-                                <path class="roof-shape"
-                                      d="M235 270 L440 95 L470 95 L685 270 L648 290 L455 150 L275 290 Z"></path>
-
-                                <!-- Carport/Garage links -->
-                                <path class="garage-shape"
-                                      d="M80 350 L270 260 L310 295 L310 500 L80 500 Z"></path>
-                                <path class="roof-shape"
-                                      d="M60 350 L245 245 L310 295 L285 315 L242 285 L85 375 Z"></path>
-
-                                <!-- Fenster/Tür -->
-                                <rect class="window" x="505" y="300" width="72" height="88" rx="3"></rect>
-                                <line x1="541" y1="300" x2="541" y2="388" stroke="#64748b" stroke-width="1.5"></line>
-                                <rect class="window" x="590" y="322" width="38" height="178" rx="3"></rect>
-
-                                <!-- PV Hausdach -->
-                                <g id="house-pv-panels">
-                                    <polygon class="panel" points="360,150 420,150 451,190 387,190"></polygon>
-                                    <polygon class="panel" points="425,150 485,150 519,190 455,190"></polygon>
-                                    <polygon class="panel" points="490,150 550,150 586,190 523,190"></polygon>
-                                    <polygon class="panel" points="387,194 451,194 482,234 414,234"></polygon>
-                                    <polygon class="panel" points="455,194 519,194 553,234 486,234"></polygon>
-                                    <polygon class="panel" points="523,194 586,194 622,234 557,234"></polygon>
-                                </g>
-
-                                <!-- PV Carport -->
-                                <g id="carport-pv-panels">
-                                    <polygon class="panel" points="105,318 150,294 190,316 145,340"></polygon>
-                                    <polygon class="panel" points="154,292 199,268 239,290 194,314"></polygon>
-                                    <polygon class="panel" points="149,343 194,319 234,341 189,365"></polygon>
-                                    <polygon class="panel" points="198,317 243,293 283,315 238,339"></polygon>
-                                </g>
-
-                                <!-- Smartmeter: zentraler Verteiler -->
-                                <g id="smartmeter-object">
-                                    <rect class="device-light" x="407" y="327" width="86" height="105" rx="10"></rect>
-                                    <rect class="device" x="426" y="352" width="48" height="34" rx="5"></rect>
-                                    <circle cx="438" cy="369" r="4" fill="#6fd32f"></circle>
-                                    <circle cx="461" cy="369" r="4" fill="#3ca0ff"></circle>
-                                    <text x="450" y="448" class="device-label">Smartmeter</text>
-                                </g>
-
-                                <!-- Batterie -->
-                                <g id="battery-object">
-                                    <rect class="device-light" x="322" y="412" width="62" height="116" rx="8"></rect>
-                                    <line x1="332" y1="448" x2="374" y2="448" stroke="#9aa6b2" stroke-width="2"></line>
-                                    <line x1="332" y1="482" x2="374" y2="482" stroke="#9aa6b2" stroke-width="2"></line>
-                                    <text x="353" y="545" class="device-label">Batterie</text>
-                                </g>
-
-                                <!-- Wallbox -->
-                                <g id="wallbox-object">
-                                    <rect class="device-light" x="126" y="404" width="48" height="66" rx="8"></rect>
-                                    <path d="M151 413 L139 435 H148 L144 456 L164 428 H154 L162 413 Z"
-                                          fill="#22d3d0"></path>
-                                    <text x="150" y="486" class="device-label">Wallbox</text>
-                                </g>
-
-                                <!-- Netzsymbol -->
-                                <g id="grid-object">
-                                    <path d="M760 255 L790 410 M820 255 L790 410"
-                                          fill="none" stroke="#8793a0" stroke-width="3"></path>
-                                    <line x1="772" y1="315" x2="808" y2="315" stroke="#8793a0" stroke-width="3"></line>
-                                    <line x1="765" y1="350" x2="815" y2="350" stroke="#8793a0" stroke-width="3"></line>
-                                    <line x1="750" y1="410" x2="830" y2="410" stroke="#8793a0" stroke-width="3"></line>
-                                    <text x="790" y="430" class="device-label">Netz</text>
-                                </g>
-                            </g>
-
-                            <!-- Feste Grundverbindungen. Smartmeter = zentraler Knoten. -->
-                            <g id="house-base-lines">
-                                <path id="base-pv1" class="base-path"
-                                      d="M450 327 L450 240"></path>
-                                <path id="base-pv2" class="base-path"
-                                      d="M407 375 L260 375 L260 350 L210 350"></path>
-                                <path id="base-home" class="base-path"
-                                      d="M493 375 L570 375"></path>
-                                <path id="base-battery" class="base-path"
-                                      d="M425 432 L384 470"></path>
-                                <path id="base-grid" class="base-path"
-                                      d="M493 405 L690 405 L690 455 L790 455"></path>
-                                <path id="base-wallbox" class="base-path"
-                                      d="M407 405 L260 405 L260 437 L174 437"></path>
-                            </g>
-
-                            <!-- Dynamische farbige Leitungen und Punkte -->
-                            <g id="house-flow-lines"></g>
-                            <g id="house-flow-dots"></g>
-
-                            <!-- Werte -->
-                            <g id="node-pv1" transform="translate(350 38)">
-                                <rect class="node-box" width="150" height="66" rx="9" stroke="#EFA020"></rect>
-                                <text id="svg-pv1-name" x="12" y="20" class="node-title">PV Dach</text>
-                                <text id="svg-pv1-value" x="12" y="45" class="node-value c-solar">0 W</text>
-                                <text id="svg-pv1-energy" x="12" y="59" class="node-detail"></text>
-                            </g>
-
-                            <g id="node-pv2" transform="translate(68 260)">
-                                <rect class="node-box" width="145" height="66" rx="9" stroke="#EFA020"></rect>
-                                <text id="svg-pv2-name" x="12" y="20" class="node-title">PV Carport</text>
-                                <text id="svg-pv2-value" x="12" y="45" class="node-value c-solar">0 W</text>
-                                <text id="svg-pv2-energy" x="12" y="59" class="node-detail"></text>
-                            </g>
-
-                            <g id="node-home" transform="translate(555 315)">
-                                <rect class="node-box" width="150" height="62" rx="9" stroke="#4d9fff"></rect>
-                                <text x="12" y="20" class="node-title">Hausverbrauch</text>
-                                <text id="svg-home-value" x="12" y="46" class="node-value c-home">0 W</text>
-                            </g>
-
-                            <g id="node-battery" transform="translate(250 500)">
-                                <rect class="node-box" width="155" height="74" rx="9" stroke="#3ca0ff"></rect>
-                                <text id="svg-battery-name" x="12" y="20" class="node-title">Batterie</text>
-                                <text id="svg-battery-value" x="12" y="45" class="node-value c-discharge">0 W</text>
-                                <text id="svg-battery-detail" x="12" y="62" class="node-detail"></text>
-                            </g>
-
-                            <g id="node-grid" transform="translate(735 458)">
-                                <rect class="node-box" width="150" height="86" rx="9" stroke="#ff4d43"></rect>
-                                <text x="12" y="20" class="node-title">Netz</text>
-                                <text id="svg-grid-value" x="12" y="45" class="node-value c-import">0 W</text>
-                                <text id="svg-grid-mode" x="12" y="61" class="node-detail"></text>
-                                <text id="svg-grid-energy" x="12" y="76" class="node-detail"></text>
-                            </g>
-
-                            <g id="node-wallbox" transform="translate(52 495)">
-                                <rect class="node-box" width="150" height="72" rx="9" stroke="#22d3d0"></rect>
-                                <text id="svg-wallbox-name" x="12" y="20" class="node-title">Wallbox</text>
-                                <text id="svg-wallbox-value" x="12" y="45" class="node-value c-wallbox">0 W</text>
-                                <text id="svg-wallbox-energy" x="12" y="62" class="node-detail"></text>
-                            </g>
-                        </svg>
+                        <div id="pfc-host"></div>
+                        <div id="pfc-loading">Power Flow Card wird geladen …</div>
+                        <div id="pfc-error"></div>
+                        <div id="pfc-pv-details"></div>
                     </div>
                 </div>
 
@@ -1148,207 +989,310 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
-    // ---------- Hausansicht V2 ----------
+    // ---------- Hausansicht: Adapter für LordGuenni/power-flow-card ----------
     const houseStage = document.getElementById('house-stage');
-    const houseFlowLines = document.getElementById('house-flow-lines');
-    const houseFlowDots = document.getElementById('house-flow-dots');
+    const pfcHost = document.getElementById('pfc-host');
+    const pfcLoading = document.getElementById('pfc-loading');
+    const pfcError = document.getElementById('pfc-error');
+    const pfcPvDetails = document.getElementById('pfc-pv-details');
 
-    const houseLineEl = {};
-    const houseDotEl = {};
-    let houseEdgeState = {};
-    let houseEdgePhase = {};
+    let pfcCard = null;
+    let pfcPendingData = null;
+    let pfcInitPromise = null;
 
-    function clearHouseEdges() {
-        Object.keys(houseLineEl).forEach(k => {
-            houseLineEl[k].remove();
-            houseDotEl[k].forEach(d => d.remove());
-            delete houseLineEl[k];
-            delete houseDotEl[k];
-        });
-        houseEdgeState = {};
+    function pfcState(value, unit = 'W') {
+        return {
+            state: String(Number.isFinite(Number(value)) ? Number(value) : 0),
+            attributes: {
+                unit_of_measurement: unit
+            }
+        };
     }
 
-    function addHouseEdge(key, d, color, width = 3.2) {
-        const p = document.createElementNS(NSc, 'path');
-        p.setAttribute('d', d);
-        p.setAttribute('class', 'flow-path');
-        p.style.stroke = color;
-        p.style.color = color;
-        p.style.strokeWidth = String(width);
-        houseFlowLines.appendChild(p);
-        houseLineEl[key] = p;
+    function pfcDurationForPower(power) {
+        const p = Math.max(100, Math.min(10000, Math.abs(power || 0)));
+        const ratio = (p - 100) / (10000 - 100);
 
-        houseDotEl[key] = [0, 1, 2].map(() => {
-            const c = document.createElementNS(NSc, 'circle');
-            c.setAttribute('r', 4.5);
-            c.setAttribute('fill', color);
-            c.style.filter = `drop-shadow(0 0 3px ${color})`;
-            houseFlowDots.appendChild(c);
-            return c;
-        });
+        // Wie im Originalprojekt: hohe Leistung = kürzere Animationsdauer.
+        return 5 - (ratio * 4);
     }
 
-    function sumFormattedEnergy(entries) {
-        // Formatierte Werte können unterschiedliche Profile besitzen.
-        // Deshalb werden sie nicht rechnerisch addiert; die Einzelwerte
-        // werden stattdessen unten aufgelistet.
-        return entries.filter(Boolean);
+    function createPfcConfig() {
+        return {
+            name: '',
+            threshold: 1,
+
+            dynamic_speed_enabled: true,
+            min_flow_speed: 5,
+            max_flow_speed: 1,
+            min_power_threshold: 100,
+            max_power_threshold: 10000,
+
+            solar_line_color: AC.solar,
+            grid_import_line_color: AC.import,
+            grid_export_line_color: AC.export,
+            battery_charge_line_color: AC.charge,
+            battery_discharge_line_color: AC.discharge,
+            ev_line_color: AC.wallbox,
+
+            entities: {
+                solar_power: 'sensor.symcon_solar',
+                grid_import_power: 'sensor.symcon_grid_import',
+                grid_export_power: 'sensor.symcon_grid_export',
+                ev_charge_power: 'sensor.symcon_ev',
+                battery_charge_power: 'sensor.symcon_battery_charge',
+                battery_discharge_power: 'sensor.symcon_battery_discharge'
+            },
+
+            solar_descriptor_enabled: true,
+            solar_descriptor_label: 'PV gesamt',
+            solar_descriptor_entity: 'sensor.symcon_solar',
+
+            grid_descriptor_enabled: true,
+            grid_descriptor_label: 'Netz',
+            grid_descriptor_entity: 'sensor.symcon_grid',
+
+            battery_descriptor_enabled: true,
+            battery_descriptor_label: 'Batterie',
+            battery_descriptor_entity: 'sensor.symcon_battery_soc',
+
+            ev_descriptor_enabled: true,
+            ev_descriptor_label: 'Wallbox',
+            ev_descriptor_entity: 'sensor.symcon_ev',
+
+            home_descriptor_enabled: true,
+            home_descriptor_label: 'Haus',
+            home_descriptor_entity: 'sensor.symcon_home'
+        };
+    }
+
+    function installPfcShadowOverrides(card) {
+        if (!card || !card.shadowRoot) {
+            return;
+        }
+
+        if (!card.shadowRoot.getElementById('symcon-pfc-overrides')) {
+            const style = document.createElement('style');
+            style.id = 'symcon-pfc-overrides';
+            style.textContent = `
+                :host {
+                    width: 100% !important;
+                    height: 100% !important;
+                }
+
+                ha-card {
+                    height: 100% !important;
+                    background: transparent !important;
+                    box-shadow: none !important;
+                    border: 0 !important;
+                    overflow: hidden !important;
+                }
+
+                ha-card .card-header {
+                    display: none !important;
+                }
+
+                #svg-overlay {
+                    width: 100% !important;
+                    height: 100% !important;
+                    min-height: 0 !important;
+                    padding: 4px !important;
+                    box-sizing: border-box !important;
+                }
+
+                #svg-overlay > div {
+                    width: 100% !important;
+                    height: 100% !important;
+                }
+
+                #svg-overlay svg {
+                    width: 100% !important;
+                    height: 100% !important;
+                    max-width: none !important;
+                    max-height: none !important;
+                }
+
+                #svg-container-bg svg {
+                    opacity: .78 !important;
+                }
+
+                .descriptor-value {
+                    font-size: 25px !important;
+                    font-weight: 700 !important;
+                }
+
+                .descriptor-label {
+                    font-size: 19px !important;
+                }
+            `;
+            card.shadowRoot.appendChild(style);
+        }
+    }
+
+    function applyPfcOptionalLayers(d, batteries, wallbox) {
+        if (!pfcCard || !pfcCard.shadowRoot) {
+            return;
+        }
+
+        const batteryContainer = pfcCard.shadowRoot.getElementById('svg-container-battery');
+        const evContainer = pfcCard.shadowRoot.getElementById('svg-container-ev');
+
+        if (batteryContainer) {
+            batteryContainer.style.display = batteries.length ? '' : 'none';
+        }
+
+        if (evContainer) {
+            evContainer.style.display = d.hasWallbox ? '' : 'none';
+        }
+    }
+
+    function updatePfcPvDetails(pvs) {
+        if (!pfcPvDetails) {
+            return;
+        }
+
+        pfcPvDetails.innerHTML = pvs.map((pv, i) => {
+            const name = pv.name || ('PV ' + (i + 1));
+            const energy = pv.energy ? `<div>${pv.energy}</div>` : '';
+
+            return `<div class="pfc-pv-chip"><b>${name}: ${fmt(pv.value || 0)}</b>${energy}</div>`;
+        }).join('');
+    }
+
+    async function ensurePowerFlowCard() {
+        if (pfcCard) {
+            return pfcCard;
+        }
+
+        if (pfcInitPromise) {
+            return pfcInitPromise;
+        }
+
+        pfcInitPromise = (async () => {
+            try {
+                // Das externe Modul registriert das Custom Element.
+                await customElements.whenDefined('power-flow-card');
+
+                const card = document.createElement('power-flow-card');
+
+                // Wichtig: Konfiguration VOR dem Einhängen setzen,
+                // weil render() im Upstream-Projekt this.config verwendet.
+                card.setConfig(createPfcConfig());
+
+                // Initiale Dummy-Zustände.
+                card.hass = {
+                    states: {
+                        'sensor.symcon_solar': pfcState(0),
+                        'sensor.symcon_grid_import': pfcState(0),
+                        'sensor.symcon_grid_export': pfcState(0),
+                        'sensor.symcon_ev': pfcState(0),
+                        'sensor.symcon_battery_charge': pfcState(0),
+                        'sensor.symcon_battery_discharge': pfcState(0),
+                        'sensor.symcon_grid': pfcState(0),
+                        'sensor.symcon_battery_soc': pfcState(0, '%'),
+                        'sensor.symcon_home': pfcState(0)
+                    }
+                };
+
+                pfcHost.replaceChildren(card);
+                pfcCard = card;
+
+                // Lit benötigt einen Render-Zyklus, bevor Shadow-DOM vorhanden ist.
+                await new Promise(resolve => requestAnimationFrame(() =>
+                    requestAnimationFrame(resolve)
+                ));
+
+                installPfcShadowOverrides(card);
+
+                if (pfcLoading) {
+                    pfcLoading.style.display = 'none';
+                }
+
+                if (pfcPendingData) {
+                    const pending = pfcPendingData;
+                    pfcPendingData = null;
+                    updatePowerFlowCard(...pending);
+                }
+
+                return card;
+            } catch (err) {
+                console.error('Power Flow Card konnte nicht initialisiert werden:', err);
+
+                if (pfcLoading) {
+                    pfcLoading.style.display = 'none';
+                }
+                if (pfcError) {
+                    pfcError.style.display = 'flex';
+                    pfcError.textContent =
+                        'Power Flow Card konnte nicht geladen werden. ' +
+                        'Die Visualisierung benötigt einmalig Zugriff auf cdn.jsdelivr.net und unpkg.com.';
+                }
+
+                throw err;
+            }
+        })();
+
+        return pfcInitPromise;
+    }
+
+    function updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox) {
+        if (!pfcCard) {
+            pfcPendingData = [d, grid, haus, pvs, batteries, wallbox];
+            ensurePowerFlowCard().catch(() => {});
+            return;
+        }
+
+        const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
+        const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
+
+        // Modulkonvention:
+        // Batterie positiv = Entladen, negativ = Laden.
+        const batteryCharge = Math.max(-batteryTotal, 0);
+        const batteryDischarge = Math.max(batteryTotal, 0);
+
+        // Netz positiv = Bezug, negativ = Einspeisung.
+        const gridImport = Math.max(grid, 0);
+        const gridExport = Math.max(-grid, 0);
+
+        const mainSoc = batteries.length
+            ? Math.max(0, Math.min(100, batteries[0].soc || 0))
+            : 0;
+
+        const states = {
+            'sensor.symcon_solar': pfcState(pvTotal),
+            'sensor.symcon_grid_import': pfcState(gridImport),
+            'sensor.symcon_grid_export': pfcState(gridExport),
+            'sensor.symcon_ev': pfcState(
+                d.hasWallbox ? Math.max(wallbox.value || 0, 0) : 0
+            ),
+            'sensor.symcon_battery_charge': pfcState(batteryCharge),
+            'sensor.symcon_battery_discharge': pfcState(batteryDischarge),
+
+            // Deskriptoren:
+            'sensor.symcon_grid': pfcState(Math.abs(grid)),
+            'sensor.symcon_battery_soc': pfcState(mainSoc, '%'),
+            'sensor.symcon_home': pfcState(haus)
+        };
+
+        pfcCard.hass = { states };
+
+        installPfcShadowOverrides(pfcCard);
+        applyPfcOptionalLayers(d, batteries, wallbox);
+        updatePfcPvDetails(pvs);
+
+        // Upstream updateFlow() wird bereits vom hass-Setter ausgelöst.
+        // Für den Fall eines noch laufenden Initialisierungszyklus nochmals
+        // nach dem nächsten Frame anwenden.
+        requestAnimationFrame(() => {
+            if (pfcCard && pfcCard.isInitialized && typeof pfcCard.updateFlow === 'function') {
+                pfcCard.updateFlow();
+                applyPfcOptionalLayers(d, batteries, wallbox);
+            }
+        });
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
-        clearHouseEdges();
-
-        const pv1 = pvs.length > 0 ? pvs[0] : null;
-        const pv2 = pvs.length > 1 ? pvs[1] : null;
-        const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
-        const mainBattery = batteries.length ? batteries[0] : null;
-        const mainSoc = mainBattery
-            ? Math.max(0, Math.min(100, mainBattery.soc || 0))
-            : 0;
-        const hasWallbox = !!d.hasWallbox;
-
-        // PV Dach
-        document.getElementById('svg-pv1-name').textContent = pv1?.name || 'PV Dach';
-        document.getElementById('svg-pv1-value').textContent = fmt(pv1?.value || 0);
-        document.getElementById('svg-pv1-energy').textContent = pv1?.energy || '';
-
-        // PV Carport: zweite PV nur dann zeigen, wenn sie konfiguriert ist.
-        const pv2Visible = !!pv2;
-        document.getElementById('node-pv2').style.display = pv2Visible ? '' : 'none';
-        document.getElementById('carport-pv-panels').style.display = pv2Visible ? '' : 'none';
-        document.getElementById('base-pv2').style.display = pv2Visible ? '' : 'none';
-        document.getElementById('svg-pv2-name').textContent = pv2?.name || 'PV Carport';
-        document.getElementById('svg-pv2-value').textContent = fmt(pv2?.value || 0);
-        document.getElementById('svg-pv2-energy').textContent = pv2?.energy || '';
-
-        // Haus
-        document.getElementById('svg-home-value').textContent = fmt(haus);
-
-        // Batterie
-        const batColor = batteryTotal >= 0 ? AC.discharge : AC.charge;
-        const batMode = batteryTotal >= 0 ? 'Entladen' : 'Laden';
-        const batValue = document.getElementById('svg-battery-value');
-        batValue.textContent = fmt(Math.abs(batteryTotal));
-        batValue.style.fill = batColor;
-        document.getElementById('svg-battery-name').textContent =
-            mainBattery?.name || 'Batterie';
-        document.getElementById('svg-battery-detail').textContent =
-            `${Math.round(mainSoc)} % · ${batMode}`;
-
-        // Netz
-        const gridColor = grid >= 0 ? AC.import : AC.export;
-        const gridMode = grid >= 0 ? 'Bezug' : 'Einspeisung';
-        const gridValue = document.getElementById('svg-grid-value');
-        gridValue.textContent = fmt(Math.abs(grid));
-        gridValue.style.fill = gridColor;
-        document.getElementById('svg-grid-mode').textContent = gridMode;
-
-        const gridEnergy = [];
-        if (d.gridImportEnergy) gridEnergy.push('Bezug ' + d.gridImportEnergy);
-        if (d.gridExportEnergy) gridEnergy.push('Einspeisung ' + d.gridExportEnergy);
-        document.getElementById('svg-grid-energy').textContent = gridEnergy.join(' · ');
-
-        // Wallbox vollständig ausblenden, wenn keine Leistungsvariable konfiguriert ist.
-        document.getElementById('wallbox-object').style.display = hasWallbox ? '' : 'none';
-        document.getElementById('node-wallbox').style.display = hasWallbox ? '' : 'none';
-        document.getElementById('base-wallbox').style.display = hasWallbox ? '' : 'none';
-        document.getElementById('svg-wallbox-name').textContent =
-            wallbox.name || 'Wallbox';
-        document.getElementById('svg-wallbox-value').textContent =
-            fmt(wallbox.value || 0);
-        document.getElementById('svg-wallbox-energy').textContent =
-            wallbox.energy || '';
-
-        // ----------------------------------------------------------
-        // Dynamische Pfade. Smartmeter ist der einzige Verteiler.
-        // ----------------------------------------------------------
-
-        // PV Dach -> Smartmeter
-        if (pv1 && (pv1.value || 0) > 0) {
-            addHouseEdge(
-                'house-pv1',
-                'M450 240 L450 327',
-                AC.solar,
-                5
-            );
-            houseEdgeState['house-pv1'] = {
-                w: Math.abs(pv1.value || 0),
-                rev: false
-            };
-        }
-
-        // PV Carport -> Smartmeter
-        if (pv2 && (pv2.value || 0) > 0) {
-            addHouseEdge(
-                'house-pv2',
-                'M210 350 L260 350 L260 375 L407 375',
-                AC.solar,
-                5
-            );
-            houseEdgeState['house-pv2'] = {
-                w: Math.abs(pv2.value || 0),
-                rev: false
-            };
-        }
-
-        // Smartmeter -> Haus
-        if (haus > 0) {
-            addHouseEdge(
-                'house-home',
-                'M493 375 L570 375',
-                AC.home,
-                5
-            );
-            houseEdgeState['house-home'] = {
-                w: haus,
-                rev: false
-            };
-        }
-
-        // Smartmeter <-> Batterie
-        if (Math.abs(batteryTotal) > 0) {
-            addHouseEdge(
-                'house-battery',
-                'M425 432 L384 470',
-                batColor,
-                5
-            );
-            houseEdgeState['house-battery'] = {
-                w: Math.abs(batteryTotal),
-                // Pfad ist Smartmeter -> Batterie.
-                // Entladen muss daher rückwärts laufen.
-                rev: batteryTotal >= 0
-            };
-        }
-
-        // Smartmeter <-> Netz
-        if (Math.abs(grid) > 0) {
-            addHouseEdge(
-                'house-grid',
-                'M493 405 L690 405 L690 455 L790 455',
-                gridColor,
-                5
-            );
-            houseEdgeState['house-grid'] = {
-                w: Math.abs(grid),
-                // Bezug: Netz -> Smartmeter.
-                rev: grid >= 0
-            };
-        }
-
-        // Smartmeter -> Wallbox
-        if (hasWallbox && (wallbox.value || 0) > 0) {
-            addHouseEdge(
-                'house-wallbox',
-                'M407 405 L260 405 L260 437 L174 437',
-                AC.wallbox,
-                5
-            );
-            houseEdgeState['house-wallbox'] = {
-                w: Math.abs(wallbox.value || 0),
-                rev: false
-            };
-        }
+        updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
     function applyDisplayMode(mode) {
@@ -1649,7 +1593,6 @@ class Energiefluss extends IPSModuleStrict
         last = now;
 
         animateEdges(dt, edgeState, lineEl, dotEl, edgePhase);
-        animateEdges(dt, houseEdgeState, houseLineEl, houseDotEl, houseEdgePhase);
 
         requestAnimationFrame(frame);
     }
