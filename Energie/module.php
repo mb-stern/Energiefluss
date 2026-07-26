@@ -374,7 +374,7 @@ class Energiefluss extends IPSModuleStrict
     .lbl { position: absolute; left: 50%; transform: translateX(-50%); color: var(--w-text2); white-space: nowrap; }
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 8px; }
-    #phases { position: absolute; left: 110px; top: 436px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
+    #phases { position: absolute; left: 110px; top: 310px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
     #wrap { display: flex; gap: 14px; align-items: flex-start; width: 540px; height: 640px; }
     #cfg { flex: 0 0 250px; width: 250px; border-left: 0.5px solid var(--w-border); padding-left: 14px; box-sizing: border-box; }
     #cfgsec { margin-top: 12px; }
@@ -508,11 +508,14 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function pvPos(i, count) {
-        return distributedPos(i, count, 210, 510, 105);
+        // Neue Einträge stehen in der Liste unten, sollen visuell aber links
+        // von bestehenden Anlagen erscheinen.
+        return distributedPos((count - 1) - i, count, 210, 510, 105);
     }
 
     function batteryPos(i, count) {
-        return distributedPos(i, count, 210, 510, 548);
+        // Gleiche Logik wie bei PV: neue Batterien links ergänzen.
+        return distributedPos((count - 1) - i, count, 210, 510, 548);
     }
 
     function clearDynamicSources() {
@@ -552,17 +555,14 @@ class Energiefluss extends IPSModuleStrict
                     ? `<div class="sub" style="font-size:10px;line-height:1.25;">${pv.energy}</div>`
                     : '');
 
-            // Gerade Leitung nach unten auf die gemeinsame PV-Sammelschiene.
-            addEdge('pv' + i, `M${p.x},149 L${p.x},250`, AC.solar);
+            // Jede PV-Anlage hat ihren eigenen direkten Weg zum Haus.
+            // Nur gerade Segmente, keine gemeinsame Sammelschiene zwischen Anlagen.
+            addEdge(
+                'pv' + i,
+                `M${p.x},149 L${p.x},250 L360,250 L360,298`,
+                AC.solar
+            );
         });
-
-        if (list.length > 0) {
-            const first = pvPos(0, list.length);
-            const last = pvPos(list.length - 1, list.length);
-
-            addEdge('pv-bus', `M${first.x},250 L${last.x},250`, AC.solar);
-            addEdge('pv-house', 'M360,250 L360,298', AC.solar);
-        }
     }
 
     function buildBatteries(list) {
@@ -591,17 +591,14 @@ class Energiefluss extends IPSModuleStrict
                     ? `<div class="sub" style="font-size:10px;line-height:1.25;">${bat.energy}</div>`
                     : '');
 
-            // Gerade Leitung nach oben auf die gemeinsame Batterie-Sammelschiene.
-            addEdge('bat' + i, `M${p.x},506 L${p.x},455`, AC.batt);
+            // Jede Batterie hat ihren eigenen direkten Weg zum Haus.
+            // Richtung der Punkte wird später anhand des Vorzeichens gesetzt.
+            addEdge(
+                'bat' + i,
+                `M${p.x},506 L${p.x},455 L360,455 L360,402`,
+                AC.batt
+            );
         });
-
-        if (list.length > 0) {
-            const first = batteryPos(0, list.length);
-            const last = batteryPos(list.length - 1, list.length);
-
-            addEdge('bat-bus', `M${first.x},455 L${last.x},455`, AC.batt);
-            addEdge('bat-house', 'M360,455 L360,402', AC.batt);
-        }
     }
 
     function buildGroups(list) {
@@ -788,16 +785,20 @@ class Energiefluss extends IPSModuleStrict
         };
 
         pvs.forEach((pv, i) => {
-            edgeState['pv' + i] = { w: Math.max(pv.value || 0, 0) };
+            // PV fließt immer in Richtung Haus.
+            edgeState['pv' + i] = {
+                w: Math.max(pv.value || 0, 0),
+                rev: false
+            };
         });
-        edgeState['pv-bus'] = { w: Math.max(pvTotal, 0) };
-        edgeState['pv-house'] = { w: Math.max(pvTotal, 0) };
-
         batteries.forEach((bat, i) => {
-            edgeState['bat' + i] = { w: Math.abs(bat.value || 0), rev: (bat.value || 0) < 0 };
+            // Positive Leistung = Batterie entlädt ins Haus -> normaler Pfad.
+            // Negative Leistung = Batterie lädt -> Punkte laufen vom Haus zur Batterie.
+            edgeState['bat' + i] = {
+                w: Math.abs(bat.value || 0),
+                rev: (bat.value || 0) < 0
+            };
         });
-        edgeState['bat-bus'] = { w: Math.abs(batteryTotal), rev: batteryTotal < 0 };
-        edgeState['bat-house'] = { w: Math.abs(batteryTotal), rev: batteryTotal < 0 };
 
         groups.forEach((g, i) => { edgeState['grp' + i] = { w: g.value || 0 }; });
         for (const k in lineEl) {
