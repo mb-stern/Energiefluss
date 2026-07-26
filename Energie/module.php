@@ -412,6 +412,7 @@ class Energiefluss extends IPSModuleStrict
     #eflow {
         width: 100%;
         height: 100vh;
+        position: relative;
         box-sizing: border-box;
         border-radius: 12px;
         padding: 10px;
@@ -445,6 +446,42 @@ class Energiefluss extends IPSModuleStrict
         flex: 0 0 540px;
         overflow: hidden;
         position: relative;
+    }
+
+    /* Browser-Umschaltung */
+    #view-switch {
+        position: absolute;
+        top: 10px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 1000;
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 9px;
+        background: var(--w-surface);
+        border: 0.5px solid var(--w-border);
+        box-shadow: 0 2px 10px rgba(0,0,0,.12);
+        pointer-events: auto;
+        user-select: none;
+    }
+
+    .view-switch-btn {
+        appearance: none;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--w-text2);
+        padding: 6px 11px;
+        font: inherit;
+        font-size: 12px;
+        cursor: pointer;
+        pointer-events: auto;
+    }
+
+    .view-switch-btn.active {
+        background: var(--w-text);
+        color: var(--w-surface);
     }
 
     /* Klassische Ansicht */
@@ -720,6 +757,11 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="eflow">
+    <div id="view-switch" role="group" aria-label="Darstellung">
+        <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
+        <button id="view-house" class="view-switch-btn" type="button">Haus</button>
+    </div>
+
     <div id="scale-host">
         <div id="scale-root">
             <div id="wrap">
@@ -1548,10 +1590,53 @@ class Energiefluss extends IPSModuleStrict
         updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
+    let browserDisplayMode = null;
+
     function applyDisplayMode(mode) {
-        const house = mode === 'house';
-        if (stage) stage.style.display = house ? 'none' : 'block';
-        if (houseStage) houseStage.style.display = house ? 'block' : 'none';
+        const normalized = mode === 'house' ? 'house' : 'flow';
+        const house = normalized === 'house';
+
+        if (stage) {
+            stage.style.display = house ? 'none' : 'block';
+        }
+        if (houseStage) {
+            houseStage.style.display = house ? 'block' : 'none';
+        }
+
+        const flowButton = document.getElementById('view-flow');
+        const houseButton = document.getElementById('view-house');
+
+        if (flowButton) {
+            flowButton.classList.toggle('active', !house);
+            flowButton.setAttribute('aria-pressed', house ? 'false' : 'true');
+        }
+        if (houseButton) {
+            houseButton.classList.toggle('active', house);
+            houseButton.setAttribute('aria-pressed', house ? 'true' : 'false');
+        }
+    }
+
+    function setBrowserDisplayMode(mode) {
+        browserDisplayMode = mode === 'house' ? 'house' : 'flow';
+        applyDisplayMode(browserDisplayMode);
+
+        updateLayout(
+            lastLayoutState.groupCount,
+            lastLayoutState.pvCount,
+            lastLayoutState.batteryCount,
+            lastLayoutState.showRightPanel,
+            browserDisplayMode
+        );
+    }
+
+    const viewFlowButton = document.getElementById('view-flow');
+    const viewHouseButton = document.getElementById('view-house');
+
+    if (viewFlowButton) {
+        viewFlowButton.addEventListener('click', () => setBrowserDisplayMode('flow'));
+    }
+    if (viewHouseButton) {
+        viewHouseButton.addEventListener('click', () => setBrowserDisplayMode('house'));
     }
 
     // ---------- Regelung / Statistik ----------
@@ -1627,8 +1712,18 @@ class Energiefluss extends IPSModuleStrict
 
     // ---------- Layout ----------
     let layoutWidth = 540;
+    const lastLayoutState = {
+        groupCount: 0,
+        pvCount: 0,
+        batteryCount: 0,
+        showRightPanel: false
+    };
 
     function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
+        lastLayoutState.groupCount = groupCount;
+        lastLayoutState.pvCount = pvCount;
+        lastLayoutState.batteryCount = batteryCount;
+        lastLayoutState.showRightPanel = showRightPanel;
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
@@ -1750,7 +1845,13 @@ class Energiefluss extends IPSModuleStrict
 
         // Hausansicht V2.
         buildHouseView(d, grid, haus, pvs, batteries, wallbox);
-        applyDisplayMode(d.displayMode || 'flow');
+
+        // Modulkonfiguration bestimmt nur die Startansicht.
+        // Danach bleibt eine im Browser gewählte Ansicht erhalten.
+        if (browserDisplayMode === null) {
+            browserDisplayMode = (d.displayMode === 'house') ? 'house' : 'flow';
+        }
+        applyDisplayMode(browserDisplayMode);
 
         // Statistik.
         const stats = d.stats || [];
@@ -1784,7 +1885,7 @@ class Energiefluss extends IPSModuleStrict
             pvs.length,
             batteries.length,
             showRightPanel,
-            (d.displayMode || 'flow') === 'house' ? 'house' : 'flow'
+            browserDisplayMode || ((d.displayMode === 'house') ? 'house' : 'flow')
         );
     }
 
