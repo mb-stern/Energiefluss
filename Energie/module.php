@@ -175,7 +175,9 @@ class Energiefluss extends IPSModuleStrict
                                 ],
                             ],
                         ],
-                        ['type' => 'Label', 'caption' => 'Netzenergie'],
+                        ['type' => 'Label', 'caption' => 'Netz'],
+                        ['type' => 'SelectVariable', 'name' => 'L1', 'caption' => 'Netzleistung (W)'],
+                        ['type' => 'CheckBox', 'name' => 'InvertGridPower', 'caption' => 'Vorzeichen der Netzleistung umkehren'],
                         ['type' => 'SelectVariable', 'name' => 'GridImportEnergy', 'caption' => 'Netzbezug gesamt (kWh)'],
                         ['type' => 'SelectVariable', 'name' => 'GridExportEnergy', 'caption' => 'Rücklieferung / Einspeisung gesamt (kWh)'],
                     ],
@@ -1109,10 +1111,13 @@ HTML;
 
     private function BuildPayload(): array
     {
+        // Netzleistung wird direkt aus der ausgewählten Gesamtleistungs-
+        // variable gelesen. Die früheren Einzelphasen L2/L3 werden nicht
+        // mehr für die Berechnung benötigt.
         $l1 = $this->ReadVar('L1');
-        $l2 = $this->ReadVar('L2');
-        $l3 = $this->ReadVar('L3');
-        $grid = $l1 + $l2 + $l3;
+        $l2 = 0.0;
+        $l3 = 0.0;
+        $grid = $l1;
 
         if ($this->ReadPropertyBoolean('InvertGridPower')) {
             $grid *= -1;
