@@ -323,6 +323,18 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
+        if ($Ident === 'DisplayMode') {
+            $mode = (string) $Value;
+            if (!in_array($mode, ['flow', 'house'], true)) {
+                return;
+            }
+
+            // Derselbe Parameter, den auch das Konfigurationsformular verwendet.
+            IPS_SetProperty($this->InstanceID, 'DisplayMode', $mode);
+            IPS_ApplyChanges($this->InstanceID);
+            return;
+        }
+
         if (str_starts_with($Ident, 'Cfg')) {
             $field = substr($Ident, 3);
             if (!array_key_exists($field, self::CONFIG_MAP)) {
@@ -448,11 +460,9 @@ class Energiefluss extends IPSModuleStrict
         position: relative;
     }
 
-    /* Browser-Umschaltung */
+    /* Umschaltung über HTML-SDK requestAction() */
     #view-switch {
         position: absolute;
-        pointer-events: auto !important;
-        touch-action: none;
         top: 10px;
         left: 50%;
         transform: translateX(-50%);
@@ -464,16 +474,10 @@ class Energiefluss extends IPSModuleStrict
         background: var(--w-surface);
         border: 0.5px solid var(--w-border);
         box-shadow: 0 2px 10px rgba(0,0,0,.12);
-        pointer-events: auto;
-        user-select: none;
     }
 
     .view-switch-btn {
-        appearance: none;
         border: 0;
-        touch-action: none;
-        -webkit-user-select: none;
-        user-select: none;
         border-radius: 6px;
         background: transparent;
         color: var(--w-text2);
@@ -481,7 +485,6 @@ class Energiefluss extends IPSModuleStrict
         font: inherit;
         font-size: 12px;
         cursor: pointer;
-        pointer-events: auto;
     }
 
     .view-switch-btn.active {
@@ -762,9 +765,11 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="eflow">
-    <div id="view-switch" role="group" aria-label="Darstellung">
-        <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
-        <button id="view-house" class="view-switch-btn" type="button">Haus</button>
+    <div id="view-switch">
+        <button id="view-flow" class="view-switch-btn" type="button"
+                onclick="requestAction('DisplayMode', 'flow')">Energiefluss</button>
+        <button id="view-house" class="view-switch-btn" type="button"
+                onclick="requestAction('DisplayMode', 'house')">Haus</button>
     </div>
 
     <div id="scale-host">
@@ -1595,83 +1600,16 @@ class Energiefluss extends IPSModuleStrict
         updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
-    let browserDisplayMode = null;
-
     function applyDisplayMode(mode) {
-        const normalized = mode === 'house' ? 'house' : 'flow';
-        const house = normalized === 'house';
-
-        if (stage) {
-            stage.style.display = house ? 'none' : 'block';
-        }
-        if (houseStage) {
-            houseStage.style.display = house ? 'block' : 'none';
-        }
+        const house = mode === 'house';
+        if (stage) stage.style.display = house ? 'none' : 'block';
+        if (houseStage) houseStage.style.display = house ? 'block' : 'none';
 
         const flowButton = document.getElementById('view-flow');
         const houseButton = document.getElementById('view-house');
-
-        if (flowButton) {
-            flowButton.classList.toggle('active', !house);
-            flowButton.setAttribute('aria-pressed', house ? 'false' : 'true');
-        }
-        if (houseButton) {
-            houseButton.classList.toggle('active', house);
-            houseButton.setAttribute('aria-pressed', house ? 'true' : 'false');
-        }
+        if (flowButton) flowButton.classList.toggle('active', !house);
+        if (houseButton) houseButton.classList.toggle('active', house);
     }
-
-    function setBrowserDisplayMode(mode) {
-        browserDisplayMode = mode === 'house' ? 'house' : 'flow';
-        applyDisplayMode(browserDisplayMode);
-
-        updateLayout(
-            lastLayoutState.groupCount,
-            lastLayoutState.pvCount,
-            lastLayoutState.batteryCount,
-            lastLayoutState.showRightPanel,
-            browserDisplayMode
-        );
-    }
-
-    const viewFlowButton = document.getElementById('view-flow');
-    const viewHouseButton = document.getElementById('view-house');
-
-    function handleViewSwitchPointer(event) {
-        const target = event.target && event.target.closest
-            ? event.target.closest('#view-flow, #view-house')
-            : null;
-
-        if (!target) {
-            return;
-        }
-
-        // Bereits beim Pointer-Down reagieren. Dadurch kann die umgebende
-        // Symcon-Visualisierung das Ereignis nicht zuerst als Tile-Geste schlucken.
-        event.preventDefault();
-        event.stopPropagation();
-        if (typeof event.stopImmediatePropagation === 'function') {
-            event.stopImmediatePropagation();
-        }
-
-        setBrowserDisplayMode(target.id === 'view-house' ? 'house' : 'flow');
-    }
-
-    // Capture = true: vor Bubbling-Handlern der umgebenden Visualisierung reagieren.
-    document.addEventListener('pointerdown', handleViewSwitchPointer, true);
-
-    // Fallback für ältere WebViews ohne Pointer Events.
-    document.addEventListener('touchstart', handleViewSwitchPointer, {
-        capture: true,
-        passive: false
-    });
-
-    document.addEventListener('mousedown', function (event) {
-        if (window.PointerEvent) {
-            return;
-        }
-        handleViewSwitchPointer(event);
-    }, true);
 
     // ---------- Regelung / Statistik ----------
     const CFG = [
@@ -1746,18 +1684,8 @@ class Energiefluss extends IPSModuleStrict
 
     // ---------- Layout ----------
     let layoutWidth = 540;
-    const lastLayoutState = {
-        groupCount: 0,
-        pvCount: 0,
-        batteryCount: 0,
-        showRightPanel: false
-    };
 
     function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
-        lastLayoutState.groupCount = groupCount;
-        lastLayoutState.pvCount = pvCount;
-        lastLayoutState.batteryCount = batteryCount;
-        lastLayoutState.showRightPanel = showRightPanel;
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
@@ -1879,13 +1807,7 @@ class Energiefluss extends IPSModuleStrict
 
         // Hausansicht V2.
         buildHouseView(d, grid, haus, pvs, batteries, wallbox);
-
-        // Modulkonfiguration bestimmt nur die Startansicht.
-        // Danach bleibt eine im Browser gewählte Ansicht erhalten.
-        if (browserDisplayMode === null) {
-            browserDisplayMode = (d.displayMode === 'house') ? 'house' : 'flow';
-        }
-        applyDisplayMode(browserDisplayMode);
+        applyDisplayMode(d.displayMode || 'flow');
 
         // Statistik.
         const stats = d.stats || [];
@@ -1919,7 +1841,7 @@ class Energiefluss extends IPSModuleStrict
             pvs.length,
             batteries.length,
             showRightPanel,
-            browserDisplayMode || ((d.displayMode === 'house') ? 'house' : 'flow')
+            (d.displayMode || 'flow') === 'house' ? 'house' : 'flow'
         );
     }
 
