@@ -94,34 +94,34 @@ class Energiefluss extends IPSModuleStrict
             'elements' => [
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'Erzeuger & Batterie',
+                    'caption' => 'PV & Batterie',
                     'items'   => [
                         [
                             'type'     => 'List',
                             'name'     => 'Producers',
                             'caption'  => 'Solaranlagen',
-                            'rowCount' => 5,
+                            'rowCount' => 6,
                             'add'      => true,
                             'delete'   => true,
                             'columns'  => [
                                 [
                                     'caption' => 'Name',
                                     'name'    => 'Name',
-                                    'width'   => '180px',
+                                    'width'   => '220px',
                                     'add'     => 'PV',
                                     'edit'    => ['type' => 'ValidationTextBox'],
                                 ],
                                 [
                                     'caption' => 'Leistung',
                                     'name'    => 'VariableID',
-                                    'width'   => 'auto',
+                                    'width'   => '320px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
                                     'caption' => 'Erzeugte Energie',
                                     'name'    => 'EnergyVariableID',
-                                    'width'   => 'auto',
+                                    'width'   => '320px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
@@ -357,7 +357,7 @@ class Energiefluss extends IPSModuleStrict
     .lbl { position: absolute; left: 50%; transform: translateX(-50%); color: var(--w-text2); white-space: nowrap; }
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 8px; }
-    #phases { position: absolute; left: 110px; top: 486px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
+    #phases { position: absolute; left: 110px; top: 436px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
     #wrap { display: flex; gap: 14px; align-items: flex-start; width: 540px; height: 640px; }
     #cfg { flex: 0 0 250px; width: 250px; border-left: 0.5px solid var(--w-border); padding-left: 14px; box-sizing: border-box; }
     #cfgsec { margin-top: 12px; }
@@ -433,9 +433,9 @@ class Energiefluss extends IPSModuleStrict
     const RR = 34, COL0 = 530, COLW = 120;
 
     const MAIN = {
-        batt: { x: 190, y: 230, r: 50, ic: 'battery-half', icc: AC.batt, lab: 'Batterie', lp: 'top', ring: true },
-        netz: { x: 110, y: 400, r: 46, ic: 'bolt',         icc: AC.grid, lab: 'Netz',     lp: 'bot' },
-        haus: { x: 360, y: 400, r: 52, ic: 'house',        icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true }
+        netz: { x: 110, y: 350, r: 46, ic: 'bolt',        icc: AC.grid, lab: 'Netz', lp: 'bot' },
+        haus: { x: 360, y: 350, r: 52, ic: 'house',       icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true },
+        batt: { x: 360, y: 548, r: 44, ic: 'battery-half', icc: AC.batt, lab: 'Batterie', lp: 'bot', ring: true }
     };
 
     const stage = document.getElementById('stage');
@@ -466,8 +466,8 @@ class Energiefluss extends IPSModuleStrict
     const ph = document.createElement('div'); ph.id = 'phases'; stage.appendChild(ph);
 
     const E = {
-        'batt-haus': { d: 'M225,266 L325,365', col: AC.batt },
-        'netz-haus': { d: 'M156,400 L306,400', col: AC.grid }
+        'batt-haus': { d: 'M360,504 L360,402', col: AC.batt },
+        'netz-haus': { d: 'M156,350 L306,350', col: AC.grid }
     };
     const lineEl = {}, dotEl = {};
     function addEdge(k, d, col) {
@@ -481,8 +481,19 @@ class Energiefluss extends IPSModuleStrict
     }
     for (const k in E) addEdge(k, E[k].d, E[k].col);
 
-    function producerPos(i) {
-        return { x: 270 + (i * 130), y: 92 };
+    function producerPos(i, count) {
+        const minX = 240;
+        const maxX = 480;
+
+        if (count <= 1) {
+            return { x: 360, y: 105 };
+        }
+
+        const span = maxX - minX;
+        return {
+            x: minX + (span * i / (count - 1)),
+            y: 105
+        };
     }
 
     function buildProducers(list) {
@@ -495,7 +506,7 @@ class Energiefluss extends IPSModuleStrict
         });
 
         list.forEach((pv, i) => {
-            const p = producerPos(i);
+            const p = producerPos(i, list.length);
             addNode(
                 'pv' + i,
                 {
@@ -516,13 +527,23 @@ class Energiefluss extends IPSModuleStrict
                     ? `<div class="sub" style="font-size:10px;line-height:1.25;">${pv.energy}</div>`
                     : '');
 
-            // Jede PV-Anlage speist direkt in das Haus.
+            // Jede PV-Anlage geht mit einer geraden Leitung auf eine
+            // gemeinsame PV-Sammelschiene über dem Haus.
             addEdge(
                 'pv' + i,
-                `M${p.x},138 L${p.x},310 L360,348`,
+                `M${p.x},151 L${p.x},250`,
                 AC.solar
             );
         });
+
+        // Gemeinsame horizontale PV-Sammelschiene + gerade Leitung ins Haus.
+        if (list.length > 0) {
+            const first = producerPos(0, list.length);
+            const last = producerPos(list.length - 1, list.length);
+
+            addEdge('pv-bus', `M${first.x},250 L${last.x},250`, AC.solar);
+            addEdge('pv-house', 'M360,250 L360,298', AC.solar);
+        }
     }
 
     function buildGroups(list) {
@@ -540,7 +561,7 @@ class Energiefluss extends IPSModuleStrict
             }
             document.getElementById('body-r' + i).innerHTML = inner;
             const endY = p.lp === 'top' ? p.y + RR : p.y - RR;
-            addEdge('grp' + i, `M412,400 L${p.x},400 L${p.x},${endY}`, AC.room);
+            addEdge('grp' + i, `M412,350 L${p.x},350 L${p.x},${endY}`, AC.room);
         });
     }
 
@@ -562,18 +583,18 @@ class Energiefluss extends IPSModuleStrict
     }
     function updateRings(segs, soc) {
         ringG.innerHTML = '';
-        track(360, 400, 60);
+        track(360, 350, 60);
         const tot = segs.reduce((a, s) => a + s[1], 0) || 1;
         let acc = 0;
         segs.forEach(([col, v]) => {
             if (v > 0) {
-                arc(360, 400, 60, col, v / tot, acc / tot);
+                arc(360, 350, 60, col, v / tot, acc / tot);
                 acc += v;
             }
         });
 
-        track(190, 230, 56);
-        arc(190, 230, 56, AC.batt, (soc || 0) / 100, 0);
+        track(360, 548, 50);
+        arc(360, 548, 50, AC.batt, (soc || 0) / 100, 0);
     }
 
     const CFG = [
@@ -635,7 +656,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         if (producerCount > 0) {
-            const lastPVX = producerPos(producerCount - 1).x;
+            const lastPVX = producerPos(producerCount - 1, producerCount).x;
             graphWidth = Math.max(graphWidth, lastPVX + 80);
         }
 
@@ -696,6 +717,9 @@ class Energiefluss extends IPSModuleStrict
         producers.forEach((pv, i) => {
             edgeState['pv' + i] = { w: Math.max(pv.value || 0, 0) };
         });
+        edgeState['pv-bus'] = { w: pvTotal };
+        edgeState['pv-house'] = { w: pvTotal };
+
         groups.forEach((g, i) => { edgeState['grp' + i] = { w: g.value || 0 }; });
         for (const k in lineEl) {
             const on = edgeState[k] && edgeState[k].w > 0;
