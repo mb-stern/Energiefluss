@@ -679,9 +679,16 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #sig-home-label {
-        top: 2%;
-        left: 55%;
+        top: 41%;
+        left: 68%;
         border-color: rgba(77,159,255,.28);
+    }
+
+    #sig-solar2-label {
+        top: 27%;
+        left: 3%;
+        border-color: rgba(239,160,32,.28);
+        display: none;
     }
 
     #sig-battery-label {
@@ -780,31 +787,52 @@ class Energiefluss extends IPSModuleStrict
                                 aria-hidden="true"
                             >
                                 <g id="sig-static-cables">
-                                    <path class="sig-cable" d="M 475 85 L 335 270 L 505 320 L 505 560"></path>
-                                    <path class="sig-cable" d="M 535 570 L 535 330 L 640 360 L 840 420 L 990 200 L 750 140"></path>
-                                    <path class="sig-cable" d="M 490 570 L 492 785"></path>
-                                    <path class="sig-cable" d="M 600 645 L 740 695 L 790 695 L 855 680 L 855 830"></path>
-                                    <path class="sig-cable" d="M 75 485 L 75 455 L 290 535 L 350 560 L 295 585 L 475 600"></path>
+                                    <!-- PV Hausdach -> Smartmeter -->
+                                    <path id="sig-cable-pv1"
+                                          class="sig-cable"
+                                          d="M 505 320 L 505 600 L 699 600 L 699 682"></path>
+
+                                    <!-- PV Carport -> entlang Wallbox-Trasse -> Smartmeter -->
+                                    <path id="sig-cable-pv2"
+                                          class="sig-cable"
+                                          d="M 185 355 L 185 455 L 290 535 L 350 560 L 475 600 L 699 682"
+                                          style="display:none"></path>
+
+                                    <!-- Smartmeter -> Haus -->
+                                    <path id="sig-cable-home"
+                                          class="sig-cable"
+                                          d="M 699 682 L 805 682 L 805 525"></path>
+
+                                    <!-- Smartmeter -> Batterie; endet an der Batteriekante -->
+                                    <path id="sig-cable-battery"
+                                          class="sig-cable"
+                                          d="M 699 682 L 603 682"></path>
+
+                                    <!-- Smartmeter -> entlang Hauskante -> Boden/Netz -->
+                                    <path id="sig-cable-grid"
+                                          class="sig-cable"
+                                          d="M 699 682 L 855 682 L 855 830"></path>
+
+                                    <!-- Wallbox -> Smartmeter -->
+                                    <path id="sig-cable-wallbox"
+                                          class="sig-cable"
+                                          d="M 75 485 L 75 455 L 290 535 L 350 560 L 475 600 L 699 682"></path>
                                 </g>
 
                                 <g id="house-flow-lines"></g>
                                 <g id="house-flow-dots"></g>
-
-                                <circle class="soc-track" cx="498" cy="585" r="32"></circle>
-                                <circle
-                                    id="sig-soc-ring"
-                                    class="soc-ring"
-                                    cx="498"
-                                    cy="585"
-                                    r="32"
-                                    stroke="#6fd32f"
-                                ></circle>
                             </svg>
 
                             <div id="sig-solar-label" class="sig-label">
                                 <div id="sig-solar-power" class="primary c-solar">0 W</div>
-                                <div class="secondary">Solar</div>
+                                <div id="sig-solar-name" class="secondary">PV Dach</div>
                                 <div id="sig-solar-detail" class="detail"></div>
+                            </div>
+
+                            <div id="sig-solar2-label" class="sig-label">
+                                <div id="sig-solar2-power" class="primary c-solar">0 W</div>
+                                <div id="sig-solar2-name" class="secondary">PV Carport</div>
+                                <div id="sig-solar2-detail" class="detail"></div>
                             </div>
 
                             <div id="sig-home-label" class="sig-label">
@@ -1210,150 +1238,257 @@ class Energiefluss extends IPSModuleStrict
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
         clearHouseEdges();
 
-        const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
+        // In der Hausansicht werden die ersten beiden PV-Anlagen räumlich
+        // zugeordnet: PV1 = Hausdach, PV2 = Carport.
+        const pv1 = pvs.length > 0 ? pvs[0] : null;
+        const pv2 = pvs.length > 1 ? pvs[1] : null;
+
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
-
         const mainBattery = batteries.length ? batteries[0] : null;
-        const mainSoc = mainBattery ? Math.max(0, Math.min(100, mainBattery.soc || 0)) : 0;
+        const mainSoc = mainBattery
+            ? Math.max(0, Math.min(100, mainBattery.soc || 0))
+            : 0;
 
-        // ---- Live-Texte -----------------------------------------------------
+        const hasWallbox = !!d.hasWallbox;
+
+        // ---------------------------------------------------------
+        // PV Dach
+        // ---------------------------------------------------------
         const solarPower = document.getElementById('sig-solar-power');
+        const solarName = document.getElementById('sig-solar-name');
         const solarDetail = document.getElementById('sig-solar-detail');
-        if (solarPower) solarPower.textContent = fmt(pvTotal);
+
+        if (solarPower) {
+            solarPower.textContent = fmt(pv1 ? (pv1.value || 0) : 0);
+        }
+        if (solarName) {
+            solarName.textContent = pv1?.name || 'PV Dach';
+        }
         if (solarDetail) {
-            solarDetail.innerHTML = pvs.map((pv, i) =>
-                `${pv.name || ('PV ' + (i + 1))}: ${fmt(pv.value || 0)}${pv.energy ? ' · ' + pv.energy : ''}`
-            ).join('<br>');
+            solarDetail.textContent = pv1?.energy || '';
         }
 
-        const homePower = document.getElementById('sig-home-power');
-        if (homePower) homePower.textContent = fmt(haus);
+        // ---------------------------------------------------------
+        // PV Carport
+        // ---------------------------------------------------------
+        const solar2Label = document.getElementById('sig-solar2-label');
+        const solar2Power = document.getElementById('sig-solar2-power');
+        const solar2Name = document.getElementById('sig-solar2-name');
+        const solar2Detail = document.getElementById('sig-solar2-detail');
+        const pv2Base = document.getElementById('sig-cable-pv2');
 
+        if (solar2Label) {
+            solar2Label.style.display = pv2 ? '' : 'none';
+        }
+        if (solar2Power) {
+            solar2Power.textContent = fmt(pv2 ? (pv2.value || 0) : 0);
+        }
+        if (solar2Name) {
+            solar2Name.textContent = pv2?.name || 'PV Carport';
+        }
+        if (solar2Detail) {
+            solar2Detail.textContent = pv2?.energy || '';
+        }
+        if (pv2Base) {
+            pv2Base.style.display = pv2 ? '' : 'none';
+        }
+
+        // ---------------------------------------------------------
+        // Haus
+        // ---------------------------------------------------------
+        const homePower = document.getElementById('sig-home-power');
+        if (homePower) {
+            homePower.textContent = fmt(haus);
+        }
+
+        // ---------------------------------------------------------
+        // Netz
+        // ---------------------------------------------------------
         const gridColor = grid >= 0 ? AC.import : AC.export;
         const gridMode = grid >= 0 ? 'Bezug' : 'Einspeisung';
+
         const gridPower = document.getElementById('sig-grid-power');
         const gridDetail = document.getElementById('sig-grid-detail');
+
         if (gridPower) {
             gridPower.textContent = fmt(Math.abs(grid));
             gridPower.style.color = gridColor;
         }
+
         if (gridDetail) {
             const details = [gridMode];
-            if (d.gridImportEnergy) details.push('Bezug: ' + d.gridImportEnergy);
-            if (d.gridExportEnergy) details.push('Einspeisung: ' + d.gridExportEnergy);
+
+            if (d.gridImportEnergy) {
+                details.push('Bezug: ' + d.gridImportEnergy);
+            }
+            if (d.gridExportEnergy) {
+                details.push('Einspeisung: ' + d.gridExportEnergy);
+            }
+
             gridDetail.innerHTML = details.join('<br>');
             gridDetail.style.color = gridColor;
         }
 
+        // ---------------------------------------------------------
+        // Batterie
+        // Kein Kreis und keine Leitung mehr durch die Batterie.
+        // Die Leitung endet an ihrer rechten Gehäusekante.
+        // ---------------------------------------------------------
         const batColor = batteryTotal >= 0 ? AC.discharge : AC.charge;
         const batMode = batteryTotal >= 0 ? 'Entladen' : 'Laden';
+
         const batteryPower = document.getElementById('sig-battery-power');
         const batteryName = document.getElementById('sig-battery-name');
         const batteryDetail = document.getElementById('sig-battery-detail');
+
         if (batteryPower) {
-            batteryPower.textContent = `${fmt(Math.abs(batteryTotal))} · ${Math.round(mainSoc)} %`;
+            batteryPower.textContent =
+                `${fmt(Math.abs(batteryTotal))} · ${Math.round(mainSoc)} %`;
             batteryPower.style.color = batColor;
         }
+
         if (batteryName) {
             batteryName.textContent = mainBattery?.name || 'Batterie';
         }
+
         if (batteryDetail) {
             batteryDetail.innerHTML = batteries.map((bat, i) => {
                 const mode = (bat.value || 0) >= 0 ? 'Entladen' : 'Laden';
-                return `${bat.name || ('Batterie ' + (i + 1))}: ${Math.round(bat.soc || 0)} % · ${fmt(Math.abs(bat.value || 0))} ${mode}`;
+
+                return `${bat.name || ('Batterie ' + (i + 1))}: ` +
+                    `${Math.round(bat.soc || 0)} % · ` +
+                    `${fmt(Math.abs(bat.value || 0))} ${mode}`;
             }).join('<br>') || batMode;
+        }
+
+        // ---------------------------------------------------------
+        // Wallbox
+        // ---------------------------------------------------------
+        const wallboxLayer = document.getElementById('sig-charger-layer');
+        const wallboxLabel = document.getElementById('sig-wallbox-label');
+        const wallboxBase = document.getElementById('sig-cable-wallbox');
+
+        if (wallboxLayer) {
+            wallboxLayer.style.display = hasWallbox ? '' : 'none';
+        }
+        if (wallboxLabel) {
+            wallboxLabel.style.display = hasWallbox ? '' : 'none';
+        }
+        if (wallboxBase) {
+            wallboxBase.style.display = hasWallbox ? '' : 'none';
         }
 
         const wallboxPower = document.getElementById('sig-wallbox-power');
         const wallboxName = document.getElementById('sig-wallbox-name');
         const wallboxDetail = document.getElementById('sig-wallbox-detail');
-        if (wallboxPower) wallboxPower.textContent = fmt(wallbox.value || 0);
-        if (wallboxName) wallboxName.textContent = wallbox.name || 'Wallbox';
-        if (wallboxDetail) wallboxDetail.textContent = wallbox.energy || '';
 
-        // ---- Batterie-SOC-Ring ---------------------------------------------
-        const socRing = document.getElementById('sig-soc-ring');
-        if (socRing) {
-            const r = 32;
-            const circumference = 2 * Math.PI * r;
-            socRing.setAttribute('stroke-dasharray', `${circumference}`);
-            socRing.setAttribute(
-                'stroke-dashoffset',
-                `${circumference * (1 - mainSoc / 100)}`
-            );
-            socRing.setAttribute('stroke', batColor);
+        if (wallboxPower) {
+            wallboxPower.textContent = fmt(wallbox.value || 0);
+        }
+        if (wallboxName) {
+            wallboxName.textContent = wallbox.name || 'Wallbox';
+        }
+        if (wallboxDetail) {
+            wallboxDetail.textContent = wallbox.energy || '';
         }
 
-        // ---- Original kalibrierte Kabelpfade -------------------------------
-        // Solar: PV-Dach -> SigenStor
-        if (pvTotal > 0) {
+        // =========================================================
+        // Energiepfade – SMARTMETER IST DER ZENTRALE KNOTEN
+        // Smartmeter-Mitte im Original-Layer: ungefähr 699 / 682.
+        // =========================================================
+
+        // PV Hausdach -> Smartmeter.
+        if (pv1 && (pv1.value || 0) > 0) {
             addHouseEdge(
-                'house-pv',
-                'M 475 85 L 335 270 L 505 320 L 505 560',
+                'house-pv1',
+                'M 505 320 L 505 600 L 699 600 L 699 682',
                 AC.solar,
                 6
             );
-            houseEdgeState['house-pv'] = {
-                w: pvTotal,
+
+            houseEdgeState['house-pv1'] = {
+                w: Math.max(pv1.value || 0, 0),
                 rev: false
             };
         }
 
-        // Haus: SigenStor -> Hausverbraucher
+        // PV Carport -> entlang der Wallbox-Trasse -> Smartmeter.
+        if (pv2 && (pv2.value || 0) > 0) {
+            addHouseEdge(
+                'house-pv2',
+                'M 185 355 L 185 455 L 290 535 L 350 560 L 475 600 L 699 682',
+                AC.solar,
+                6
+            );
+
+            houseEdgeState['house-pv2'] = {
+                w: Math.max(pv2.value || 0, 0),
+                rev: false
+            };
+        }
+
+        // Smartmeter -> Haus.
         if (haus > 0) {
             addHouseEdge(
                 'house-home',
-                'M 535 570 L 535 330 L 640 360 L 840 420 L 990 200 L 750 140',
+                'M 699 682 L 805 682 L 805 525',
                 AC.home,
                 6
             );
+
             houseEdgeState['house-home'] = {
                 w: haus,
                 rev: false
             };
         }
 
-        // Batteriepfad ist vom SigenStor nach unten zur Batterie definiert.
+        // Smartmeter <-> Batterie.
+        // Pfad ist Smartmeter -> Batterie definiert:
+        // Laden = vorwärts, Entladen = rückwärts.
         if (Math.abs(batteryTotal) > 0) {
             addHouseEdge(
                 'house-battery',
-                'M 490 570 L 492 785',
+                'M 699 682 L 603 682',
                 batColor,
                 6
             );
+
             houseEdgeState['house-battery'] = {
                 w: Math.abs(batteryTotal),
-                // Positiv = Entladen, also Batterie -> Haus = rückwärts.
                 rev: batteryTotal >= 0
             };
         }
 
-        // Netzpfad ist vom Haus/Junction zum Netz definiert.
+        // Smartmeter <-> Netz.
+        // Erst entlang der Hauskante, dann senkrecht in den Boden.
         if (Math.abs(grid) > 0) {
             addHouseEdge(
                 'house-grid',
-                'M 600 645 L 740 695 L 790 695 L 855 680 L 855 830',
+                'M 699 682 L 855 682 L 855 830',
                 gridColor,
                 6
             );
+
             houseEdgeState['house-grid'] = {
                 w: Math.abs(grid),
-                // Bezug = Netz -> Haus, also rückwärts.
+                // Bezug: Netz -> Smartmeter.
                 rev: grid >= 0
             };
         }
 
-        // EV-Pfad ist vom Charger zur Haus-Junction definiert.
-        if ((wallbox.value || 0) > 0) {
+        // Smartmeter -> Wallbox.
+        if (hasWallbox && (wallbox.value || 0) > 0) {
             addHouseEdge(
                 'house-wallbox',
-                'M 75 485 L 75 455 L 290 535 L 350 560 L 295 585 L 475 600',
+                'M 75 485 L 75 455 L 290 535 L 350 560 L 475 600 L 699 682',
                 AC.wallbox,
                 6
             );
+
             houseEdgeState['house-wallbox'] = {
                 w: Math.abs(wallbox.value || 0),
-                // Laden: Haus -> Wallbox, also rückwärts.
+                // Pfad ist Wallbox -> Smartmeter definiert.
+                // Beim Laden soll der Fluss Smartmeter -> Wallbox laufen.
                 rev: true
             };
         }
@@ -2092,6 +2227,10 @@ HTML;
             'gridImportEnergy' => $this->ReadVarFormatted('GridImportEnergy'),
             'gridExportEnergy' => $this->ReadVarFormatted('GridExportEnergy'),
             'wallbox'          => $wallbox,
+            'hasWallbox'       => (
+                $this->ReadPropertyInteger('WallboxPower') > 0
+                && IPS_VariableExists($this->ReadPropertyInteger('WallboxPower'))
+            ),
             'groups'           => $groups,
             'stats'            => $stats,
             'hasConfig'        => $config !== null,
