@@ -515,7 +515,10 @@ class Energiefluss extends IPSModuleStrict
     const lineEl = {}, dotEl = {};
     function addEdge(k, d, col) {
         const p = document.createElementNS(NSc, 'path');
-        p.setAttribute('d', d); linesG.appendChild(p); lineEl[k] = p;
+        p.setAttribute('d', d);
+        p.style.stroke = col;
+        linesG.appendChild(p);
+        lineEl[k] = p;
         dotEl[k] = [0, 1].map(() => {
             const c = document.createElementNS(NSc, 'circle');
             c.setAttribute('r', 5); c.setAttribute('fill', col); c.style.display = 'none';
@@ -601,6 +604,8 @@ class Energiefluss extends IPSModuleStrict
         list.forEach((bat, i) => {
             const p = batteryPos(i, list.length);
 
+            const batColor = (bat.value || 0) >= 0 ? AC.grid : AC.batt;
+
             addNode(
                 'bat' + i,
                 {
@@ -608,7 +613,7 @@ class Energiefluss extends IPSModuleStrict
                     y: p.y,
                     r: 42,
                     ic: 'battery-half',
-                    icc: AC.batt,
+                    icc: batColor,
                     lab: bat.name || ('Batterie ' + (i + 1)),
                     lp: 'bot',
                     ring: true
@@ -618,7 +623,7 @@ class Energiefluss extends IPSModuleStrict
 
             document.getElementById('body-bat' + i).innerHTML =
                 `<div class="sub" style="font-size:11px">${Math.round(bat.soc || 0)}%</div>` +
-                `<div class="val" style="color:${AC.batt}">${fmt(bat.value)}</div>` +
+                `<div class="val" style="color:${batColor}">${fmt(bat.value)}</div>` +
                 (bat.energy
                     ? `<div class="sub" style="font-size:10px;line-height:1.25;">${bat.energy}</div>`
                     : '');
@@ -628,7 +633,7 @@ class Energiefluss extends IPSModuleStrict
             addEdge(
                 'bat' + i,
                 `M${p.x},506 L${p.x},455 L360,455 L360,402`,
-                AC.batt
+                batColor
             );
         });
     }
@@ -689,8 +694,9 @@ class Energiefluss extends IPSModuleStrict
         // Separater SOC-Ring für jede Batterie.
         batteries.forEach((bat, i) => {
             const p = batteryPos(i, batteries.length);
+            const batColor = (bat.value || 0) >= 0 ? AC.grid : AC.batt;
             track(p.x, p.y, 48);
-            arc(p.x, p.y, 48, AC.batt, Math.max(0, Math.min(100, bat.soc || 0)) / 100, 0);
+            arc(p.x, p.y, 48, batColor, Math.max(0, Math.min(100, bat.soc || 0)) / 100, 0);
         });
     }
 
@@ -798,20 +804,35 @@ class Energiefluss extends IPSModuleStrict
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
+        const gridColor = grid >= 0 ? AC.grid : AC.batt;
+
         document.getElementById('body-netz').innerHTML =
-            `<div class="val" style="color:${grid >= 0 ? AC.grid : AC.batt}">${fmt(Math.abs(grid))}</div>` +
+            `<div class="val" style="color:${gridColor}">${fmt(Math.abs(grid))}</div>` +
             (d.gridImportEnergy
                 ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.grid}">&rarr; ${d.gridImportEnergy}</div>`
                 : '') +
             (d.gridExportEnergy
                 ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.batt}">&larr; ${d.gridExportEnergy}</div>`
                 : '');
+        const gridNode = document.getElementById('n-netz');
+        if (gridNode) {
+            gridNode.style.borderColor = gridColor;
+            const gridIcon = gridNode.querySelector('i');
+            if (gridIcon) gridIcon.style.color = gridColor;
+        }
+        if (lineEl['netz-haus']) {
+            lineEl['netz-haus'].style.stroke = gridColor;
+        }
+        if (dotEl['netz-haus']) {
+            dotEl['netz-haus'].forEach(dot => dot.setAttribute('fill', gridColor));
+        }
+
         document.getElementById('body-haus').innerHTML = `<div class="val" style="font-size:17px">${fmt(haus)}</div>`;
 
         const groups = d.groups || [];
         buildGroups(groups);
         updateRings(
-            [[AC.solar, Math.max(pvTotal, 0)], [AC.batt, Math.max(batteryTotal, 0)], [AC.grid, imp]],
+            [[AC.solar, Math.max(pvTotal, 0)], [AC.grid, Math.max(batteryTotal, 0)], [AC.grid, imp]],
             batteries
         );
 
