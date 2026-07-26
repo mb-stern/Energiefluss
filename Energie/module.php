@@ -54,6 +54,10 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('DayGridImport', 0);
         $this->RegisterPropertyInteger('WeekGridImport', 0);
 
+        // Darstellung der Kachel: flow = klassische Energieflussansicht,
+        // house = Hausansicht.
+        $this->RegisterPropertyString('DisplayMode', 'flow');
+
         // HTML-SDK als Darstellung aktivieren
         $this->SetVisualizationType(1);
     }
@@ -99,6 +103,15 @@ class Energiefluss extends IPSModuleStrict
     {
         $form = [
             'elements' => [
+                [
+                    'type'    => 'Select',
+                    'name'    => 'DisplayMode',
+                    'caption' => 'Darstellung',
+                    'options' => [
+                        ['caption' => 'Energiefluss', 'value' => 'flow'],
+                        ['caption' => 'Hausansicht', 'value' => 'house'],
+                    ],
+                ],
                 [
                     'type'    => 'ExpansionPanel',
                     'caption' => 'PV, Netz & Batterie',
@@ -409,6 +422,94 @@ class Energiefluss extends IPSModuleStrict
     .fld { display: flex; justify-content: space-between; align-items: center; gap: 8px; font-size: 13px; padding: 3px 0; }
     .fld > span { color: var(--w-text2); }
     .ed { color: var(--w-text); font-weight: 500; border: 0.5px solid var(--w-border); background: var(--w-surface); border-radius: 6px; padding: 4px 8px; width: 92px; text-align: right; font-size: 13px; font-family: inherit; }
+
+    /* Zweite Darstellung: stilisierte Hausansicht */
+    #house-stage {
+        position: relative;
+        width: 1080px;
+        height: 640px;
+        display: none;
+        overflow: hidden;
+    }
+    #house-svg { position: absolute; inset: 0; z-index: 1; }
+    #house-svg .shell { fill: var(--w-surface); stroke: var(--w-line); stroke-width: 3; }
+    #house-svg .roof { fill: var(--w-surface); stroke: var(--w-line); stroke-width: 3; }
+    #house-svg .window { fill: none; stroke: var(--w-line); stroke-width: 2; }
+    #house-svg .door { fill: none; stroke: var(--w-line); stroke-width: 2; }
+    #house-svg .panel { fill: #24384a; stroke: #56728c; stroke-width: 1.5; }
+    #house-svg .panel-line { stroke: #56728c; stroke-width: 1; }
+    #house-svg .hline { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
+    .house-label {
+        position: absolute;
+        z-index: 3;
+        text-align: center;
+        color: var(--w-text);
+        line-height: 1.25;
+        pointer-events: none;
+    }
+    .house-label .name { color: var(--w-text2); font-size: 13px; }
+    .house-label .power { font-size: 18px; font-weight: 600; }
+    .house-label .energy { color: var(--w-text2); font-size: 11px; }
+    #house-center {
+        left: 355px;
+        top: 355px;
+        width: 250px;
+        transform: translateX(-50%);
+    }
+    #house-grid-label {
+        left: 72px;
+        top: 300px;
+        width: 120px;
+    }
+    #house-battery-area {
+        position: absolute;
+        left: 690px;
+        top: 210px;
+        width: 250px;
+        z-index: 3;
+        display: flex;
+        flex-direction: column;
+        gap: 18px;
+    }
+    .house-battery-card {
+        background: var(--w-surface);
+        border: 1px solid var(--w-border);
+        border-radius: 12px;
+        padding: 10px 12px;
+        color: var(--w-text);
+        min-height: 58px;
+    }
+    .house-battery-card .row {
+        display: flex;
+        justify-content: space-between;
+        gap: 10px;
+        align-items: baseline;
+    }
+    .house-battery-card .name { color: var(--w-text2); font-size: 12px; }
+    .house-battery-card .power { font-weight: 600; font-size: 16px; }
+    .house-battery-card .sub { color: var(--w-text2); font-size: 11px; margin-top: 3px; }
+    #house-pv-area {
+        position: absolute;
+        left: 210px;
+        top: 48px;
+        width: 420px;
+        z-index: 3;
+        display: flex;
+        justify-content: center;
+        gap: 14px;
+        flex-wrap: wrap;
+    }
+    .house-pv-card {
+        min-width: 105px;
+        text-align: center;
+        background: rgba(255,255,255,0.04);
+        border-radius: 8px;
+        padding: 4px 8px;
+        color: var(--w-text);
+    }
+    .house-pv-card .name { color: var(--w-text2); font-size: 11px; }
+    .house-pv-card .power { font-weight: 600; font-size: 15px; }
+    .house-pv-card .energy { color: var(--w-text2); font-size: 10px; }
 </style>
 <script src="/icons.js"></script>
 
@@ -423,6 +524,49 @@ class Energiefluss extends IPSModuleStrict
                     <g id="ring"></g>
                     <g id="dots"></g>
                 </svg>
+            </div>
+
+            <div id="house-stage">
+                <svg id="house-svg" width="1080" height="640" viewBox="0 0 1080 640" aria-hidden="true">
+                    <g id="house-base">
+                        <!-- Hauskörper -->
+                        <path class="roof" d="M220 305 L355 175 L490 305 Z"></path>
+                        <rect class="shell" x="245" y="305" width="220" height="185" rx="4"></rect>
+
+                        <!-- Dach-Solarmodule -->
+                        <g transform="translate(282 214) skewX(-26)">
+                            <rect class="panel" x="0" y="0" width="128" height="72" rx="3"></rect>
+                            <line class="panel-line" x1="42" y1="0" x2="42" y2="72"></line>
+                            <line class="panel-line" x1="84" y1="0" x2="84" y2="72"></line>
+                            <line class="panel-line" x1="0" y1="24" x2="128" y2="24"></line>
+                            <line class="panel-line" x1="0" y1="48" x2="128" y2="48"></line>
+                        </g>
+
+                        <!-- Fenster/Tür -->
+                        <rect class="window" x="275" y="340" width="58" height="52" rx="2"></rect>
+                        <line class="window" x1="304" y1="340" x2="304" y2="392"></line>
+                        <line class="window" x1="275" y1="366" x2="333" y2="366"></line>
+                        <rect class="door" x="380" y="350" width="48" height="140" rx="3"></rect>
+                    </g>
+
+                    <g id="house-lines"></g>
+                    <g id="house-dots"></g>
+                </svg>
+
+                <div id="house-pv-area"></div>
+
+                <div id="house-center" class="house-label">
+                    <div class="name">Haus</div>
+                    <div id="house-center-power" class="power">0 W</div>
+                </div>
+
+                <div id="house-grid-label" class="house-label">
+                    <div class="name">Netz</div>
+                    <div id="house-grid-power" class="power">0 W</div>
+                    <div id="house-grid-energy" class="energy"></div>
+                </div>
+
+                <div id="house-battery-area"></div>
             </div>
         </div>
         <div id="cfg" style="display:none">
@@ -466,9 +610,7 @@ class Energiefluss extends IPSModuleStrict
     window.addEventListener('load', detectTheme);
     setInterval(detectTheme, 2000);
 
-    const AC = { solar: '#EFA020', grid: '#3B82C4', room: '#2FA98F', batt: '#4F9A5B',
-        import: '#ef4444'
-    };
+    const AC = { solar: '#EFA020', grid: '#3B82C4', room: '#2FA98F', batt: '#4F9A5B' };
     const NSc = 'http://www.w3.org/2000/svg';
     const RR = 34, COL0 = 530, COLW = 120;
 
@@ -481,6 +623,14 @@ class Energiefluss extends IPSModuleStrict
     const linesG = document.getElementById('lines');
     const dotsG = document.getElementById('dots');
     const ringG = document.getElementById('ring');
+
+    const houseStage = document.getElementById('house-stage');
+    const houseLinesG = document.getElementById('house-lines');
+    const houseDotsG = document.getElementById('house-dots');
+    const houseLineEl = {};
+    const houseDotEl = {};
+    let houseEdgeState = {};
+    let houseEdgePhase = {};
 
     function gpos(i) {
         const col = Math.floor(i / 2);
@@ -517,10 +667,7 @@ class Energiefluss extends IPSModuleStrict
     const lineEl = {}, dotEl = {};
     function addEdge(k, d, col) {
         const p = document.createElementNS(NSc, 'path');
-        p.setAttribute('d', d);
-        p.style.stroke = col;
-        linesG.appendChild(p);
-        lineEl[k] = p;
+        p.setAttribute('d', d); linesG.appendChild(p); lineEl[k] = p;
         dotEl[k] = [0, 1].map(() => {
             const c = document.createElementNS(NSc, 'circle');
             c.setAttribute('r', 5); c.setAttribute('fill', col); c.style.display = 'none';
@@ -568,6 +715,114 @@ class Energiefluss extends IPSModuleStrict
             });
     }
 
+    function clearHouseEdges() {
+        Object.keys(houseLineEl).forEach(k => {
+            houseLineEl[k].remove();
+            houseDotEl[k].forEach(d => d.remove());
+            delete houseLineEl[k];
+            delete houseDotEl[k];
+        });
+        houseEdgeState = {};
+    }
+
+    function addHouseEdge(key, d, color) {
+        const p = document.createElementNS(NSc, 'path');
+        p.setAttribute('d', d);
+        p.setAttribute('class', 'hline');
+        p.style.stroke = color;
+        houseLinesG.appendChild(p);
+        houseLineEl[key] = p;
+
+        houseDotEl[key] = [0, 1].map(() => {
+            const c = document.createElementNS(NSc, 'circle');
+            c.setAttribute('r', 5);
+            c.setAttribute('fill', color);
+            houseDotsG.appendChild(c);
+            return c;
+        });
+    }
+
+    function buildHouseView(d, grid, haus, pvs, batteries) {
+        clearHouseEdges();
+
+        const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
+
+        // PV-Karten
+        const pvArea = document.getElementById('house-pv-area');
+        pvArea.innerHTML = pvs.map((pv, i) => `
+            <div class="house-pv-card">
+                <div class="name">${pv.name || ('PV ' + (i + 1))}</div>
+                <div class="power" style="color:${AC.solar}">${fmt(pv.value)}</div>
+                ${pv.energy ? `<div class="energy">${pv.energy}</div>` : ''}
+            </div>
+        `).join('');
+
+        // Haus
+        document.getElementById('house-center-power').textContent = fmt(haus);
+
+        // Netz
+        const gridColor = grid >= 0 ? '#d9534f' : AC.batt;
+        document.getElementById('house-grid-power').style.color = gridColor;
+        document.getElementById('house-grid-power').textContent = fmt(Math.abs(grid));
+
+        const gridEnergy = [];
+        if (d.gridImportEnergy) {
+            gridEnergy.push(`<span style="color:#d9534f">→ ${d.gridImportEnergy}</span>`);
+        }
+        if (d.gridExportEnergy) {
+            gridEnergy.push(`<span style="color:${AC.batt}">← ${d.gridExportEnergy}</span>`);
+        }
+        document.getElementById('house-grid-energy').innerHTML = gridEnergy.join('<br>');
+
+        // Batterien
+        const batteryArea = document.getElementById('house-battery-area');
+        batteryArea.innerHTML = batteries.map((bat, i) => {
+            const batColor = (bat.value || 0) >= 0 ? AC.grid : AC.batt;
+            return `
+                <div class="house-battery-card" id="house-bat-${i}">
+                    <div class="row">
+                        <span class="name">${bat.name || ('Batterie ' + (i + 1))}</span>
+                        <span>${Math.round(bat.soc || 0)}%</span>
+                    </div>
+                    <div class="power" style="color:${batColor}">${fmt(Math.abs(bat.value || 0))}</div>
+                    ${bat.energy ? `<div class="sub">${bat.energy}</div>` : ''}
+                </div>
+            `;
+        }).join('');
+
+        // Energiepfade in der Hausansicht
+        // PV -> Haus immer orange
+        if (pvTotal > 0) {
+            addHouseEdge('hpv', 'M355,175 L355,120', AC.solar);
+            houseEdgeState['hpv'] = { w: pvTotal, rev: true };
+        }
+
+        // Netz horizontal zum Haus
+        if (Math.abs(grid) > 0) {
+            addHouseEdge('hgrid', 'M120,335 L245,335', gridColor);
+            houseEdgeState['hgrid'] = { w: Math.abs(grid), rev: grid < 0 };
+        }
+
+        // Batterien rechts, je eigener Pfad
+        batteries.forEach((bat, i) => {
+            const y = 255 + (i * 82);
+            const color = (bat.value || 0) >= 0 ? AC.grid : AC.batt;
+            addHouseEdge('hbat' + i, `M465,${y} L675,${y}`, color);
+            // Pfad ist Haus -> Batterie gezeichnet; positive Batterieentladung
+            // muss daher rückwärts Richtung Haus laufen.
+            houseEdgeState['hbat' + i] = {
+                w: Math.abs(bat.value || 0),
+                rev: (bat.value || 0) >= 0
+            };
+        });
+    }
+
+    function applyDisplayMode(mode) {
+        const house = mode === 'house';
+        stage.style.display = house ? 'none' : '';
+        houseStage.style.display = house ? '' : 'none';
+    }
+
     function buildPVs(list) {
         list.forEach((pv, i) => {
             const p = pvPos(i, list.length);
@@ -606,8 +861,6 @@ class Energiefluss extends IPSModuleStrict
         list.forEach((bat, i) => {
             const p = batteryPos(i, list.length);
 
-            const batColor = (bat.value || 0) >= 0 ? AC.grid : AC.batt;
-
             addNode(
                 'bat' + i,
                 {
@@ -615,7 +868,7 @@ class Energiefluss extends IPSModuleStrict
                     y: p.y,
                     r: 42,
                     ic: 'battery-half',
-                    icc: batColor,
+                    icc: AC.batt,
                     lab: bat.name || ('Batterie ' + (i + 1)),
                     lp: 'bot',
                     ring: true
@@ -625,7 +878,7 @@ class Energiefluss extends IPSModuleStrict
 
             document.getElementById('body-bat' + i).innerHTML =
                 `<div class="sub" style="font-size:11px">${Math.round(bat.soc || 0)}%</div>` +
-                `<div class="val" style="color:${batColor}">${fmt(bat.value)}</div>` +
+                `<div class="val" style="color:${AC.batt}">${fmt(bat.value)}</div>` +
                 (bat.energy
                     ? `<div class="sub" style="font-size:10px;line-height:1.25;">${bat.energy}</div>`
                     : '');
@@ -635,7 +888,7 @@ class Energiefluss extends IPSModuleStrict
             addEdge(
                 'bat' + i,
                 `M${p.x},506 L${p.x},455 L360,455 L360,402`,
-                batColor
+                AC.batt
             );
         });
     }
@@ -696,9 +949,8 @@ class Energiefluss extends IPSModuleStrict
         // Separater SOC-Ring für jede Batterie.
         batteries.forEach((bat, i) => {
             const p = batteryPos(i, batteries.length);
-            const batColor = (bat.value || 0) >= 0 ? AC.grid : AC.batt;
             track(p.x, p.y, 48);
-            arc(p.x, p.y, 48, batColor, Math.max(0, Math.min(100, bat.soc || 0)) / 100, 0);
+            arc(p.x, p.y, 48, AC.batt, Math.max(0, Math.min(100, bat.soc || 0)) / 100, 0);
         });
     }
 
@@ -806,35 +1058,23 @@ class Energiefluss extends IPSModuleStrict
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
-        const gridColor = grid >= 0 ? AC.import : AC.batt;
-
         document.getElementById('body-netz').innerHTML =
-            `<div class="val" style="color:${gridColor}">${fmt(Math.abs(grid))}</div>` +
+            `<div class="val" style="color:${grid >= 0 ? AC.grid : AC.batt}">${fmt(Math.abs(grid))}</div>` +
             (d.gridImportEnergy
-                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.import}">&rarr; ${d.gridImportEnergy}</div>`
+                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.grid}">&rarr; ${d.gridImportEnergy}</div>`
                 : '') +
             (d.gridExportEnergy
                 ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.batt}">&larr; ${d.gridExportEnergy}</div>`
                 : '');
-        const gridNode = document.getElementById('n-netz');
-        if (gridNode) {
-            gridNode.style.borderColor = gridColor;
-            const gridIcon = gridNode.querySelector('i');
-            if (gridIcon) gridIcon.style.color = gridColor;
-        }
-        if (lineEl['netz-haus']) {
-            lineEl['netz-haus'].style.stroke = gridColor;
-        }
-        if (dotEl['netz-haus']) {
-            dotEl['netz-haus'].forEach(dot => dot.setAttribute('fill', gridColor));
-        }
-
         document.getElementById('body-haus').innerHTML = `<div class="val" style="font-size:17px">${fmt(haus)}</div>`;
 
         const groups = d.groups || [];
         buildGroups(groups);
+
+        buildHouseView(d, grid, haus, pvs, batteries);
+        applyDisplayMode(d.displayMode || 'flow');
         updateRings(
-            [[AC.solar, Math.max(pvTotal, 0)], [AC.grid, Math.max(batteryTotal, 0)], [AC.import, imp]],
+            [[AC.solar, Math.max(pvTotal, 0)], [AC.batt, Math.max(batteryTotal, 0)], [AC.grid, imp]],
             batteries
         );
 
@@ -883,7 +1123,12 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('cfg').style.display = showRightPanel ? '' : 'none';
 
         // Breite nur für tatsächlich sichtbare Inhalte reservieren.
-        updateLayout(groups.length, pvs.length, batteries.length, showRightPanel);
+        if ((d.displayMode || 'flow') === 'house') {
+            // Hausansicht hat eine feste, kompakte Grundbreite.
+            updateLayout(0, 0, 0, showRightPanel);
+        } else {
+            updateLayout(groups.length, pvs.length, batteries.length, showRightPanel);
+        }
     }
 
     // Pflicht-Funktion: empfängt Nachrichten vom Modul (UpdateVisualizationValue)
@@ -946,6 +1191,29 @@ class Energiefluss extends IPSModuleStrict
                 if (st.rev) {
                     t = 1 - t;
                 }
+
+                const pt = path.getPointAtLength(t * len);
+                dot.setAttribute('cx', pt.x);
+                dot.setAttribute('cy', pt.y);
+            });
+        }
+
+        for (const k in houseEdgeState) {
+            const st = houseEdgeState[k];
+            if (!st || st.w <= 0 || !houseLineEl[k]) continue;
+
+            if (houseEdgePhase[k] === undefined) {
+                houseEdgePhase[k] = 0;
+            }
+
+            houseEdgePhase[k] = (houseEdgePhase[k] + (dt * powerSpeed(st.w))) % 1;
+
+            const path = houseLineEl[k];
+            const len = path.getTotalLength();
+
+            houseDotEl[k].forEach((dot, i) => {
+                let t = (houseEdgePhase[k] + i / 2) % 1;
+                if (st.rev) t = 1 - t;
 
                 const pt = path.getPointAtLength(t * len);
                 dot.setAttribute('cx', pt.x);
@@ -1309,7 +1577,8 @@ HTML;
         }
 
         return [
-            'pvs'       => $pvs,
+            'displayMode' => $this->ReadPropertyString('DisplayMode'),
+            'pvs'         => $pvs,
             'batteries' => $batteries,
             'l1'        => $l1,
             'l2'        => $l2,
