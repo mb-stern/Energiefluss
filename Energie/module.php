@@ -466,7 +466,9 @@ class Energiefluss extends IPSModuleStrict
     window.addEventListener('load', detectTheme);
     setInterval(detectTheme, 2000);
 
-    const AC = { solar: '#EFA020', grid: '#3B82C4', room: '#2FA98F', batt: '#4F9A5B' };
+    const AC = { solar: '#EFA020', grid: '#3B82C4', room: '#2FA98F', batt: '#4F9A5B',
+        import: '#ef4444'
+    };
     const NSc = 'http://www.w3.org/2000/svg';
     const RR = 34, COL0 = 530, COLW = 120;
 
@@ -804,7 +806,7 @@ class Energiefluss extends IPSModuleStrict
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
-        const gridColor = grid >= 0 ? AC.grid : AC.batt;
+        const gridColor = grid >= 0 ? AC.import : AC.batt;
 
         document.getElementById('body-netz').innerHTML =
             `<div class="val" style="color:${gridColor}">${fmt(Math.abs(grid))}</div>` +
@@ -832,7 +834,7 @@ class Energiefluss extends IPSModuleStrict
         const groups = d.groups || [];
         buildGroups(groups);
         updateRings(
-            [[AC.solar, Math.max(pvTotal, 0)], [AC.grid, Math.max(batteryTotal, 0)], [AC.grid, imp]],
+            [[AC.solar, Math.max(pvTotal, 0)], [AC.grid, Math.max(batteryTotal, 0)], [AC.import, imp]],
             batteries
         );
 
