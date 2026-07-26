@@ -374,7 +374,17 @@ class Energiefluss extends IPSModuleStrict
     .lbl { position: absolute; left: 50%; transform: translateX(-50%); color: var(--w-text2); white-space: nowrap; }
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 8px; }
-    #phases { position: absolute; left: 110px; top: 270px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
+    #phases {
+        position: absolute;
+        left: 18px;
+        top: 330px;
+        transform: none;
+        font-size: 13px;
+        line-height: 1.45;
+        color: var(--w-text2);
+        white-space: nowrap;
+        text-align: left;
+    }
     #wrap { display: flex; gap: 14px; align-items: flex-start; width: 540px; height: 640px; }
     #cfg { flex: 0 0 250px; width: 250px; border-left: 0.5px solid var(--w-border); padding-left: 14px; box-sizing: border-box; }
     #cfgsec { margin-top: 12px; }
@@ -460,8 +470,17 @@ class Energiefluss extends IPSModuleStrict
     const ringG = document.getElementById('ring');
 
     function gpos(i) {
-        const col = Math.floor(i / 2), top = i % 2 === 0;
-        return { x: COL0 + col * COLW, y: top ? 252 : 548, lp: top ? 'top' : 'bot' };
+        const col = Math.floor(i / 2);
+        const top = i % 2 === 0;
+
+        // Verbraucher liegen symmetrisch ober- und unterhalb der
+        // gemeinsamen Haus-Sammellinie. Dadurch sind alle senkrechten
+        // Verbraucherleitungen gleich lang.
+        return {
+            x: COL0 + col * COLW,
+            y: top ? 205 : 495,
+            lp: top ? 'top' : 'bot'
+        };
     }
     function fmt(w) { return Math.round(w || 0).toLocaleString('de-DE') + ' W'; }
 
@@ -620,6 +639,9 @@ class Energiefluss extends IPSModuleStrict
             }
             document.getElementById('body-r' + i).innerHTML = inner;
             const endY = p.lp === 'top' ? p.y + RR : p.y - RR;
+
+            // Gemeinsame horizontale Linie auf Haushöhe; der senkrechte
+            // Abschnitt ist für obere und untere Verbraucher gleich lang.
             addEdge('grp' + i, `M412,350 L${p.x},350 L${p.x},${endY}`, AC.room);
         });
     }
@@ -705,6 +727,7 @@ class Energiefluss extends IPSModuleStrict
     buildCfg();
 
     let edgeState = {};
+    let edgePhase = {};
     let layoutWidth = 540;
 
     function updateLayout(groupCount, pvCount, batteryCount, showRightPanel) {
@@ -774,7 +797,10 @@ class Energiefluss extends IPSModuleStrict
             (d.gridExportEnergy
                 ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.batt}">&larr; ${d.gridExportEnergy}</div>`
                 : '');
-        ph.innerHTML = `L1 ${Math.round(l1)} &middot; L2 ${Math.round(l2)} &middot; L3 ${Math.round(l3)} W`;
+        ph.innerHTML =
+            `L1 ${Math.round(l1)} W<br>` +
+            `L2 ${Math.round(l2)} W<br>` +
+            `L3 ${Math.round(l3)} W`;
         document.getElementById('body-haus').innerHTML = `<div class="val" style="font-size:17px">${fmt(haus)}</div>`;
 
         const groups = d.groups || [];
@@ -844,20 +870,55 @@ class Energiefluss extends IPSModuleStrict
         setState(d);
     }
 
-    let p = 0, last = performance.now();
+    let last = performance.now();
+
+    function powerSpeed(w) {
+        // Leistung bestimmt die sichtbare Flussgeschwindigkeit.
+        // Kleine Leistungen bleiben gut sichtbar, hohe Leistungen
+        // werden schneller, aber bewusst begrenzt.
+        const power = Math.max(0, Math.abs(w || 0));
+
+        // 0 W = keine Bewegung; ab ca. 50 W langsam sichtbar,
+        // danach logarithmisch steigend bis zum Maximalwert.
+        if (power <= 0) return 0;
+
+        const minSpeed = 0.10;
+        const maxSpeed = 0.75;
+        const normalized = Math.min(1, Math.log10(power + 1) / 4);
+
+        return minSpeed + ((maxSpeed - minSpeed) * normalized);
+    }
+
     function frame(now) {
-        const dt = (now - last) / 1000; last = now; p = (p + dt * 0.28) % 1;
+        const dt = (now - last) / 1000;
+        last = now;
+
         for (const k in edgeState) {
             const st = edgeState[k];
             if (!st || st.w <= 0 || !lineEl[k]) continue;
-            const path = lineEl[k], len = path.getTotalLength();
-            dotEl[k].forEach((dt2, i) => {
-                let t = (p + i / 2) % 1;
-                if (st.rev) t = 1 - t;
+
+            if (edgePhase[k] === undefined) {
+                edgePhase[k] = 0;
+            }
+
+            edgePhase[k] = (edgePhase[k] + (dt * powerSpeed(st.w))) % 1;
+
+            const path = lineEl[k];
+            const len = path.getTotalLength();
+
+            dotEl[k].forEach((dot, i) => {
+                let t = (edgePhase[k] + i / 2) % 1;
+
+                if (st.rev) {
+                    t = 1 - t;
+                }
+
                 const pt = path.getPointAtLength(t * len);
-                dt2.setAttribute('cx', pt.x); dt2.setAttribute('cy', pt.y);
+                dot.setAttribute('cx', pt.x);
+                dot.setAttribute('cy', pt.y);
             });
         }
+
         requestAnimationFrame(frame);
     }
 
