@@ -374,7 +374,7 @@ class Energiefluss extends IPSModuleStrict
     .lbl { position: absolute; left: 50%; transform: translateX(-50%); color: var(--w-text2); white-space: nowrap; }
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 8px; }
-    #phases { position: absolute; left: 110px; top: 310px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
+    #phases { position: absolute; left: 110px; top: 270px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
     #wrap { display: flex; gap: 14px; align-items: flex-start; width: 540px; height: 640px; }
     #cfg { flex: 0 0 250px; width: 250px; border-left: 0.5px solid var(--w-border); padding-left: 14px; box-sizing: border-box; }
     #cfgsec { margin-top: 12px; }
@@ -507,15 +507,19 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
+    function sourceX(i) {
+        // Der erste Eintrag bleibt am Hausanker x=360.
+        // Weitere Einträge wachsen ausschließlich nach links.
+        // 120 px Abstand hält Beschriftung und Kreise sauber getrennt.
+        return 360 - (i * 120);
+    }
+
     function pvPos(i, count) {
-        // Neue Einträge stehen in der Liste unten, sollen visuell aber links
-        // von bestehenden Anlagen erscheinen.
-        return distributedPos((count - 1) - i, count, 210, 510, 105);
+        return { x: sourceX(i), y: 105 };
     }
 
     function batteryPos(i, count) {
-        // Gleiche Logik wie bei PV: neue Batterien links ergänzen.
-        return distributedPos((count - 1) - i, count, 210, 510, 548);
+        return { x: sourceX(i), y: 548 };
     }
 
     function clearDynamicSources() {
