@@ -11,8 +11,9 @@
  * Die Home-Assistant-Datenanbindung wird hier nicht verwendet.
  * Stattdessen erzeugt das IP-Symcon-Modul ein kompatibles State-Objekt
  * aus seinem bestehenden BuildPayload().
- * power-flow-card.js und Lit werden beim ersten ApplyChanges() lokal
- * unter /user/Energiefluss/vendor/ abgelegt.
+ * power-flow-card.js und Lit liegen versioniert im Modulbaum unter
+ * assets/vendor/ und werden von ApplyChanges() lediglich in den
+ * Web-Pfad /user/Energiefluss/vendor/ veröffentlicht.
  */
 
 declare(strict_types=1);
@@ -1207,7 +1208,7 @@ class Energiefluss extends IPSModuleStrict
                     pfcError.style.display = 'flex';
                     pfcError.textContent =
                         'Power Flow Card konnte nicht geladen werden. ' +
-                        'Prüfe das Symcon-Log. Die lokalen Visualisierungsdateien konnten möglicherweise nicht initialisiert werden.';
+                        'Prüfe assets/vendor/ im Modulbaum und das Symcon-Log.';
                 }
 
                 throw err;
@@ -1632,14 +1633,20 @@ HTML;
 
     private function EnsureVisualizationAssets(): void
     {
-        // Feste Quellen: Es wird NICHT bei jedem Start die neueste Version geladen.
-        // Die Dateien werden nur beim ersten Fehlen heruntergeladen.
-        $powerFlowUrl =
-            'https://raw.githubusercontent.com/LordGuenni/power-flow-card/master/power-flow-card.js';
-
-        // Offizielles, bereits gebündeltes Lit-Core-Modul ohne weitere Abhängigkeiten.
-        $litUrl =
-            'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
+        /*
+         * Quelle der Visualisierungsdateien ist ausschließlich der Modulbaum:
+         *
+         *   assets/vendor/power-flow-card.js
+         *   assets/vendor/lit-core.min.js
+         *
+         * Der /user/-Ordner ist nur die vom Symcon-Webserver erreichbare
+         * Laufzeitkopie. Es findet keinerlei Download aus dem Internet statt.
+         */
+        $sourceDir = __DIR__
+            . DIRECTORY_SEPARATOR
+            . 'assets'
+            . DIRECTORY_SEPARATOR
+            . 'vendor';
 
         $targetDir = IPS_GetKernelDir()
             . 'user'
@@ -1651,113 +1658,62 @@ HTML;
         if (!is_dir($targetDir)) {
             if (!@mkdir($targetDir, 0777, true) && !is_dir($targetDir)) {
                 $this->LogMessage(
-                    'Hausansicht: Vendor-Verzeichnis konnte nicht erstellt werden: ' . $targetDir,
+                    'Hausansicht: Web-Verzeichnis konnte nicht erstellt werden: ' . $targetDir,
                     KL_ERROR
                 );
                 return;
             }
         }
 
-        $powerFlowTarget =
-            $targetDir . DIRECTORY_SEPARATOR . 'power-flow-card.js';
-        $litTarget =
-            $targetDir . DIRECTORY_SEPARATOR . 'lit-core.min.js';
+        $assets = [
+            'power-flow-card.js',
+            'lit-core.min.js',
+        ];
 
-        // 1) Lit lokal bereitstellen.
-        if (!is_file($litTarget) || @filesize($litTarget) < 1000) {
-            $lit = $this->DownloadVisualizationAsset($litUrl);
+        foreach ($assets as $asset) {
+            $source = $sourceDir . DIRECTORY_SEPARATOR . $asset;
+            $target = $targetDir . DIRECTORY_SEPARATOR . $asset;
 
-            if ($lit === null) {
+            if (!is_file($source)) {
                 $this->LogMessage(
-                    'Hausansicht: Lit konnte nicht heruntergeladen werden.',
+                    'Hausansicht: Datei fehlt im Modulbaum: ' . $source,
                     KL_ERROR
                 );
-                return;
+                continue;
             }
 
-            if (@file_put_contents($litTarget, $lit, LOCK_EX) === false) {
-                $this->LogMessage(
-                    'Hausansicht: Lit konnte nicht gespeichert werden: ' . $litTarget,
-                    KL_ERROR
-                );
-                return;
-            }
-        }
+            $copyRequired = !is_file($target);
 
-        // 2) Power-Flow-Card herunterladen und den Online-Lit-Import
-        //    dauerhaft auf unsere lokale Datei umstellen.
-        if (!is_file($powerFlowTarget) || @filesize($powerFlowTarget) < 1000) {
-            $powerFlow = $this->DownloadVisualizationAsset($powerFlowUrl);
+            if (!$copyRequired) {
+                $sourceSize = @filesize($source);
+                $targetSize = @filesize($target);
+                $sourceMTime = @filemtime($source);
+                $targetMTime = @filemtime($target);
 
-            if ($powerFlow === null) {
-                $this->LogMessage(
-                    'Hausansicht: power-flow-card.js konnte nicht heruntergeladen werden.',
-                    KL_ERROR
-                );
-                return;
+                $copyRequired =
+                    $sourceSize !== $targetSize
+                    || $sourceMTime === false
+                    || $targetMTime === false
+                    || $sourceMTime > $targetMTime;
             }
 
-            $powerFlow = str_replace(
-                [
-                    'https://unpkg.com/lit?module',
-                    'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js',
-                ],
-                '/user/Energiefluss/vendor/lit-core.min.js',
-                $powerFlow
-            );
-
-            if (
-                !str_contains(
-                    $powerFlow,
-                    '/user/Energiefluss/vendor/lit-core.min.js'
-                )
-            ) {
-                $this->LogMessage(
-                    'Hausansicht: Lit-Import in power-flow-card.js konnte nicht lokalisiert werden.',
-                    KL_ERROR
-                );
-                return;
+            if (!$copyRequired) {
+                continue;
             }
 
-            if (@file_put_contents($powerFlowTarget, $powerFlow, LOCK_EX) === false) {
+            if (!@copy($source, $target)) {
                 $this->LogMessage(
-                    'Hausansicht: power-flow-card.js konnte nicht gespeichert werden: '
-                    . $powerFlowTarget,
+                    'Hausansicht: Datei konnte nicht veröffentlicht werden: ' . $asset,
                     KL_ERROR
                 );
-                return;
+                continue;
+            }
+
+            $mtime = @filemtime($source);
+            if ($mtime !== false) {
+                @touch($target, $mtime);
             }
         }
-    }
-
-    private function DownloadVisualizationAsset(string $url): ?string
-    {
-        // Kurzer Timeout, damit ein fehlender Internetzugang ApplyChanges()
-        // nicht unnötig lange blockiert.
-        $context = stream_context_create([
-            'http' => [
-                'method'          => 'GET',
-                'timeout'         => 15,
-                'follow_location' => 1,
-                'max_redirects'   => 5,
-                'header'          => [
-                    'User-Agent: IP-Symcon Energiefluss Module',
-                    'Accept: */*',
-                ],
-            ],
-            'ssl' => [
-                'verify_peer'      => true,
-                'verify_peer_name' => true,
-            ],
-        ]);
-
-        $data = @file_get_contents($url, false, $context);
-
-        if ($data === false || strlen($data) < 1000) {
-            return null;
-        }
-
-        return $data;
     }
 
 
