@@ -28,6 +28,10 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyString('PV2Name', 'PV2');
         $this->RegisterPropertyInteger('PV2Energy', 0);
 
+        // Dynamische Solaranlagen. Die alten PV1/PV2-Eigenschaften bleiben
+        // vorerst als Fallback für bestehende Konfigurationen erhalten.
+        $this->RegisterPropertyString('Producers', '[]');
+
         $this->RegisterPropertyInteger('BatteryOut', 0);
         $this->RegisterPropertyInteger('BatterySoC', 0);
         $this->RegisterPropertyInteger('L1', 0);
@@ -92,16 +96,37 @@ class Energiefluss extends IPSModuleStrict
                     'type'    => 'ExpansionPanel',
                     'caption' => 'Erzeuger & Batterie',
                     'items'   => [
-                        ['type' => 'Label', 'caption' => 'PV1'],
-                        ['type' => 'ValidationTextBox', 'name' => 'PV1Name', 'caption' => 'Name'],
-                        ['type' => 'SelectVariable', 'name' => 'SolarFlowPV', 'caption' => 'Leistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'PV1Energy', 'caption' => 'Erzeugte Energie gesamt (kWh)'],
-
-                        ['type' => 'Label', 'caption' => 'PV2'],
-                        ['type' => 'ValidationTextBox', 'name' => 'PV2Name', 'caption' => 'Name'],
-                        ['type' => 'SelectVariable', 'name' => 'HoymilesPV', 'caption' => 'Leistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'PV2Energy', 'caption' => 'Erzeugte Energie gesamt (kWh)'],
-
+                        [
+                            'type'     => 'List',
+                            'name'     => 'Producers',
+                            'caption'  => 'Solaranlagen',
+                            'rowCount' => 5,
+                            'add'      => true,
+                            'delete'   => true,
+                            'columns'  => [
+                                [
+                                    'caption' => 'Name',
+                                    'name'    => 'Name',
+                                    'width'   => '180px',
+                                    'add'     => 'PV',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                ],
+                                [
+                                    'caption' => 'Leistung',
+                                    'name'    => 'VariableID',
+                                    'width'   => 'auto',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Erzeugte Energie',
+                                    'name'    => 'EnergyVariableID',
+                                    'width'   => 'auto',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                            ],
+                        ],
                         ['type' => 'Label', 'caption' => 'Batterie'],
                         ['type' => 'SelectVariable', 'name' => 'BatteryOut', 'caption' => 'Batterie-Ausgang ins Haus (W)'],
                         ['type' => 'SelectVariable', 'name' => 'BatterySoC', 'caption' => 'Batterie-Ladezustand (%)'],
@@ -260,7 +285,7 @@ class Energiefluss extends IPSModuleStrict
 
     // Lädt nur den HTML-Kontext der geöffneten Kachel neu.
     // Die komplette Symcon-Seite muss dafür nicht neu geladen werden.
-    public function RLoadHtml(): void
+    public function ReloadHtml(): void
     {
         $this->UpdateVisualizationValue(
             json_encode(
@@ -408,11 +433,9 @@ class Energiefluss extends IPSModuleStrict
     const RR = 34, COL0 = 530, COLW = 120;
 
     const MAIN = {
-        sf:   { x: 250, y: 82,  r: 46, ic: 'solar-panel',   icc: AC.solar, lab: 'PV1', lp: 'top' },
-        hm:   { x: 470, y: 82,  r: 46, ic: 'solar-panel',   icc: AC.solar, lab: 'PV2',  lp: 'top' },
-        batt: { x: 360, y: 232, r: 50, ic: 'battery-half',  icc: AC.batt,  lab: 'Batterie',  lp: 'top', ring: true },
-        netz: { x: 110, y: 400, r: 46, ic: 'bolt',          icc: AC.grid,  lab: 'Netz',      lp: 'bot' },
-        haus: { x: 360, y: 400, r: 52, ic: 'house',         icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true }
+        batt: { x: 190, y: 230, r: 50, ic: 'battery-half', icc: AC.batt, lab: 'Batterie', lp: 'top', ring: true },
+        netz: { x: 110, y: 400, r: 46, ic: 'bolt',         icc: AC.grid, lab: 'Netz',     lp: 'bot' },
+        haus: { x: 360, y: 400, r: 52, ic: 'house',        icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true }
     };
 
     const stage = document.getElementById('stage');
@@ -443,9 +466,7 @@ class Energiefluss extends IPSModuleStrict
     const ph = document.createElement('div'); ph.id = 'phases'; stage.appendChild(ph);
 
     const E = {
-        'sf-batt':   { d: 'M255,126 L336,193', col: AC.solar },
-        'hm-batt':   { d: 'M465,126 L384,193', col: AC.solar },
-        'batt-haus': { d: 'M360,284 L360,346', col: AC.batt },
+        'batt-haus': { d: 'M225,266 L325,365', col: AC.batt },
         'netz-haus': { d: 'M156,400 L306,400', col: AC.grid }
     };
     const lineEl = {}, dotEl = {};
@@ -459,6 +480,50 @@ class Energiefluss extends IPSModuleStrict
         });
     }
     for (const k in E) addEdge(k, E[k].d, E[k].col);
+
+    function producerPos(i) {
+        return { x: 270 + (i * 130), y: 92 };
+    }
+
+    function buildProducers(list) {
+        document.querySelectorAll('.pv-node').forEach(e => e.remove());
+        Object.keys(lineEl).filter(k => k.startsWith('pv')).forEach(k => {
+            lineEl[k].remove();
+            dotEl[k].forEach(d => d.remove());
+            delete lineEl[k];
+            delete dotEl[k];
+        });
+
+        list.forEach((pv, i) => {
+            const p = producerPos(i);
+            addNode(
+                'pv' + i,
+                {
+                    x: p.x,
+                    y: p.y,
+                    r: 46,
+                    ic: 'solar-panel',
+                    icc: AC.solar,
+                    lab: pv.name || ('PV' + (i + 1)),
+                    lp: 'top'
+                },
+                'pv-node'
+            );
+
+            document.getElementById('body-pv' + i).innerHTML =
+                `<div class="val">${fmt(pv.value)}</div>` +
+                (pv.energy
+                    ? `<div class="sub" style="font-size:10px;line-height:1.25;">${pv.energy}</div>`
+                    : '');
+
+            // Jede PV-Anlage speist direkt in das Haus.
+            addEdge(
+                'pv' + i,
+                `M${p.x},138 L${p.x},310 L360,348`,
+                AC.solar
+            );
+        });
+    }
 
     function buildGroups(list) {
         document.querySelectorAll('.grp-node').forEach(e => e.remove());
@@ -498,10 +563,17 @@ class Energiefluss extends IPSModuleStrict
     function updateRings(segs, soc) {
         ringG.innerHTML = '';
         track(360, 400, 60);
-        const tot = segs.reduce((a, s) => a + s[1], 0) || 1; let acc = 0;
-        segs.forEach(([col, v]) => { if (v > 0) { arc(360, 400, 60, col, v / tot, acc / tot); acc += v; } });
-        track(360, 232, 56);
-        arc(360, 232, 56, AC.batt, (soc || 0) / 100, 0);
+        const tot = segs.reduce((a, s) => a + s[1], 0) || 1;
+        let acc = 0;
+        segs.forEach(([col, v]) => {
+            if (v > 0) {
+                arc(360, 400, 60, col, v / tot, acc / tot);
+                acc += v;
+            }
+        });
+
+        track(190, 230, 56);
+        arc(190, 230, 56, AC.batt, (soc || 0) / 100, 0);
     }
 
     const CFG = [
@@ -548,24 +620,26 @@ class Energiefluss extends IPSModuleStrict
     let edgeState = {};
     let layoutWidth = 540;
 
-    function updateLayout(groupCount, showRightPanel) {
+    function updateLayout(groupCount, producerCount, showRightPanel) {
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
 
-        // Grundbereich enthält PV, Batterie, Netz und Haus.
         // Verbraucher werden paarweise in zusätzlichen Spalten angeordnet.
         const columns = Math.ceil(groupCount / 2);
 
-        // Erste Verbraucher-Spalte sitzt bei x=530. Ohne Verbraucher
-        // brauchen wir diesen bislang reservierten Bereich nicht.
         let graphWidth = 540;
+
         if (columns > 0) {
-            // Genug Platz für Kreis + Beschriftung rechts der letzten Spalte.
-            graphWidth = 650 + ((columns - 1) * COLW);
+            graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
         }
 
-        // Maximal die bisherige Zeichenfläche nutzen.
+        if (producerCount > 0) {
+            const lastPVX = producerPos(producerCount - 1).x;
+            graphWidth = Math.max(graphWidth, lastPVX + 80);
+        }
+
+        // Die SVG-Zeichenfläche ist 1080 px breit.
         graphWidth = Math.min(graphWidth, 1080);
 
         const rightWidth = showRightPanel ? 264 : 0; // 14px Abstand + 250px Panel
@@ -588,45 +662,40 @@ class Energiefluss extends IPSModuleStrict
         const grid = (d.grid !== undefined) ? d.grid : (l1 + l2 + l3);
         const imp = Math.max(grid, 0), exp = Math.max(-grid, 0);
         const battOut = d.battOut || 0;
-        const battToHaus = Math.max(battOut - exp, 0);
-        const haus = battToHaus + imp;
+        const producers = d.producers || [];
+        const pvTotal = producers.reduce((sum, pv) => sum + (pv.value || 0), 0);
 
-        const sfLabel = document.querySelector('#n-sf .lbl');
-        const hmLabel = document.querySelector('#n-hm .lbl');
-        if (sfLabel) sfLabel.textContent = d.pv1Name || 'PV1';
-        if (hmLabel) hmLabel.textContent = d.pv2Name || 'PV2';
+        // Alle Erzeuger sowie die Batterie speisen direkt in das Haus.
+        // Netzbezug ist positiv, Einspeisung negativ.
+        const haus = Math.max(pvTotal + battOut + grid, 0);
 
-        document.getElementById('body-sf').innerHTML =
-            `<div class="val">${fmt(d.solarflow)}</div>` +
-            (d.pv1Energy ? `<div class="sub" style="font-size:10px; line-height:1.25;">${d.pv1Energy}</div>` : '');
+        buildProducers(producers);
 
-        document.getElementById('body-hm').innerHTML =
-            `<div class="val">${fmt(d.hoymiles)}</div>` +
-            (d.pv2Energy ? `<div class="sub" style="font-size:10px; line-height:1.25;">${d.pv2Energy}</div>` : '');
         document.getElementById('body-batt').innerHTML =
             `<div class="sub" style="font-size:11px">${Math.round(d.soc || 0)}%</div>` +
             `<div class="val" style="color:${AC.batt}">${fmt(battOut)}</div>`;
         document.getElementById('body-netz').innerHTML =
             `<div class="val" style="color:${grid >= 0 ? AC.grid : AC.batt}">${fmt(Math.abs(grid))}</div>` +
             (d.gridImportEnergy
-                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.grid}">&larr; ${d.gridImportEnergy}</div>`
+                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.grid}">&rarr; ${d.gridImportEnergy}</div>`
                 : '') +
             (d.gridExportEnergy
-                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.batt}">&rarr; ${d.gridExportEnergy}</div>`
+                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.batt}">&larr; ${d.gridExportEnergy}</div>`
                 : '');
         ph.innerHTML = `L1 ${Math.round(l1)} &middot; L2 ${Math.round(l2)} &middot; L3 ${Math.round(l3)} W`;
         document.getElementById('body-haus').innerHTML = `<div class="val" style="font-size:17px">${fmt(haus)}</div>`;
 
         const groups = d.groups || [];
         buildGroups(groups);
-        updateRings([[AC.batt, battToHaus], [AC.grid, imp]], d.soc);
+        updateRings([[AC.solar, pvTotal], [AC.batt, Math.max(battOut, 0)], [AC.grid, imp]], d.soc);
 
         edgeState = {
-            'sf-batt':   { w: d.solarflow || 0 },
-            'hm-batt':   { w: d.hoymiles || 0 },
-            'batt-haus': { w: battOut },
+            'batt-haus': { w: Math.abs(battOut), rev: battOut < 0 },
             'netz-haus': { w: Math.abs(grid), rev: grid < 0 }
         };
+        producers.forEach((pv, i) => {
+            edgeState['pv' + i] = { w: Math.max(pv.value || 0, 0) };
+        });
         groups.forEach((g, i) => { edgeState['grp' + i] = { w: g.value || 0 }; });
         for (const k in lineEl) {
             const on = edgeState[k] && edgeState[k].w > 0;
@@ -652,7 +721,7 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('cfg').style.display = showRightPanel ? '' : 'none';
 
         // Breite nur für tatsächlich sichtbare Inhalte reservieren.
-        updateLayout(groups.length, showRightPanel);
+        updateLayout(groups.length, producers.length, showRightPanel);
     }
 
     // Pflicht-Funktion: empfängt Nachrichten vom Modul (UpdateVisualizationValue)
@@ -787,6 +856,21 @@ HTML;
             }
         }
 
+        $producers = json_decode($this->ReadPropertyString('Producers'), true);
+        if (is_array($producers)) {
+            foreach ($producers as $producer) {
+                $variableID = (int) ($producer['VariableID'] ?? 0);
+                if ($variableID > 0) {
+                    $ids[] = $variableID;
+                }
+
+                $energyVariableID = (int) ($producer['EnergyVariableID'] ?? 0);
+                if ($energyVariableID > 0) {
+                    $ids[] = $energyVariableID;
+                }
+            }
+        }
+
         $groups = json_decode($this->ReadPropertyString('Groups'), true);
         if (is_array($groups)) {
             foreach ($groups as $group) {
@@ -844,6 +928,61 @@ HTML;
             $grid *= -1;
         }
 
+        $producers = [];
+        $decodedProducers = json_decode($this->ReadPropertyString('Producers'), true);
+        if (is_array($decodedProducers)) {
+            foreach ($decodedProducers as $index => $producer) {
+                $variableID = (int) ($producer['VariableID'] ?? 0);
+                $energyVariableID = (int) ($producer['EnergyVariableID'] ?? 0);
+
+                // Nur tatsächlich konfigurierte Solaranlagen anzeigen.
+                if ($variableID <= 0 || !IPS_VariableExists($variableID)) {
+                    continue;
+                }
+
+                $producers[] = [
+                    'name'   => trim((string) ($producer['Name'] ?? '')) !== ''
+                        ? (string) $producer['Name']
+                        : 'PV' . (count($producers) + 1),
+                    'value'  => (float) GetValue($variableID),
+                    'energy' => ($energyVariableID > 0 && IPS_VariableExists($energyVariableID))
+                        ? GetValueFormatted($energyVariableID)
+                        : '',
+                ];
+            }
+        }
+
+        // Abwärtskompatibilität: Ist die neue Liste leer, werden vorhandene
+        // alte PV1/PV2-Zuordnungen weiterhin angezeigt.
+        if (count($producers) === 0) {
+            $legacy = [
+                [
+                    'name' => $this->ReadPropertyString('PV1Name'),
+                    'powerID' => $this->ReadPropertyInteger('SolarFlowPV'),
+                    'energyID' => $this->ReadPropertyInteger('PV1Energy'),
+                ],
+                [
+                    'name' => $this->ReadPropertyString('PV2Name'),
+                    'powerID' => $this->ReadPropertyInteger('HoymilesPV'),
+                    'energyID' => $this->ReadPropertyInteger('PV2Energy'),
+                ],
+            ];
+
+            foreach ($legacy as $entry) {
+                if ($entry['powerID'] <= 0 || !IPS_VariableExists($entry['powerID'])) {
+                    continue;
+                }
+
+                $producers[] = [
+                    'name'   => $entry['name'],
+                    'value'  => (float) GetValue($entry['powerID']),
+                    'energy' => ($entry['energyID'] > 0 && IPS_VariableExists($entry['energyID']))
+                        ? GetValueFormatted($entry['energyID'])
+                        : '',
+                ];
+            }
+        }
+
         $groups = [];
         $decoded = json_decode($this->ReadPropertyString('Groups'), true);
         if (is_array($decoded)) {
@@ -889,12 +1028,7 @@ HTML;
         }
 
         return [
-            'pv1Name'   => $this->ReadPropertyString('PV1Name'),
-            'solarflow' => $this->ReadVar('SolarFlowPV'),
-            'pv1Energy' => $this->ReadVarFormatted('PV1Energy'),
-            'pv2Name'   => $this->ReadPropertyString('PV2Name'),
-            'hoymiles'  => $this->ReadVar('HoymilesPV'),
-            'pv2Energy' => $this->ReadVarFormatted('PV2Energy'),
+            'producers' => $producers,
             'battOut'   => $this->ReadVar('BatteryOut'),
             'soc'       => $this->ReadVar('BatterySoC'),
             'l1'        => $l1,
