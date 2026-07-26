@@ -40,6 +40,11 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('L1', 0);
         $this->RegisterPropertyInteger('L2', 0);
         $this->RegisterPropertyInteger('L3', 0);
+
+        // Optional: getrennte Smartmeter-Variablen für Bezug und Rücklieferung.
+        $this->RegisterPropertyInteger('GridImportPower', 0);
+        $this->RegisterPropertyInteger('GridExportPower', 0);
+
         $this->RegisterPropertyBoolean('InvertGridPower', false);
         $this->RegisterPropertyInteger('GridImportEnergy', 0);
         $this->RegisterPropertyInteger('GridExportEnergy', 0);
@@ -176,7 +181,13 @@ class Energiefluss extends IPSModuleStrict
                             ],
                         ],
                         ['type' => 'Label', 'caption' => 'Netz'],
-                        ['type' => 'SelectVariable', 'name' => 'L1', 'caption' => 'Netzleistung (W)'],
+                        [
+                            'type'    => 'Label',
+                            'caption' => 'Entweder eine Gesamtleistungsvariable wählen oder optional getrennte Variablen für Bezug und Rücklieferung. Sind beide getrennten Variablen gesetzt, haben diese Vorrang.',
+                        ],
+                        ['type' => 'SelectVariable', 'name' => 'L1', 'caption' => 'Netzleistung gesamt (W)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridImportPower', 'caption' => 'Netzbezug Leistung (W, optional)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridExportPower', 'caption' => 'Rücklieferung Leistung (W, optional)'],
                         ['type' => 'CheckBox', 'name' => 'InvertGridPower', 'caption' => 'Vorzeichen der Netzleistung umkehren'],
                         ['type' => 'SelectVariable', 'name' => 'GridImportEnergy', 'caption' => 'Netzbezug gesamt (kWh)'],
                         ['type' => 'SelectVariable', 'name' => 'GridExportEnergy', 'caption' => 'Rücklieferung / Einspeisung gesamt (kWh)'],
@@ -1018,6 +1029,8 @@ HTML;
             'L1',
             'L2',
             'L3',
+            'GridImportPower',
+            'GridExportPower',
             'GridImportEnergy',
             'GridExportEnergy',
             'DayProduction',
@@ -1111,13 +1124,28 @@ HTML;
 
     private function BuildPayload(): array
     {
-        // Netzleistung wird direkt aus der ausgewählten Gesamtleistungs-
-        // variable gelesen. Die früheren Einzelphasen L2/L3 werden nicht
-        // mehr für die Berechnung benötigt.
-        $l1 = $this->ReadVar('L1');
+        // Netzleistung:
+        // 1) Wenn getrennte Variablen für Bezug und Rücklieferung gesetzt sind,
+        //    werden diese verwendet: Bezug positiv, Rücklieferung negativ.
+        // 2) Andernfalls wird die Gesamtleistungsvariable verwendet.
+        $l1 = 0.0;
         $l2 = 0.0;
         $l3 = 0.0;
-        $grid = $l1;
+
+        $gridImportPowerID = $this->ReadPropertyInteger('GridImportPower');
+        $gridExportPowerID = $this->ReadPropertyInteger('GridExportPower');
+
+        $hasGridImportPower = $gridImportPowerID > 0 && IPS_VariableExists($gridImportPowerID);
+        $hasGridExportPower = $gridExportPowerID > 0 && IPS_VariableExists($gridExportPowerID);
+
+        if ($hasGridImportPower || $hasGridExportPower) {
+            $gridImportPower = $hasGridImportPower ? (float) GetValue($gridImportPowerID) : 0.0;
+            $gridExportPower = $hasGridExportPower ? (float) GetValue($gridExportPowerID) : 0.0;
+
+            $grid = $gridImportPower - $gridExportPower;
+        } else {
+            $grid = $this->ReadVar('L1');
+        }
 
         if ($this->ReadPropertyBoolean('InvertGridPower')) {
             $grid *= -1;
