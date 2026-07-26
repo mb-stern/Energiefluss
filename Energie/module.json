@@ -1,0 +1,13 @@
+{
+    "id": "{0FA30BD5-13FC-51A3-2063-18BBF7B1BD64}",
+    "name": "Energiefluss",
+    "type": 3,
+    "vendor": "",
+    "aliases": [
+        "Energiefluss",
+    ],
+    "parentRequirements": [],
+    "childRequirements": [],
+    "implemented": [],
+    "prefix": "ENERGIE"
+}
