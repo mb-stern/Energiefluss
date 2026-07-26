@@ -69,10 +69,6 @@ class Energiefluss extends IPSModuleStrict
         parent::ApplyChanges();
 
         try {
-            // Statische Dateien aus dem Modulordner für die Visualisierung
-            // in Symcons öffentlich erreichbaren /user/-Bereich kopieren.
-            $this->EnsureWebAssets();
-
             foreach ($this->GetMessageList() as $senderID => $messages) {
                 foreach ($messages as $message) {
                     if ($message === VM_UPDATE) {
@@ -412,7 +408,7 @@ class Energiefluss extends IPSModuleStrict
     }
     #scale-root {
         width: 540px;
-        height: 667px;
+        height: 640px;
         position: absolute;
         left: 0;
         top: 0;
@@ -423,11 +419,11 @@ class Energiefluss extends IPSModuleStrict
         gap: 14px;
         align-items: flex-start;
         width: 540px;
-        height: 667px;
+        height: 640px;
     }
     #fit {
         width: 540px;
-        height: 667px;
+        height: 640px;
         flex: 0 0 540px;
         overflow: hidden;
         position: relative;
@@ -535,249 +531,292 @@ class Energiefluss extends IPSModuleStrict
         font-family: inherit;
     }
 
-    /* Hausansicht V2 */
+    /* Hausansicht V3 – Gebäude und Energiepfade in EINEM Koordinatensystem */
     #house-stage {
         position: relative;
         width: 1000px;
-        height: 667px;
+        height: 640px;
         display: __HOUSE_DISPLAY__;
         overflow: hidden;
         border-radius: 18px;
-        background:
-            radial-gradient(circle at 55% 35%, rgba(34, 55, 75, 0.34), transparent 40%),
-            linear-gradient(180deg, #0d141d 0%, #080c12 64%, #05080c 100%);
-        color: #f2f5f8;
         box-sizing: border-box;
-        border: 1px solid #263241;
-    }
-    #house-bg {
-        position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
-        object-fit: cover;
-        z-index: 0;
-        pointer-events: none;
-        user-select: none;
-    }
-    #house-overlay {
-        position: absolute;
-        inset: 0;
-        z-index: 2;
-        pointer-events: none;
+        color: #eef4fa;
+        border: 1px solid #253342;
+        background:
+            radial-gradient(circle at 52% 30%, rgba(42, 71, 94, 0.30), transparent 42%),
+            linear-gradient(180deg, #101923 0%, #0a1118 56%, #070b10 100%);
     }
 
-    #house-svg {
+    #house-scene {
         position: absolute;
         inset: 0;
         width: 1000px;
         height: 640px;
         z-index: 1;
     }
-    #house-svg .flow-path {
-        fill: none;
-        stroke-width: 3.2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-        opacity: 0.95;
-        filter: drop-shadow(0 0 3px currentColor);
-    }
-    #house-svg .flow-base {
-        fill: none;
-        stroke: #283544;
-        stroke-width: 2.2;
-        stroke-linecap: round;
-        stroke-linejoin: round;
-    }
-    #house-svg .solar-panel {
-        fill: #182844;
-        stroke: #8c9eb9;
-        stroke-width: 1.5;
-    }
-    #house-svg .solar-grid {
-        stroke: #7e91ad;
-        stroke-width: 1;
-        opacity: 0.85;
+
+    #house-scene .scene-ground {
+        fill: #0b1712;
+        opacity: .82;
     }
 
-    .house-topbar {
-        position: absolute;
-        left: 18px;
-        right: 18px;
-        top: 14px;
-        height: 52px;
-        z-index: 5;
-        border: 1px solid #344253;
-        border-radius: 12px;
-        background: rgba(89, 96, 108, 0.82);
-        display: grid;
-        grid-template-columns: repeat(3, 1fr);
-        align-items: center;
-        text-align: center;
-        backdrop-filter: blur(4px);
+    #house-scene .house-wall {
+        fill: #171f29;
+        stroke: #3a4858;
+        stroke-width: 2.5;
     }
-    .house-topbar .t-title {
-        font-size: 13px;
-        font-weight: 700;
-        color: #f3f5f7;
+
+    #house-scene .house-side {
+        fill: #111821;
+        stroke: #344251;
+        stroke-width: 2;
     }
-    .house-topbar .t-value {
-        margin-top: 2px;
+
+    #house-scene .roof {
+        fill: #222c38;
+        stroke: #536172;
+        stroke-width: 2.5;
+    }
+
+    #house-scene .roof-edge {
+        fill: none;
+        stroke: #6c7885;
+        stroke-width: 3;
+        opacity: .72;
+    }
+
+    #house-scene .window {
+        fill: #132434;
+        stroke: #526578;
+        stroke-width: 1.5;
+    }
+
+    #house-scene .window-glow {
+        fill: #d99a38;
+        opacity: .62;
+    }
+
+    #house-scene .panel {
+        fill: #152c4a;
+        stroke: #7c93af;
+        stroke-width: 1.25;
+    }
+
+    #house-scene .panel-grid {
+        stroke: #68809d;
+        stroke-width: .8;
+        opacity: .8;
+    }
+
+    #house-scene .device {
+        fill: #e5eaee;
+        stroke: #7d8893;
+        stroke-width: 1.7;
+    }
+
+    #house-scene .device-dark {
+        fill: #18212a;
+        stroke: #657482;
+        stroke-width: 1.5;
+    }
+
+    #house-scene .grid-metal {
+        fill: none;
+        stroke: #9aa9b8;
+        stroke-width: 2;
+        opacity: .82;
+    }
+
+    #house-scene .flow-base {
+        fill: none;
+        stroke: #31404e;
+        stroke-width: 3;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: .68;
+    }
+
+    #house-scene .flow-path {
+        fill: none;
+        stroke-width: 4;
+        stroke-linecap: round;
+        stroke-linejoin: round;
+        opacity: .98;
+        filter: drop-shadow(0 0 3px currentColor);
+    }
+
+    #house-scene .device-caption {
+        fill: #aeb9c5;
         font-size: 12px;
-        color: #e0e4e9;
+        font-weight: 600;
+    }
+
+    #house-scene .small-caption {
+        fill: #8493a2;
+        font-size: 10px;
     }
 
     .house-label {
         position: absolute;
-        z-index: 4;
+        z-index: 5;
+        min-width: 112px;
+        padding: 7px 9px;
+        box-sizing: border-box;
+        border: 1px solid rgba(129, 151, 172, .28);
+        border-radius: 9px;
+        background: rgba(8, 13, 19, .82);
+        box-shadow: 0 6px 18px rgba(0,0,0,.22);
         line-height: 1.25;
+        pointer-events: none;
     }
-    #house-grid-label {
-        left: 34px;
-        top: 225px;
-        width: 135px;
-        text-align: left;
-        background: rgba(7, 12, 18, 0.72);
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 9px;
-        padding: 7px 9px;
-    }
-    #house-home-label {
-        left: 515px;
-        top: 360px;
-        width: 150px;
-        text-align: center;
-        transform: translateX(-50%);
-        background: rgba(8, 12, 18, 0.78);
-        border: 1px solid #394859;
-        border-radius: 10px;
-        padding: 9px 8px;
-    }
-    #house-battery-label {
-        right: 22px;
-        top: 315px;
-        width: 135px;
-        text-align: left;
-        background: rgba(7, 12, 18, 0.72);
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 9px;
-        padding: 7px 9px;
-    }
-    #house-wallbox-label {
-        left: 120px;
-        top: 420px;
-        width: 150px;
-        text-align: left;
-        background: rgba(7, 12, 18, 0.72);
-        border: 1px solid rgba(255,255,255,0.12);
-        border-radius: 9px;
-        padding: 7px 9px;
-    }
+
     .house-label .name {
-        font-size: 13px;
-        font-weight: 700;
-        color: #f3f5f7;
-        margin-bottom: 4px;
+        color: #b8c3ce;
+        font-size: 11px;
+        font-weight: 650;
+        margin-bottom: 2px;
     }
+
     .house-label .power {
         font-size: 17px;
-        font-weight: 650;
+        font-weight: 700;
+        color: #f4f7f9;
     }
+
     .house-label .sub {
-        font-size: 11px;
-        margin-top: 3px;
-        color: #aeb8c4;
+        font-size: 10px;
+        margin-top: 2px;
+        color: #99a7b5;
+    }
+
+    #house-grid-label {
+        left: 28px;
+        top: 236px;
+        width: 128px;
+    }
+
+    #house-home-label {
+        left: 438px;
+        top: 338px;
+        width: 150px;
+        text-align: center;
+    }
+
+    #house-battery-label {
+        right: 28px;
+        top: 245px;
+        width: 142px;
+    }
+
+    #house-wallbox-label {
+        left: 168px;
+        top: 375px;
+        width: 150px;
     }
 
     #house-pv-list {
         position: absolute;
-        left: 275px;
-        right: 235px;
-        top: 64px;
+        left: 315px;
+        right: 245px;
+        top: 55px;
         z-index: 5;
         display: flex;
         justify-content: center;
-        gap: 14px;
+        gap: 9px;
         flex-wrap: wrap;
         pointer-events: none;
     }
+
     .house-pv-chip {
-        min-width: 118px;
-        border-radius: 10px;
+        min-width: 106px;
         padding: 5px 8px;
+        box-sizing: border-box;
         text-align: center;
-        background: rgba(9, 14, 21, 0.74);
-        border: 1px solid rgba(239,160,32,0.32);
+        border-radius: 9px;
+        background: rgba(10, 15, 22, .84);
+        border: 1px solid rgba(239, 160, 32, .38);
+        box-shadow: 0 4px 14px rgba(0,0,0,.18);
     }
+
     .house-pv-chip .name {
+        color: #efa020;
         font-size: 10px;
-        color: #f0a126;
-        font-weight: 650;
+        font-weight: 700;
     }
+
     .house-pv-chip .power {
-        font-size: 14px;
-        color: #f7f8fa;
-        font-weight: 650;
+        color: #f4f6f8;
+        font-size: 13px;
+        font-weight: 700;
+        margin-top: 1px;
     }
+
     .house-pv-chip .energy {
+        color: #9eabb7;
         font-size: 9px;
-        color: #aeb8c4;
-        margin-top: 2px;
+        margin-top: 1px;
     }
 
     .house-card-grid {
         position: absolute;
-        left: 18px;
-        right: 18px;
+        left: 16px;
+        right: 16px;
         bottom: 14px;
-        height: 150px;
-        z-index: 5;
+        height: 126px;
+        z-index: 6;
         display: grid;
-        grid-template-columns: repeat(5, 1fr);
-        gap: 10px;
+        grid-template-columns: repeat(5, minmax(0, 1fr));
+        gap: 8px;
     }
+
     .house-card {
         min-width: 0;
-        border: 1px solid #354354;
-        border-radius: 12px;
-        background: rgba(11, 17, 24, 0.91);
-        padding: 10px 12px;
+        padding: 9px 10px;
         box-sizing: border-box;
         overflow: hidden;
+        border: 1px solid #2e3c4b;
+        border-radius: 11px;
+        background: rgba(11, 17, 24, .94);
+        box-shadow: 0 8px 22px rgba(0,0,0,.18);
     }
+
     .house-card .head {
-        font-size: 12px;
-        font-weight: 700;
-        color: #eef2f6;
         display: flex;
         align-items: center;
         gap: 6px;
-        margin-bottom: 6px;
-    }
-    .house-card .big {
-        font-size: 19px;
-        font-weight: 650;
-        margin-bottom: 3px;
-    }
-    .house-card .small {
-        font-size: 10px;
-        color: #aeb8c4;
-        line-height: 1.35;
-    }
-    .house-card .sep {
-        height: 1px;
-        background: #253140;
-        margin: 7px 0;
-    }
-    .house-card .list {
-        font-size: 9px;
-        color: #bdc5ce;
-        line-height: 1.35;
-        max-height: 52px;
-        overflow: hidden;
+        margin-bottom: 5px;
+        color: #eaf0f5;
+        font-size: 11px;
+        font-weight: 700;
     }
 
-    .c-solar { color: #f0a126; }
+    .house-card .big {
+        margin-bottom: 2px;
+        font-size: 18px;
+        font-weight: 700;
+    }
+
+    .house-card .small {
+        color: #9caab7;
+        font-size: 9px;
+        line-height: 1.3;
+    }
+
+    .house-card .sep {
+        height: 1px;
+        margin: 5px 0;
+        background: #253342;
+    }
+
+    .house-card .list {
+        max-height: 42px;
+        overflow: hidden;
+        color: #aeb8c2;
+        font-size: 8.5px;
+        line-height: 1.3;
+    }
+
+    .c-solar { color: #EFA020; }
     .c-import { color: #ff4d43; }
     .c-export { color: #6fd32f; }
     .c-discharge { color: #3ca0ff; }
@@ -786,9 +825,10 @@ class Energiefluss extends IPSModuleStrict
     .c-home { color: #4d9fff; }
 
     @media (max-width: 700px) {
-        .house-card-grid { gap: 6px; }
-        .house-card { padding: 8px; }
+        .house-card-grid { gap: 5px; }
+        .house-card { padding: 7px; }
     }
+
 </style>
 <script src="/icons.js"></script>
 
@@ -807,12 +847,123 @@ class Energiefluss extends IPSModuleStrict
                         </svg>
                     </div>
 
-                    <!-- Hausansicht V2 -->
+                    <!-- Hausansicht V3: komplettes Gebäude als SVG -->
                     <div id="house-stage">
-                        <img id="house-bg" src="/user/Energiefluss/house.png?v=1" alt="Hausansicht">
+                        <svg id="house-scene" viewBox="0 0 1000 640" aria-hidden="true">
+                            <defs>
+                                <linearGradient id="batteryBody" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="#283442"></stop>
+                                    <stop offset="100%" stop-color="#111820"></stop>
+                                </linearGradient>
+                                <linearGradient id="garageGlass" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0%" stop-color="#24384c"></stop>
+                                    <stop offset="100%" stop-color="#0c131a"></stop>
+                                </linearGradient>
+                            </defs>
 
-                        <!-- Dynamische Ebene über der Hintergrundgrafik -->
-                        <svg id="house-overlay" viewBox="0 0 1000 667" aria-hidden="true">
+                            <!-- Umgebung -->
+                            <ellipse class="scene-ground" cx="510" cy="450" rx="420" ry="58"></ellipse>
+                            <path d="M0 430 C110 392 170 414 255 432 C350 451 430 428 520 427 C625 426 710 451 802 438 C880 427 940 414 1000 430 L1000 500 L0 500 Z"
+                                  fill="#0e2117" opacity=".62"></path>
+
+                            <!-- Netz -->
+                            <g id="grid-object">
+                                <path class="grid-metal" d="M88 335 L116 205 L144 335"></path>
+                                <line class="grid-metal" x1="99" y1="286" x2="133" y2="286"></line>
+                                <line class="grid-metal" x1="94" y1="257" x2="138" y2="257"></line>
+                                <line class="grid-metal" x1="88" y1="228" x2="144" y2="228"></line>
+                                <line class="grid-metal" x1="82" y1="335" x2="150" y2="335"></line>
+                                <text x="116" y="358" text-anchor="middle" class="device-caption">Netz</text>
+                            </g>
+
+                            <!-- Hauskörper -->
+                            <g id="house-object">
+                                <!-- Garage -->
+                                <path class="house-side" d="M205 390 L205 305 L315 232 L430 232 L485 286 L485 430 L205 430 Z"></path>
+                                <rect x="226" y="323" width="188" height="107" rx="3" fill="url(#garageGlass)" stroke="#364554" stroke-width="2"></rect>
+                                <line x1="226" y1="350" x2="414" y2="350" stroke="#283847" stroke-width="1.4"></line>
+                                <line x1="226" y1="377" x2="414" y2="377" stroke="#283847" stroke-width="1.4"></line>
+
+                                <!-- Haupthaus -->
+                                <path class="house-wall" d="M392 430 L392 245 L508 165 L675 165 L790 248 L790 430 Z"></path>
+                                <path class="roof" d="M352 255 L498 128 L682 128 L828 255 L785 274 L662 194 L518 194 L395 274 Z"></path>
+                                <path class="roof-edge" d="M352 255 L498 128 L682 128 L828 255"></path>
+
+                                <!-- Fenster / Tür -->
+                                <rect class="window" x="442" y="286" width="58" height="76" rx="2"></rect>
+                                <rect class="window-glow" x="451" y="296" width="40" height="56" rx="1"></rect>
+                                <line x1="471" y1="296" x2="471" y2="352" stroke="#304252" stroke-width="1.4"></line>
+
+                                <rect class="window" x="684" y="285" width="60" height="78" rx="2"></rect>
+                                <rect x="704" y="302" width="22" height="61" rx="2" fill="#10161d" stroke="#3d4c5b" stroke-width="1.4"></rect>
+
+                                <!-- PV -->
+                                <g id="pv-panels">
+                                    <polygon class="panel" points="474,150 540,150 569,184 500,184"></polygon>
+                                    <polygon class="panel" points="545,150 612,150 642,184 574,184"></polygon>
+                                    <polygon class="panel" points="617,150 674,150 706,184 647,184"></polygon>
+                                    <line class="panel-grid" x1="496" y1="150" x2="522" y2="184"></line>
+                                    <line class="panel-grid" x1="518" y1="150" x2="544" y2="184"></line>
+                                    <line class="panel-grid" x1="567" y1="150" x2="596" y2="184"></line>
+                                    <line class="panel-grid" x1="590" y1="150" x2="619" y2="184"></line>
+                                    <line class="panel-grid" x1="641" y1="150" x2="672" y2="184"></line>
+                                    <line class="panel-grid" x1="488" y1="167" x2="690" y2="167"></line>
+                                </g>
+
+                                <!-- Wechselrichter -->
+                                <g id="inverter-object">
+                                    <rect class="device" x="545" y="240" width="72" height="86" rx="10"></rect>
+                                    <rect class="device-dark" x="563" y="270" width="36" height="27" rx="5"></rect>
+                                    <circle cx="575" cy="283" r="3.2" fill="#6fd32f"></circle>
+                                    <circle cx="587" cy="283" r="3.2" fill="#3ca0ff"></circle>
+                                    <text x="581" y="340" text-anchor="middle" class="small-caption">Wechselrichter</text>
+                                </g>
+                            </g>
+
+                            <!-- Wallbox -->
+                            <g id="wallbox-object">
+                                <rect class="device" x="237" y="346" width="42" height="59" rx="8"></rect>
+                                <path d="M258 356 L248 375 H256 L252 393 L270 368 H261 L267 356 Z" fill="#22d3d0"></path>
+                                <path d="M277 382 C302 384 319 393 325 408" fill="none" stroke="#657789" stroke-width="2"></path>
+                                <text x="258" y="423" text-anchor="middle" class="device-caption">Wallbox</text>
+                            </g>
+
+                            <!-- Auto -->
+                            <g id="car-object">
+                                <path d="M280 403 C296 373 329 359 370 359 C407 359 436 374 450 403 Z"
+                                      fill="#c9d1d8" stroke="#697784" stroke-width="2"></path>
+                                <rect x="270" y="397" width="190" height="34" rx="15"
+                                      fill="#d6dce1" stroke="#697784" stroke-width="2"></rect>
+                                <path d="M319 373 L350 365 L394 365 L417 381 L323 381 Z"
+                                      fill="#192837" stroke="#687988" stroke-width="1.5"></path>
+                                <circle cx="310" cy="428" r="13" fill="#080b0f" stroke="#4d5a66" stroke-width="2"></circle>
+                                <circle cx="422" cy="428" r="13" fill="#080b0f" stroke="#4d5a66" stroke-width="2"></circle>
+                            </g>
+
+                            <!-- Batterie -->
+                            <g id="battery-object">
+                                <rect x="823" y="270" width="86" height="154" rx="13"
+                                      fill="url(#batteryBody)" stroke="#687889" stroke-width="2.2"></rect>
+                                <rect x="853" y="258" width="27" height="12" rx="3" fill="#6c7885"></rect>
+                                <rect x="837" y="290" width="58" height="112" rx="7"
+                                      fill="#101820" stroke="#41505e" stroke-width="1.5"></rect>
+                                <rect id="house-battery-fill" x="837" y="290" width="58" height="112" rx="7"
+                                      fill="#6fd32f" opacity=".80"></rect>
+                                <line x1="837" y1="327" x2="895" y2="327" stroke="#18242d" stroke-width="2"></line>
+                                <line x1="837" y1="364" x2="895" y2="364" stroke="#18242d" stroke-width="2"></line>
+                                <text x="866" y="444" text-anchor="middle" class="device-caption">Batterie</text>
+                            </g>
+
+                            <!-- Statische Leitungsbasis -->
+                            <g id="house-flow-base">
+                                <path class="flow-base" d="M574 184 L574 240"></path>
+                                <path class="flow-base" d="M150 300 L545 300"></path>
+                                <path class="flow-base" d="M617 300 L823 300"></path>
+                                <path class="flow-base" d="M581 326 L581 375"></path>
+                                <path class="flow-base" d="M545 330 L470 330 L470 385 L279 385"></path>
+                            </g>
+
+                            <!-- Dynamische Energiepfade -->
                             <g id="house-flow-lines"></g>
                             <g id="house-flow-dots"></g>
                         </svg>
@@ -1295,6 +1446,17 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('house-battery-mode').style.color = batColor;
         document.getElementById('house-battery-soc').textContent = `${Math.round(mainSoc)} %`;
 
+        // Batterie im Gebäude proportional zum SOC füllen.
+        const houseBatteryFill = document.getElementById('house-battery-fill');
+        if (houseBatteryFill) {
+            const soc = Math.max(0, Math.min(100, mainSoc));
+            const fullHeight = 112;
+            const fillHeight = fullHeight * soc / 100;
+            houseBatteryFill.setAttribute('y', 290 + (fullHeight - fillHeight));
+            houseBatteryFill.setAttribute('height', fillHeight);
+            houseBatteryFill.setAttribute('fill', batColor);
+        }
+
         document.getElementById('house-wallbox-name').textContent = wallbox.name || 'Wallbox';
         document.getElementById('house-wallbox-power').textContent = fmt(wallbox.value || 0);
         document.getElementById('house-wallbox-energy').textContent = wallbox.energy || '';
@@ -1338,20 +1500,20 @@ class Energiefluss extends IPSModuleStrict
 
         // Flusspfade direkt über dem Haus.
         if (pvTotal > 0) {
-            addHouseEdge('house-pv', 'M565,185 L565,285 L520,325', AC.solar);
+            addHouseEdge('house-pv', 'M574,184 L574,240', AC.solar);
             houseEdgeState['house-pv'] = { w: pvTotal, rev: false };
         }
 
         if (grid >= 0 && Math.abs(grid) > 0) {
-            addHouseEdge('house-grid-import', 'M805,155 L805,270 L520,325', AC.import);
+            addHouseEdge('house-grid-import', 'M150,300 L545,300', AC.import);
             houseEdgeState['house-grid-import'] = { w: Math.abs(grid), rev: false };
         } else if (grid < 0) {
-            addHouseEdge('house-grid-export', 'M805,178 L805,292 L520,347', AC.export);
+            addHouseEdge('house-grid-export', 'M150,300 L545,300', AC.export);
             houseEdgeState['house-grid-export'] = { w: Math.abs(grid), rev: true };
         }
 
         if (Math.abs(batteryTotal) > 0) {
-            addHouseEdge('house-battery', 'M520,325 L690,365 L735,430', batColor);
+            addHouseEdge('house-battery', 'M617,300 L823,300', batColor);
             // Pfad ist Wechselrichter -> Batterie. Entladen läuft rückwärts.
             houseEdgeState['house-battery'] = {
                 w: Math.abs(batteryTotal),
@@ -1359,8 +1521,16 @@ class Energiefluss extends IPSModuleStrict
             };
         }
 
+        if (haus > 0) {
+            addHouseEdge('house-home', 'M581,326 L581,375', AC.home);
+            houseEdgeState['house-home'] = {
+                w: haus,
+                rev: false
+            };
+        }
+
         if ((wallbox.value || 0) > 0) {
-            addHouseEdge('house-wallbox', 'M520,350 L385,390 L125,430', AC.wallbox);
+            addHouseEdge('house-wallbox', 'M545,330 L470,330 L470,385 L279,385', AC.wallbox);
             houseEdgeState['house-wallbox'] = {
                 w: wallbox.value || 0,
                 rev: false
@@ -1681,8 +1851,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         const baseWidth = layoutWidth;
-        const houseMode = houseStage && houseStage.style.display !== 'none';
-        const baseHeight = houseMode ? 667 : 640;
+        const baseHeight = 640;
 
         const availableWidth = host.clientWidth;
         const availableHeight = host.clientHeight;
@@ -1722,66 +1891,6 @@ HTML;
             [$flowDisplay, $houseDisplay],
             $html
         );
-    }
-
-    private function EnsureWebAssets(): void
-    {
-        $source = __DIR__ . DIRECTORY_SEPARATOR . 'house.png';
-        if (!is_file($source)) {
-            $this->LogMessage('Hausgrafik fehlt im Modulordner: ' . $source, KL_ERROR);
-            return;
-        }
-
-        // Ab IP-Symcon 7 liegt der vom WebServer unter /user/ bereitgestellte
-        // Ordner direkt unterhalb des Kernel-Verzeichnisses.
-        $targetDir = IPS_GetKernelDir()
-            . 'user'
-            . DIRECTORY_SEPARATOR
-            . 'Energiefluss';
-
-        if (!is_dir($targetDir)) {
-            if (!@mkdir($targetDir, 0777, true) && !is_dir($targetDir)) {
-                $this->LogMessage(
-                    'Web-Verzeichnis konnte nicht erstellt werden: ' . $targetDir,
-                    KL_ERROR
-                );
-                return;
-            }
-        }
-
-        $target = $targetDir . DIRECTORY_SEPARATOR . 'house.png';
-
-        // Nur kopieren, wenn die Datei fehlt oder sich geändert hat.
-        $copyRequired = !is_file($target);
-
-        if (!$copyRequired) {
-            $sourceSize = @filesize($source);
-            $targetSize = @filesize($target);
-            $sourceMTime = @filemtime($source);
-            $targetMTime = @filemtime($target);
-
-            $copyRequired =
-                $sourceSize !== $targetSize
-                || $sourceMTime === false
-                || $targetMTime === false
-                || $sourceMTime > $targetMTime;
-        }
-
-        if ($copyRequired) {
-            if (!@copy($source, $target)) {
-                $this->LogMessage(
-                    'Hausgrafik konnte nicht nach ' . $target . ' kopiert werden.',
-                    KL_ERROR
-                );
-                return;
-            }
-
-            // Zeitstempel mitnehmen, damit nicht bei jedem ApplyChanges neu kopiert wird.
-            $mtime = @filemtime($source);
-            if ($mtime !== false) {
-                @touch($target, $mtime);
-            }
-        }
     }
 
     private function PushState(): void
