@@ -433,6 +433,7 @@ class Energiefluss extends IPSModuleStrict
     #eflow {
         width: 100%;
         height: 100vh;
+        position: relative;
         box-sizing: border-box;
         border-radius: 12px;
         padding: 10px;
@@ -470,33 +471,33 @@ class Energiefluss extends IPSModuleStrict
 
     #view-switch {
         position: absolute;
-        top: 6px;
+        top: 4px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 99999;
         display: inline-flex;
-        gap: 2px;
-        padding: 2px;
-        border-radius: 6px;
+        gap: 1px;
+        padding: 1px;
+        border-radius: 5px;
         background: var(--w-surface);
         border: 1px solid var(--w-border);
-        box-shadow: 0 1px 6px rgba(0,0,0,.12);
+        box-shadow: 0 1px 4px rgba(0,0,0,.10);
         pointer-events: auto;
     }
 
     .view-switch-btn {
         display: block;
         box-sizing: border-box;
-        min-width: 0;
         border: 0;
-        border-radius: 4px;
-        padding: 4px 7px;
+        border-radius: 3px;
+        padding: 2px 5px;
         margin: 0;
         background: transparent;
         color: var(--w-text2);
         font: inherit;
-        font-size: 11px;
-        line-height: 1.15;
+        font-size: 9px;
+        line-height: 1.1;
+        white-space: nowrap;
         cursor: pointer;
         pointer-events: auto;
         touch-action: manipulation;
@@ -786,15 +787,15 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="eflow">
+    <div id="view-switch">
+        <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
+        <button id="view-house" class="view-switch-btn" type="button">Haus</button>
+    </div>
+
     <div id="scale-host">
         <div id="scale-root">
             <div id="wrap">
                 <div id="fit">
-
-                    <div id="view-switch">
-                        <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
-                        <button id="view-house" class="view-switch-btn" type="button">Haus</button>
-                    </div>
 
                     <!-- Klassische Energieflussansicht -->
                     <div id="stage">
