@@ -890,9 +890,9 @@ class Energiefluss extends IPSModuleStrict
         //
         // Die Wurzelfunktion sorgt dafür, dass hohe Leistungen nicht
         // unverhältnismäßig hektisch werden.
-        const speed = 0.018 + (Math.sqrt(power) * 0.00155);
+        const speed = 0.028 + (Math.sqrt(power) * 0.00215);
 
-        return Math.min(speed, 0.18);
+        return Math.min(speed, 0.24);
     }
 
     function frame(now) {
