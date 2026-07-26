@@ -1,3 +1,74 @@
+ChatGPT Plus
+
+
+
+
+
+Eingefügter Text(81).txt
+Dokument
+Kannst du die Hausgrafik auch uf das ganze verfügbare fenste skalierne oder ist das iergendwei fix
+
+Ja. In der geposteten Version ist die Hausgrafik nicht grundsätzlich fix, aber sie wird momentan absichtlich mit einem festen Seitenverhältnis skaliert. 
+
+
+Entscheidend ist dein fit():
+
+const scaleX = availableWidth / baseWidth;
+const scaleY = availableHeight / baseHeight;
+const scale = Math.min(scaleX, scaleY);
+Für die Hausansicht ist außerdem festgelegt:
+
+let graphWidth = mode === 'house' ? 900 : 540;
+und die Grundhöhe ist:
+
+const baseHeight = 640;
+Damit hat die Hausansicht immer 900 × 640 als Grundformat. Math.min(scaleX, scaleY) sorgt dafür, dass dieses Verhältnis erhalten bleibt. Deshalb entstehen je nach Fenstergröße freie Bereiche oben/unten oder links/rechts.
+
+Wir können es auf zwei Arten ändern:
+
+Gesamtes Fenster wirklich ausfüllen – Breite und Höhe werden unabhängig skaliert. Dann kann die Hausgrafik allerdings etwas breiter oder höher verzerrt werden.
+
+Proportional möglichst groß – Seitenverhältnis bleibt erhalten, aber wir können die eigentliche Hausansicht so umbauen, dass sie den verfügbaren Platz wesentlich besser nutzt.
+
+Ich würde Variante 2 nehmen, damit Haus, Leitungen und Kreise nicht verzerrt werden. Dabei können wir die Hausansicht praktisch bis an die Ränder des verfügbaren Fensters vergrößern.
+
+
+bitt nicht fix, sondern auch danamssich
+
+Ja, genau: nicht auf eine feste Größe, sondern vollständig dynamisch abhängig vom aktuell verfügbaren Fenster.
+
+Also bei der Hausansicht:
+
+Fenster wird größer → Hausgrafik wächst mit.
+
+Fenster wird kleiner → Hausgrafik schrumpft mit.
+
+Änderung der Kachel-/Fenstergröße → sofortige Neuberechnung über den vorhandenen ResizeObserver.
+
+Seitenverhältnis bleibt erhalten, damit Haus, Kreise und Leitungen nicht verzerrt werden.
+
+Es wird jeweils die maximal mögliche Größe aus der tatsächlich verfügbaren Breite und Höhe verwendet.
+
+Dein vorhandener ResizeObserver ist dafür schon eine gute Grundlage. Wir müssten hauptsächlich die derzeit fest vorgegebenen 900 × 640 der Hausansicht aus der Layoutberechnung herausnehmen bzw. die Hausansicht selbst responsiv machen. 
+
+
+Wenn du möchtest, ändere ich dir genau die gepostete Datei entsprechend und gebe dir die fertige Datei zurück.
+
+
+ja bitte erstlle die module.php. es bruacht kein zip
+
+1m 6s nachgedacht
+Erledigt. Ich habe die Hausansicht so angepasst, dass sie sich dynamisch an die aktuell verfügbare Fensterbreite und -höhe anpasst. Der vorhandene ResizeObserver berechnet die Größe bei jeder Änderung neu; die klassische Energieflussansicht bleibt unverändert. Grundlage ist deine gepostete Version. 
+
+
+PHP-Syntaxprüfung ist ebenfalls fehlerfrei.
+
+module.php
+
+
+module.php
+
+
 <?php
 
 /*
@@ -552,8 +623,8 @@ class Energiefluss extends IPSModuleStrict
     /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
-        width: 900px;
-        height: 640px;
+        width: 100%;
+        height: 100%;
         display: __HOUSE_DISPLAY__;
         overflow: hidden;
         box-sizing: border-box;
@@ -564,10 +635,9 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-host {
         position: absolute;
-        left: 0;
-        top: 0;
-        width: 900px;
-        height: 640px;
+        inset: 0;
+        width: 100%;
+        height: 100%;
         overflow: hidden;
     }
 
@@ -1627,23 +1697,13 @@ class Energiefluss extends IPSModuleStrict
 
     // ---------- Layout ----------
     let layoutWidth = 540;
+    let layoutMode = 'flow';
+    let layoutShowRightPanel = false;
 
-    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
+    function setBaseLayoutWidth(graphWidth, showRightPanel) {
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
-
-        let graphWidth = mode === 'house' ? 900 : 540;
-
-        if (mode !== 'house') {
-            const columns = Math.ceil(groupCount / 2);
-
-            if (columns > 0) {
-                graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
-            }
-
-            graphWidth = Math.min(graphWidth, 1080);
-        }
 
         const rightWidth = showRightPanel ? 264 : 0;
         layoutWidth = graphWidth + rightWidth;
@@ -1655,7 +1715,29 @@ class Energiefluss extends IPSModuleStrict
         rootEl.style.width = layoutWidth + 'px';
 
         wrapEl.style.gap = showRightPanel ? '14px' : '0px';
+    }
 
+    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
+        layoutMode = mode;
+        layoutShowRightPanel = showRightPanel;
+
+        if (mode === 'house') {
+            // Die tatsächliche Breite der Hausansicht wird in fit() aus der
+            // jeweils verfügbaren Fenstergröße berechnet. 900 px gibt es hier
+            // bewusst nicht mehr als feste Vorgabe.
+            fit();
+            return;
+        }
+
+        let graphWidth = 540;
+        const columns = Math.ceil(groupCount / 2);
+
+        if (columns > 0) {
+            graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
+        }
+
+        graphWidth = Math.min(graphWidth, 1080);
+        setBaseLayoutWidth(graphWidth, showRightPanel);
         fit();
     }
 
@@ -1859,9 +1941,7 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        const baseWidth = layoutWidth;
         const baseHeight = 640;
-
         const availableWidth = host.clientWidth;
         const availableHeight = host.clientHeight;
 
@@ -1869,6 +1949,18 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
+        if (layoutMode === 'house') {
+            // Hausansicht dynamisch an das aktuelle Seitenverhältnis anpassen.
+            // Dadurch nutzt scale-root nach der proportionalen Skalierung
+            // die gesamte verfügbare Breite UND Höhe.
+            const rightWidth = layoutShowRightPanel ? 264 : 0;
+            const requiredLayoutWidth = baseHeight * (availableWidth / availableHeight);
+            const graphWidth = Math.max(1, requiredLayoutWidth - rightWidth);
+
+            setBaseLayoutWidth(graphWidth, layoutShowRightPanel);
+        }
+
+        const baseWidth = layoutWidth;
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
         const scale = Math.min(scaleX, scaleY);
