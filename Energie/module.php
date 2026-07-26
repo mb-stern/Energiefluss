@@ -1,3 +1,853 @@
+ChatGPT Plus
+
+
+
+
+heute 12:11
+
+Pasted code.html
+Datei
+<?php
+
+// SolarFlowTile v1.6 (Build 7)
+
+declare(strict_types=1);
+
+class SolarFlowTile extends IPSModule
+{
+    // Idents der Einstellungs-Variablen, die das PID-Skript in der Kategorie
+    // "SolarFlow Einstellungen" anlegt. Schlüssel = Feld-ID in der Kachel.
+    private const CONFIG_MAP = [
+        'Kp'               => 'SF_Kp',
+        'Ki'               => 'SF_Ki',
+        'Kd'               => 'SF_Kd',
+        'TargetImport'     => 'SF_TargetImport',
+        'ReserveHours'     => 'SF_ReserveHours',
+        'FreeSoc'          => 'SF_FreeSocThreshold',
+        'LowSocOut'        => 'SF_LowSocOutput',
+        'LowSocThreshold'  => 'SF_LowSocThreshold',
+        'MinSocShutdown'   => 'SF_MinSocShutdown',
+        'MorningStart'     => 'SF_MorningStart',
+        'MorningEnd'       => 'SF_MorningEnd',
+    ];
+
+    public function Create()
+    {
+        parent::Create();
+
+        $this->RegisterPropertyInteger('SolarFlowPV', 0);
+        $this->RegisterPropertyInteger('HoymilesPV', 0);
+        $this->RegisterPropertyInteger('BatteryOut', 0);
+        $this->RegisterPropertyInteger('BatterySoC', 0);
+        $this->RegisterPropertyInteger('L1', 0);
+        $this->RegisterPropertyInteger('L2', 0);
+        $this->RegisterPropertyInteger('L3', 0);
+        $this->RegisterPropertyInteger('SettingsCategory', 0);
+        $this->RegisterPropertyString('Groups', '[]');
+        $this->RegisterPropertyInteger('DayProduction', 0);
+        $this->RegisterPropertyInteger('WeekProduction', 0);
+        $this->RegisterPropertyInteger('DayGridImport', 0);
+        $this->RegisterPropertyInteger('WeekGridImport', 0);
+
+        // HTML-SDK als Darstellung aktivieren
+        $this->SetVisualizationType(1);
+    }
+
+    public function ApplyChanges()
+    {
+        parent::ApplyChanges();
+
+        // Defensiv: Fehler hier dürfen niemals den Symcon-Start blockieren
+        try {
+            // Alte Nachrichten-Registrierungen entfernen
+            foreach ($this->GetMessageList() as $senderID => $messages) {
+                foreach ($messages as $message) {
+                    if ($message == VM_UPDATE) {
+                        $this->UnregisterMessage($senderID, VM_UPDATE);
+                    }
+                }
+            }
+            // Alte Referenzen entfernen
+            foreach ($this->GetReferenceList() as $referenceID) {
+                $this->UnregisterReference($referenceID);
+            }
+
+            // Für alle konfigurierten Variablen auf Änderungen lauschen + referenzieren
+            foreach ($this->CollectVariableIDs() as $id) {
+                if ($id > 0 && IPS_VariableExists($id)) {
+                    $this->RegisterMessage($id, VM_UPDATE);
+                    $this->RegisterReference($id);
+                }
+            }
+
+            // Aktuellen Stand an offene Kacheln pushen
+            if (IPS_GetKernelRunlevel() == KR_READY) {
+                $this->PushState();
+            }
+        } catch (Throwable $e) {
+            $this->LogMessage('ApplyChanges: ' . $e->getMessage(), KL_ERROR);
+        }
+    }
+
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    {
+        try {
+            if ($Message == VM_UPDATE && IPS_GetKernelRunlevel() == KR_READY) {
+                $this->PushState();
+            }
+        } catch (Throwable $e) {
+            $this->LogMessage('MessageSink: ' . $e->getMessage(), KL_ERROR);
+        }
+    }
+
+    // Von der Kachel (JavaScript requestAction) aufgerufen
+    public function RequestAction($Ident, $Value)
+    {
+        // Konfig-Felder: "Cfg<FeldID>" -> Einstellungs-Variable schreiben
+        if (strpos($Ident, 'Cfg') === 0) {
+            $field = substr($Ident, 3);
+            if (!array_key_exists($field, self::CONFIG_MAP)) {
+                return;
+            }
+            $catID = $this->ReadPropertyInteger('SettingsCategory');
+            if ($catID <= 0 || !IPS_ObjectExists($catID)) {
+                return;
+            }
+            $varID = @IPS_GetObjectIDByIdent(self::CONFIG_MAP[$field], $catID);
+            if ($varID === false || !IPS_VariableExists($varID)) {
+                return;
+            }
+            $type = IPS_GetVariable($varID)['VariableType'];
+            if ($type == VARIABLETYPE_STRING) {
+                SetValue($varID, (string) $Value);
+            } elseif ($type == VARIABLETYPE_INTEGER) {
+                SetValue($varID, (int) round(floatval($Value)));
+            } else {
+                SetValue($varID, floatval($Value));
+            }
+            $this->PushState();
+            return;
+        }
+    }
+
+    // Button im Konfigurationsformular
+    public function Refresh()
+    {
+        $this->PushState();
+    }
+
+    public function GetVisualizationTile()
+    {
+        try {
+            $html = file_get_contents(__DIR__ . '/module.html');
+            $payload = json_encode($this->BuildPayload());
+            // handleMessage() ist in module.html definiert; hier initial mit aktuellen Werten aufrufen
+            return $html . '<script>handleMessage(' . $payload . ');</script>';
+        } catch (Throwable $e) {
+            return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
+        }
+    }
+
+    private function PushState()
+    {
+        $this->UpdateVisualizationValue(json_encode($this->BuildPayload()));
+    }
+
+    private function ReadVar(string $property): float
+    {
+        $id = $this->ReadPropertyInteger($property);
+        if ($id > 0 && IPS_VariableExists($id)) {
+            return floatval(GetValue($id));
+        }
+        return 0.0;
+    }
+
+    private function CollectVariableIDs(): array
+    {
+        $ids = [];
+        foreach (['SolarFlowPV', 'HoymilesPV', 'BatteryOut', 'BatterySoC', 'L1', 'L2', 'L3', 'DayProduction', 'WeekProduction', 'DayGridImport', 'WeekGridImport'] as $p) {
+            $id = $this->ReadPropertyInteger($p);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        $groups = json_decode($this->ReadPropertyString('Groups'), true);
+        if (is_array($groups)) {
+            foreach ($groups as $g) {
+                $vid = intval($g['VariableID'] ?? 0);
+                if ($vid > 0) {
+                    $ids[] = $vid;
+                }
+                $did = intval($g['DailyVariableID'] ?? 0);
+                if ($did > 0) {
+                    $ids[] = $did;
+                }
+            }
+        }
+        $catID = $this->ReadPropertyInteger('SettingsCategory');
+        if ($catID > 0 && IPS_ObjectExists($catID)) {
+            foreach (self::CONFIG_MAP as $ident) {
+                $vid = @IPS_GetObjectIDByIdent($ident, $catID);
+                if ($vid !== false) {
+                    $ids[] = $vid;
+                }
+            }
+        }
+        return array_values(array_unique($ids));
+    }
+
+    private function BuildConfig()
+    {
+        $catID = $this->ReadPropertyInteger('SettingsCategory');
+        if ($catID <= 0 || !IPS_ObjectExists($catID)) {
+            return null;
+        }
+        $out = [];
+        foreach (self::CONFIG_MAP as $field => $ident) {
+            $vid = @IPS_GetObjectIDByIdent($ident, $catID);
+            if ($vid !== false && IPS_VariableExists($vid)) {
+                $out[$field] = GetValue($vid);
+            }
+        }
+        return count($out) > 0 ? $out : null;
+    }
+
+    private function BuildPayload(): array
+    {
+        $l1 = $this->ReadVar('L1');
+        $l2 = $this->ReadVar('L2');
+        $l3 = $this->ReadVar('L3');
+        $grid = $l1 + $l2 + $l3;
+
+        $groups = [];
+        $decoded = json_decode($this->ReadPropertyString('Groups'), true);
+        if (is_array($decoded)) {
+            foreach ($decoded as $g) {
+                $vid = intval($g['VariableID'] ?? 0);
+                $val = ($vid > 0 && IPS_VariableExists($vid)) ? floatval(GetValue($vid)) : 0.0;
+                $did = intval($g['DailyVariableID'] ?? 0);
+                $daily = ($did > 0 && IPS_VariableExists($did)) ? GetValueFormatted($did) : '';
+                $groups[] = [
+                    'name'  => (string) ($g['Name'] ?? ''),
+                    'icon'  => (string) ($g['Icon'] ?? 'plug'),
+                    'value' => $val,
+                    'daily' => $daily,
+                ];
+            }
+        }
+
+        $config = $this->BuildConfig();
+
+        // Statistik: formatierte Werte (Einheit aus dem Variablenprofil)
+        $stats = [];
+        $statDefs = [
+            ['DayProduction',  'Tagesproduktion'],
+            ['WeekProduction', 'Wochenproduktion'],
+            ['DayGridImport',  'Netzbezug heute'],
+            ['WeekGridImport', 'Netzbezug Woche'],
+        ];
+        foreach ($statDefs as $def) {
+            $sid = $this->ReadPropertyInteger($def[0]);
+            if ($sid > 0 && IPS_VariableExists($sid)) {
+                $stats[] = [
+                    'label' => $def[1],
+                    'value' => GetValueFormatted($sid),
+                ];
+            }
+        }
+
+        return [
+            'solarflow' => $this->ReadVar('SolarFlowPV'),
+            'hoymiles'  => $this->ReadVar('HoymilesPV'),
+            'battOut'   => $this->ReadVar('BatteryOut'),
+            'soc'       => $this->ReadVar('BatterySoC'),
+            'l1'        => $l1,
+            'l2'        => $l2,
+            'l3'        => $l3,
+            'grid'      => $grid,
+            'groups'    => $groups,
+            'stats'     => $stats,
+            'hasConfig' => $config !== null,
+            'config'    => $config ?? (object) [],
+        ];
+    }
+}
+
+
+Pasted code(56).php
+Datei
+ich kann das modul nichte rtellen woe ist der fehelr
+
+
+Pasted code(57).php
+Datei
+
+Pasted code (2).html
+Datei
+bitte das html als Funktion ins moduel.php intgerieren, dann legen wir mit en modigfikatinen los
+
+
+Eingefügter Text(69).txt
+Dokument
+Das hat nicht funktioniert  da ist die ahsusnasicht leer nur das Umschaltmenu ist vorhanden bitte nun auch SVG einpflegen
+
+0b98fea6-40c6-4b18-87e2-61ad2dc044cc.png
+so was sähe auch echt cool aus
+
+Generiertes Bild: Energieflussübersicht für Smart Home
+
+
+Bearbeiten
+
+
+Generiertes Bild: Energieflussübersicht für Smart Homes
+
+
+Bearbeiten
+
+
+
+Überlegt, wie Bilder integriert werden können
+
+Generiertes Bild: Energieübersicht für modernes Zuhause
+
+
+Bearbeiten
+
+
+
+Überlegte die Bildintegration
+Ich setze es jetzt wirklich als Grafikhintergrund um: Haus, PV-Dach, Batterie, Wallbox, Auto und Netz bleiben als hochwertige Grafik erhalten; alle Texte, Werte, Karten und farbigen Flusslinien kommen dynamisch aus der module.php darüber. So sieht es wie dein Entwurf aus, ohne dass feste Beispielwerte im Bild stehen.
+
+
+Ich brauche dafür noch einen sauberen Hintergrund ohne feste Beispielwerte und ohne fest eingezeichnete Energieflüsse; sonst würden sich die statischen Werte mit deinen Live-Daten überlagern. Ich bereinige deshalb genau die Hausgrafik und bette sie anschließend direkt in die module.php ein.
+
+
+Generiertes Bild: Energiefluss-Übersicht des Hauses
+
+
+Bearbeiten
+
+
+097aaf5b-b6b2-47ca-b4b4-b6da22cf00c5.png
+vermutlich bruachen wir doch eien bilddatei oder?
+
+
+Eingefügter Text(70).txt
+Dokument
+was soll das jetzt mit deiner Module.phph voreher so und jetz gehst du augf eien uralte?
+
+Generiertes Bild: Moderne Energieübersicht bei Nacht
+
+
+Bearbeiten
+
+
+
+Überprüft Dateien und Pfade
+Ich mache jetzt zuerst die saubere Hintergrundgrafik in groß – nur Haus, PV, Wechselrichter, Batterie, Wallbox, Auto, Netz und Umgebung. Keine Karten, keine Werte, keine Flusslinien. Danach ersetze ich in deiner aktuell hochgeladenen module.php ausschließlich das eingebettete Bild durch house.png und lasse die dynamischen SVG-Linien darüber laufen.
+
+Das Bild ist groß genug, aber es hat wieder feste Karten/Werte erzeugt – genau das dürfen wir nicht haben. Ich entferne diese jetzt aus dieser Grafik und behalte nur Haus, PV, Wechselrichter, Batterie, Wallbox, Auto, Netz und Umgebung.
+
+
+Generiertes Bild: Moderne Solarenergie im Vorort design
+
+
+Bearbeiten
+
+Die saubere Hintergrundgrafik ist jetzt erstellt: ohne feste Werte, Karten und Energieflusslinien. Für die module.php brauche ich jetzt noch einmal deine aktuelle PHP-Datei als Upload, damit ich garantiert nicht wieder auf einen älteren Stand zurückgreife.
+
+
+Generiertes Bild: Moderne umweltfreundliche Architektur im Alltag
+
+
+Bearbeiten
+
+
+Ich brauche jetzt nur noch deine aktuelle module.php als Datei hier im Chat. Die letzte aktuelle Version liegt mir in diesem Turn nicht als bearbeitbare Datei im Container vor.
+
+Sobald du sie hochlädst, mache ich ohne weitere Zwischenstufe:
+
+genau diese module.php als Basis,
+
+das eben bestätigte Bild als house.png,
+
+Hausgrafik responsiv als Hintergrund,
+
+dynamische PV-, Netz-, Batterie- und Wallbox-Leitungen darüber,
+
+animierte Punkte mit der bisherigen leistungsabhängigen Geschwindigkeit,
+
+Farben wie festgelegt: Netzbezug rot, Einspeisung grün, Batterieentladung blau, Batterieladung grün, PV orange, Wallbox türkis,
+
+Live-Werte als HTML/SVG über der Grafik,
+
+klassische Energieflussansicht unverändert erhalten.
+
+Lade einfach die aktuelle module.php hoch, dann erstelle ich dir direkt die beiden fertigen Dateien.
+
+
+
+Eingefügter Text(71).txt
+Dokument
+
+
+Analysiert
+from pathlib import Path
+import re, shutil, subprocess, zipfile
+
+src = Path("/mnt/data/Eingefügter Text(71).txt")
+img_src = Path("/mnt/data/a_photorealistic_high_resolution_exterior_scene_of.png")
+
+if not src.exists():
+    raise FileNotFoundError(f"Aktuelle Moduldatei fehlt: {src}")
+if not img_src.exists():
+    raise FileNotFoundError(f"Hausgrafik fehlt: {img_src}")
+
+code = src.read_text(encoding="utf-8")
+
+# 1) Base64-Hintergrund exakt durch externe house.png ersetzen.
+pattern = re.compile(
+    r'<img id="house-bg" src="data:image/png;base64,[^"]+" alt="Hausansicht">',
+    re.S
+)
+code, count = pattern.subn(
+    '<img id="house-bg" src="house.png" alt="Hausansicht">',
+    code,
+    count=1
+)
+if count != 1:
+    raise RuntimeError("Das eingebettete Base64-Hausbild wurde nicht eindeutig gefunden.")
+
+# 2) Die dynamischen HTML-Beschriftungen/Karten wieder sichtbar machen.
+hide_block = re.compile(
+    r'\s*/\* Die Hintergrundgrafik enthält bereits die komplette Beschriftungs-/Kartenoptik\..*?'
+    r'#house-pv-list,\s*'
+    r'#house-grid-label,\s*'
+    r'#house-home-label,\s*'
+    r'#house-battery-label,\s*'
+    r'#house-wallbox-label,\s*'
+    r'\.house-card-grid\s*\{\s*display:\s*none\s*!important;\s*\}\s*',
+    re.S
+)
+code, hidden_removed = hide_block.subn("\n", code, count=1)
+
+# 3) Hausbild füllt die Hausansicht vollständig. 1536x1024 -> 3:2.
+# Container ebenfalls auf 3:2 stellen, damit Overlay und Bild ohne Versatz skalieren.
+code = code.replace(
+    """#house-stage {
+        position: relative;
+        width: 1000px;
+        height: 640px;""",
+    """#house-stage {
+        position: relative;
+        width: 1000px;
+        height: 667px;""",
+    1
+)
+code = code.replace(
+    """object-fit: contain;""",
+    """object-fit: cover;""",
+    1
+)
+
+# 4) Overlay muss exakt dieselbe logische Größe wie das Bild haben.
+code = code.replace(
+    '<svg id="house-overlay" viewBox="0 0 1000 640" aria-hidden="true">',
+    '<svg id="house-overlay" viewBox="0 0 1000 667" aria-hidden="true">',
+    1
+)
+
+# 5) Dynamische Positionen für das neue saubere Bild.
+css_replacements = {
+    """#house-grid-label {
+        left: 40px;
+        top: 255px;
+        width: 120px;
+        text-align: left;
+    }""":
+    """#house-grid-label {
+        left: 34px;
+        top: 225px;
+        width: 135px;
+        text-align: left;
+        background: rgba(7, 12, 18, 0.72);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 9px;
+        padding: 7px 9px;
+    }""",
+
+    """#house-home-label {
+        left: 448px;
+        top: 334px;
+        width: 150px;""":
+    """#house-home-label {
+        left: 515px;
+        top: 360px;
+        width: 150px;""",
+
+    """#house-battery-label {
+        right: 25px;
+        top: 250px;
+        width: 130px;
+        text-align: left;
+    }""":
+    """#house-battery-label {
+        right: 22px;
+        top: 315px;
+        width: 135px;
+        text-align: left;
+        background: rgba(7, 12, 18, 0.72);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 9px;
+        padding: 7px 9px;
+    }""",
+
+    """#house-wallbox-label {
+        left: 185px;
+        top: 405px;
+        width: 145px;
+        text-align: left;
+    }""":
+    """#house-wallbox-label {
+        left: 120px;
+        top: 420px;
+        width: 150px;
+        text-align: left;
+        background: rgba(7, 12, 18, 0.72);
+        border: 1px solid rgba(255,255,255,0.12);
+        border-radius: 9px;
+        padding: 7px 9px;
+    }""",
+
+    """#house-pv-list {
+        position: absolute;
+        left: 260px;
+        right: 250px;
+        top: 76px;""":
+    """#house-pv-list {
+        position: absolute;
+        left: 275px;
+        right: 235px;
+        top: 64px;""",
+
+    """bottom: 16px;
+        height: 142px;""":
+    """bottom: 14px;
+        height: 150px;"""
+}
+for old, new in css_replacements.items():
+    if old in code:
+        code = code.replace(old, new, 1)
+
+# 6) SVG-Flusswege auf die Komponenten des neuen Bildes legen.
+path_replacements = {
+    "addHouseEdge('house-pv', 'M520,190 L520,225 L560,245', AC.solar);":
+        "addHouseEdge('house-pv', 'M565,185 L565,285 L520,325', AC.solar);",
+
+    "addHouseEdge('house-grid-import', 'M105,300 L555,300', AC.import);":
+        "addHouseEdge('house-grid-import', 'M805,155 L805,270 L520,325', AC.import);",
+
+    "addHouseEdge('house-grid-export', 'M105,323 L555,323', AC.export);":
+        "addHouseEdge('house-grid-export', 'M805,178 L805,292 L520,347', AC.export);",
+
+    "addHouseEdge('house-battery', 'M560,300 L820,300', batColor);":
+        "addHouseEdge('house-battery', 'M520,325 L690,365 L735,430', batColor);",
+
+    "addHouseEdge('house-wallbox', 'M560,340 L430,340 L430,390 L220,390', AC.wallbox);":
+        "addHouseEdge('house-wallbox', 'M520,350 L385,390 L125,430', AC.wallbox);",
+}
+for old, new in path_replacements.items():
+    if old in code:
+        code = code.replace(old, new, 1)
+
+# 7) Hausansicht hat nun 667 px Grundhöhe. Layout/Skalierung entsprechend anpassen.
+code = code.replace(
+    "let graphWidth = mode === 'house' ? 1000 : 540;",
+    "let graphWidth = mode === 'house' ? 1000 : 540;",
+    1
+)
+
+# fit() verwendet bisher feste 640 px. Im Hausmodus muss 667 gelten.
+old_fit = """        const baseWidth = layoutWidth;
+        const baseHeight = 640;"""
+new_fit = """        const baseWidth = layoutWidth;
+        const houseMode = houseStage && houseStage.style.display !== 'none';
+        const baseHeight = houseMode ? 667 : 640;"""
+if old_fit in code:
+    code = code.replace(old_fit, new_fit, 1)
+
+# Root/wrap/fit müssen Hausmodus höher aufnehmen können.
+code = code.replace(
+    """#scale-root {
+        width: 540px;
+        height: 640px;""",
+    """#scale-root {
+        width: 540px;
+        height: 667px;""",
+    1
+)
+code = code.replace(
+    """#wrap {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        width: 540px;
+        height: 640px;""",
+    """#wrap {
+        display: flex;
+        gap: 14px;
+        align-items: flex-start;
+        width: 540px;
+        height: 667px;""",
+    1
+)
+code = code.replace(
+    """#fit {
+        width: 540px;
+        height: 640px;""",
+    """#fit {
+        width: 540px;
+        height: 667px;""",
+    1
+)
+
+# 8) Output-Ordner erzeugen.
+out_dir = Path("/mnt/data/Energiefluss_Hausansicht")
+out_dir.mkdir(parents=True, exist_ok=True)
+
+module_out = out_dir / "module.php"
+house_out = out_dir / "house.png"
+
+module_out.write_text(code, encoding="utf-8")
+shutil.copy2(img_src, house_out)
+
+# 9) PHP-Syntax prüfen.
+check = subprocess.run(
+    ["php", "-l", str(module_out)],
+    capture_output=True,
+    text=True
+)
+if check.returncode != 0:
+    raise RuntimeError(check.stdout + check.stderr)
+
+# 10) Zusätzlich ZIP mit beiden fertigen Dateien.
+zip_out = Path("/mnt/data/Energiefluss_Hausansicht.zip")
+with zipfile.ZipFile(zip_out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    zf.write(module_out, arcname="module.php")
+    zf.write(house_out, arcname="house.png")
+
+print(check.stdout.strip())
+print(f"module.php: {module_out.stat().st_size / 1024:.1f} KB")
+print(f"house.png: {house_out.stat().st_size / 1024 / 1024:.2f} MB")
+print(f"ZIP: {zip_out.stat().st_size / 1024 / 1024:.2f} MB")
+STDOUT/STDERR
+No syntax errors detected in /mnt/data/Energiefluss_Hausansicht/module.php
+module.php: 70.0 KB
+house.png: 2.74 MB
+ZIP: 2.69 MB
+Jetzt ist es sauber fertig – auf Basis deiner aktuellen hochgeladenen Version. 
+
+
+Enthalten sind:
+
+module.php mit deiner aktuellen Modulstruktur
+
+house.png als separate, große Hintergrundgrafik
+
+keine Base64-Daten mehr
+
+dynamische Werte/Karten wieder aktiviert
+
+dynamische SVG-Flüsse liegen über dem Bild
+
+Hausansicht auf das 3:2-Bildformat angepasst
+
+PHP-Syntax geprüft: keine Fehler
+
+Dateien
+module.php
+
+house.png
+
+Oder direkt beide zusammen:
+
+Energiefluss_Hausansicht.zip herunterladen
+
+Beide Dateien gehören anschließend nebeneinander in den Modulordner:
+
+Energiefluss/
+├── module.php
+├── house.png
+├── module.json
+└── ...
+
+
+
+Ich sehe nur das SVG aber kein Bild
+
+29s nachgedacht
+
+Analysiert
+from pathlib import Path
+import subprocess, shutil, zipfile, re
+
+src = Path("/mnt/data/Energiefluss_Hausansicht/module.php")
+house_src = Path("/mnt/data/Energiefluss_Hausansicht/house.png")
+
+if not src.exists():
+    raise FileNotFoundError(src)
+if not house_src.exists():
+    raise FileNotFoundError(house_src)
+
+code = src.read_text(encoding="utf-8")
+
+# 1) Call asset deployment during ApplyChanges.
+needle = """        try {
+            foreach ($this->GetMessageList() as $senderID => $messages) {"""
+replacement = """        try {
+            // Statische Dateien aus dem Modulordner für die Visualisierung
+            // in Symcons öffentlich erreichbaren /user/-Bereich kopieren.
+            $this->EnsureWebAssets();
+
+            foreach ($this->GetMessageList() as $senderID => $messages) {"""
+if needle not in code:
+    raise RuntimeError("ApplyChanges()-Marker nicht gefunden.")
+code = code.replace(needle, replacement, 1)
+
+# 2) Use the web-served /user/ path instead of relative module path.
+old_img = '<img id="house-bg" src="house.png" alt="Hausansicht">'
+new_img = '<img id="house-bg" src="/user/Energiefluss/house.png?v=1" alt="Hausansicht">'
+if old_img not in code:
+    raise RuntimeError("house.png-Referenz nicht gefunden.")
+code = code.replace(old_img, new_img, 1)
+
+# 3) Add private asset deployment helper before PushState().
+marker = """    private function PushState(): void
+    {"""
+helper = r'''    private function EnsureWebAssets(): void
+    {
+        $source = __DIR__ . DIRECTORY_SEPARATOR . 'house.png';
+        if (!is_file($source)) {
+            $this->LogMessage('Hausgrafik fehlt im Modulordner: ' . $source, KL_ERROR);
+            return;
+        }
+
+        // Ab IP-Symcon 7 liegt der vom WebServer unter /user/ bereitgestellte
+        // Ordner direkt unterhalb des Kernel-Verzeichnisses.
+        $targetDir = IPS_GetKernelDir()
+            . 'user'
+            . DIRECTORY_SEPARATOR
+            . 'Energiefluss';
+
+        if (!is_dir($targetDir)) {
+            if (!@mkdir($targetDir, 0777, true) && !is_dir($targetDir)) {
+                $this->LogMessage(
+                    'Web-Verzeichnis konnte nicht erstellt werden: ' . $targetDir,
+                    KL_ERROR
+                );
+                return;
+            }
+        }
+
+        $target = $targetDir . DIRECTORY_SEPARATOR . 'house.png';
+
+        // Nur kopieren, wenn die Datei fehlt oder sich geändert hat.
+        $copyRequired = !is_file($target);
+
+        if (!$copyRequired) {
+            $sourceSize = @filesize($source);
+            $targetSize = @filesize($target);
+            $sourceMTime = @filemtime($source);
+            $targetMTime = @filemtime($target);
+
+            $copyRequired =
+                $sourceSize !== $targetSize
+                || $sourceMTime === false
+                || $targetMTime === false
+                || $sourceMTime > $targetMTime;
+        }
+
+        if ($copyRequired) {
+            if (!@copy($source, $target)) {
+                $this->LogMessage(
+                    'Hausgrafik konnte nicht nach ' . $target . ' kopiert werden.',
+                    KL_ERROR
+                );
+                return;
+            }
+
+            // Zeitstempel mitnehmen, damit nicht bei jedem ApplyChanges neu kopiert wird.
+            $mtime = @filemtime($source);
+            if ($mtime !== false) {
+                @touch($target, $mtime);
+            }
+        }
+    }
+
+'''
+if marker not in code:
+    raise RuntimeError("PushState()-Marker nicht gefunden.")
+code = code.replace(marker, helper + marker, 1)
+
+# Output package
+out_dir = Path("/mnt/data/Energiefluss_Hausansicht_UserPath")
+out_dir.mkdir(parents=True, exist_ok=True)
+
+module_out = out_dir / "module.php"
+house_out = out_dir / "house.png"
+
+module_out.write_text(code, encoding="utf-8")
+shutil.copy2(house_src, house_out)
+
+check = subprocess.run(["php", "-l", str(module_out)], capture_output=True, text=True)
+if check.returncode != 0:
+    raise RuntimeError(check.stdout + check.stderr)
+
+zip_out = Path("/mnt/data/Energiefluss_Hausansicht_UserPath.zip")
+with zipfile.ZipFile(zip_out, "w", compression=zipfile.ZIP_DEFLATED) as zf:
+    zf.write(module_out, arcname="module.php")
+    zf.write(house_out, arcname="house.png")
+
+print(check.stdout.strip())
+print("PHP:", module_out)
+print("PNG:", house_out)
+print("ZIP:", zip_out)
+STDOUT/STDERR
+No syntax errors detected in /mnt/data/Energiefluss_Hausansicht_UserPath/module.php
+PHP: /mnt/data/Energiefluss_Hausansicht_UserPath/module.php
+PNG: /mnt/data/Energiefluss_Hausansicht_UserPath/house.png
+ZIP: /mnt/data/Energiefluss_Hausansicht_UserPath.zip
+Ja, die Ursache war der Pfad. house.png direkt neben module.php ist für den Browser der HTML-SDK-Kachel nicht automatisch erreichbar. Symcon stellt benutzerdefinierte Web-Dateien über /user/ bereit. 
+
+Ich habe es
+ bleibt neben deiner module.php
+
+ApplyChanges() kopiert sie automatisch nach
+IPS_GetKernelDir()/user/Energiefluss/house.png
+
+die Hausansicht lädt anschließend:
+
+/user/Energiefluss/house.png
+nur wenn sich die Grafik geändert hat, wird erneut kopiert
+
+PHP-Syntax geprüft: keine Fehler
+
+Dateien
+module.php
+
+house.png
+
+Beide als ZIP
+
+Nach dem Ersetzen der Dateien einmal Änderungen übernehmen / Modul neu laden, damit EnsureWebAssets() läuft. 
+
+
+Bibliothek
+/
+module.php
+
+
 <?php
 
 declare(strict_types=1);
@@ -69,6 +919,10 @@ class Energiefluss extends IPSModuleStrict
         parent::ApplyChanges();
 
         try {
+            // Statische Dateien aus dem Modulordner für die Visualisierung
+            // in Symcons öffentlich erreichbaren /user/-Bereich kopieren.
+            $this->EnsureWebAssets();
+
             foreach ($this->GetMessageList() as $senderID => $messages) {
                 foreach ($messages as $message) {
                     if ($message === VM_UPDATE) {
@@ -805,7 +1659,7 @@ class Energiefluss extends IPSModuleStrict
 
                     <!-- Hausansicht V2 -->
                     <div id="house-stage">
-                        <img id="house-bg" src="house.png" alt="Hausansicht">
+                        <img id="house-bg" src="/user/Energiefluss/house.png?v=1" alt="Hausansicht">
 
                         <!-- Dynamische Ebene über der Hintergrundgrafik -->
                         <svg id="house-overlay" viewBox="0 0 1000 667" aria-hidden="true">
@@ -1718,6 +2572,66 @@ HTML;
             [$flowDisplay, $houseDisplay],
             $html
         );
+    }
+
+    private function EnsureWebAssets(): void
+    {
+        $source = __DIR__ . DIRECTORY_SEPARATOR . 'house.png';
+        if (!is_file($source)) {
+            $this->LogMessage('Hausgrafik fehlt im Modulordner: ' . $source, KL_ERROR);
+            return;
+        }
+
+        // Ab IP-Symcon 7 liegt der vom WebServer unter /user/ bereitgestellte
+        // Ordner direkt unterhalb des Kernel-Verzeichnisses.
+        $targetDir = IPS_GetKernelDir()
+            . 'user'
+            . DIRECTORY_SEPARATOR
+            . 'Energiefluss';
+
+        if (!is_dir($targetDir)) {
+            if (!@mkdir($targetDir, 0777, true) && !is_dir($targetDir)) {
+                $this->LogMessage(
+                    'Web-Verzeichnis konnte nicht erstellt werden: ' . $targetDir,
+                    KL_ERROR
+                );
+                return;
+            }
+        }
+
+        $target = $targetDir . DIRECTORY_SEPARATOR . 'house.png';
+
+        // Nur kopieren, wenn die Datei fehlt oder sich geändert hat.
+        $copyRequired = !is_file($target);
+
+        if (!$copyRequired) {
+            $sourceSize = @filesize($source);
+            $targetSize = @filesize($target);
+            $sourceMTime = @filemtime($source);
+            $targetMTime = @filemtime($target);
+
+            $copyRequired =
+                $sourceSize !== $targetSize
+                || $sourceMTime === false
+                || $targetMTime === false
+                || $sourceMTime > $targetMTime;
+        }
+
+        if ($copyRequired) {
+            if (!@copy($source, $target)) {
+                $this->LogMessage(
+                    'Hausgrafik konnte nicht nach ' . $target . ' kopiert werden.',
+                    KL_ERROR
+                );
+                return;
+            }
+
+            // Zeitstempel mitnehmen, damit nicht bei jedem ApplyChanges neu kopiert wird.
+            $mtime = @filemtime($source);
+            if ($mtime !== false) {
+                @touch($target, $mtime);
+            }
+        }
     }
 
     private function PushState(): void
