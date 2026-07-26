@@ -182,20 +182,6 @@ class Energiefluss extends IPSModuleStrict
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'Netz',
-                    'items'   => [
-                        [
-                            'type'    => 'Label',
-                            'caption' => 'Netzleistung wird aus L1 + L2 + L3 berechnet. Bei Bedarf kann das Vorzeichen der Gesamtleistung umgekehrt werden.',
-                        ],
-                        ['type' => 'SelectVariable', 'name' => 'L1', 'caption' => 'L1 Leistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'L2', 'caption' => 'L2 Leistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'L3', 'caption' => 'L3 Leistung (W)'],
-                        ['type' => 'CheckBox', 'name' => 'InvertGridPower', 'caption' => 'Vorzeichen der Netzleistung umkehren'],
-                    ],
-                ],
-                [
-                    'type'    => 'ExpansionPanel',
                     'caption' => 'Verbrauchergruppen (optional, paarweise)',
                     'items'   => [
                         [
