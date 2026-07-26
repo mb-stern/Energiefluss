@@ -552,8 +552,8 @@ class Energiefluss extends IPSModuleStrict
     /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
-        width: 900px;
-        height: 640px;
+        width: 100%;
+        height: 100%;
         display: __HOUSE_DISPLAY__;
         overflow: hidden;
         box-sizing: border-box;
@@ -564,10 +564,9 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-host {
         position: absolute;
-        left: 0;
-        top: 0;
-        width: 900px;
-        height: 640px;
+        inset: 0;
+        width: 100%;
+        height: 100%;
         overflow: hidden;
     }
 
@@ -651,8 +650,8 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-info-solar {
-        left: 64%;
-        top: 7%;
+        left: 60%;
+        top: 4%;
         border-color: rgba(239,160,32,.36);
     }
 
@@ -664,7 +663,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-battery {
         left: 55%;
-        bottom: 9%;
+        bottom: 17%;
         transform: translateX(-50%);
         border-color: rgba(60,160,255,.36);
     }
@@ -1257,16 +1256,25 @@ class Energiefluss extends IPSModuleStrict
 
         const batteryContainer =
             pfcCard.shadowRoot.getElementById('svg-container-battery');
-        const evContainer =
+
+        // Die Wallbox benutzt jetzt den früheren Grid-Import-Container "primary".
+        const wallboxContainer =
+            pfcCard.shadowRoot.getElementById('svg-container-primary');
+
+        // Der alte EV-Pfad wird nicht mehr verwendet.
+        const oldEvContainer =
             pfcCard.shadowRoot.getElementById('svg-container-ev');
 
         if (batteryContainer) {
             batteryContainer.style.display = hasBattery ? '' : 'none';
         }
 
-        if (evContainer) {
-            // Entfernt sowohl die EV-/Wallbox-Grafik als auch deren Flusslinie.
-            evContainer.style.display = hasWallbox ? '' : 'none';
+        if (wallboxContainer) {
+            wallboxContainer.style.display = hasWallbox ? '' : 'none';
+        }
+
+        if (oldEvContainer) {
+            oldEvContainer.style.display = 'none';
         }
 
         // Die Descriptor-Gruppen befinden sich im SVG-Overlay.
@@ -1618,23 +1626,13 @@ class Energiefluss extends IPSModuleStrict
 
     // ---------- Layout ----------
     let layoutWidth = 540;
+    let layoutMode = 'flow';
+    let layoutShowRightPanel = false;
 
-    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
+    function setBaseLayoutWidth(graphWidth, showRightPanel) {
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
-
-        let graphWidth = mode === 'house' ? 900 : 540;
-
-        if (mode !== 'house') {
-            const columns = Math.ceil(groupCount / 2);
-
-            if (columns > 0) {
-                graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
-            }
-
-            graphWidth = Math.min(graphWidth, 1080);
-        }
 
         const rightWidth = showRightPanel ? 264 : 0;
         layoutWidth = graphWidth + rightWidth;
@@ -1646,7 +1644,29 @@ class Energiefluss extends IPSModuleStrict
         rootEl.style.width = layoutWidth + 'px';
 
         wrapEl.style.gap = showRightPanel ? '14px' : '0px';
+    }
 
+    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
+        layoutMode = mode;
+        layoutShowRightPanel = showRightPanel;
+
+        if (mode === 'house') {
+            // Die tatsächliche Breite der Hausansicht wird in fit() aus der
+            // jeweils verfügbaren Fenstergröße berechnet. 900 px gibt es hier
+            // bewusst nicht mehr als feste Vorgabe.
+            fit();
+            return;
+        }
+
+        let graphWidth = 540;
+        const columns = Math.ceil(groupCount / 2);
+
+        if (columns > 0) {
+            graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
+        }
+
+        graphWidth = Math.min(graphWidth, 1080);
+        setBaseLayoutWidth(graphWidth, showRightPanel);
         fit();
     }
 
@@ -1850,9 +1870,7 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        const baseWidth = layoutWidth;
         const baseHeight = 640;
-
         const availableWidth = host.clientWidth;
         const availableHeight = host.clientHeight;
 
@@ -1860,6 +1878,18 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
+        if (layoutMode === 'house') {
+            // Hausansicht dynamisch an das aktuelle Seitenverhältnis anpassen.
+            // Dadurch nutzt scale-root nach der proportionalen Skalierung
+            // die gesamte verfügbare Breite UND Höhe.
+            const rightWidth = layoutShowRightPanel ? 264 : 0;
+            const requiredLayoutWidth = baseHeight * (availableWidth / availableHeight);
+            const graphWidth = Math.max(1, requiredLayoutWidth - rightWidth);
+
+            setBaseLayoutWidth(graphWidth, layoutShowRightPanel);
+        }
+
+        const baseWidth = layoutWidth;
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
         const scale = Math.min(scaleX, scaleY);
