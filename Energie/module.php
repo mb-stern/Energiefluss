@@ -97,13 +97,13 @@ class Energiefluss extends IPSModuleStrict
             'elements' => [
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'PV & Batterie',
+                    'caption' => 'PV, Netz & Batterie',
                     'items'   => [
                         [
                             'type'     => 'List',
                             'name'     => 'Producers',
                             'caption'  => 'PV-Anlagen',
-                            'rowCount' => 6,
+                            'rowCount' => 3,
                             'add'      => true,
                             'delete'   => true,
                             'columns'  => [
@@ -134,7 +134,7 @@ class Energiefluss extends IPSModuleStrict
                             'type'     => 'List',
                             'name'     => 'Batteries',
                             'caption'  => 'Batterien',
-                            'rowCount' => 6,
+                            'rowCount' => 3,
                             'add'      => true,
                             'delete'   => true,
                             'columns'  => [
@@ -175,6 +175,9 @@ class Energiefluss extends IPSModuleStrict
                                 ],
                             ],
                         ],
+                        ['type' => 'Label', 'caption' => 'Netzenergie'],
+                        ['type' => 'SelectVariable', 'name' => 'GridImportEnergy', 'caption' => 'Netzbezug gesamt (kWh)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridExportEnergy', 'caption' => 'Rücklieferung / Einspeisung gesamt (kWh)'],
                     ],
                 ],
                 [
@@ -189,8 +192,6 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'L2', 'caption' => 'L2 Leistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'L3', 'caption' => 'L3 Leistung (W)'],
                         ['type' => 'CheckBox', 'name' => 'InvertGridPower', 'caption' => 'Vorzeichen der Netzleistung umkehren'],
-                        ['type' => 'SelectVariable', 'name' => 'GridImportEnergy', 'caption' => 'Netzbezug gesamt (kWh)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridExportEnergy', 'caption' => 'Einspeisung gesamt (kWh)'],
                     ],
                 ],
                 [
@@ -402,18 +403,7 @@ class Energiefluss extends IPSModuleStrict
     .lbl { position: absolute; left: 50%; transform: translateX(-50%); color: var(--w-text2); white-space: nowrap; }
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 8px; }
-    #phases {
-        position: absolute;
-        left: -34px;
-        top: 330px;
-        transform: none;
-        font-size: 13px;
-        line-height: 1.45;
-        color: var(--w-text2);
-        white-space: nowrap;
-        text-align: left;
-    }
-    #wrap { display: flex; gap: 14px; align-items: flex-start; width: 540px; height: 640px; }
+#wrap { display: flex; gap: 14px; align-items: flex-start; width: 540px; height: 640px; }
     #cfg { flex: 0 0 250px; width: 250px; border-left: 0.5px solid var(--w-border); padding-left: 14px; box-sizing: border-box; }
     #cfgsec { margin-top: 12px; }
     #statsec + #cfgsec[style=""] { border-top: 0.5px solid var(--w-border); padding-top: 10px; }
@@ -525,8 +515,6 @@ class Energiefluss extends IPSModuleStrict
         stage.appendChild(el);
     }
     for (const id in MAIN) addNode(id, MAIN[id]);
-
-    const ph = document.createElement('div'); ph.id = 'phases'; stage.appendChild(ph);
 
     const E = {
         'netz-haus': { d: 'M156,350 L306,350', col: AC.grid }
@@ -825,10 +813,6 @@ class Energiefluss extends IPSModuleStrict
             (d.gridExportEnergy
                 ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.batt}">&larr; ${d.gridExportEnergy}</div>`
                 : '');
-        ph.innerHTML =
-            `L1 ${Math.round(l1)} W<br>` +
-            `L2 ${Math.round(l2)} W<br>` +
-            `L3 ${Math.round(l3)} W`;
         document.getElementById('body-haus').innerHTML = `<div class="val" style="font-size:17px">${fmt(haus)}</div>`;
 
         const groups = d.groups || [];
