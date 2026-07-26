@@ -99,37 +99,54 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'     => 'List',
                             'name'     => 'Producers',
-                            'caption'  => 'Solaranlagen',
-                            'rowCount' => 6,
+                            'caption'  => 'PV- und Batterieanlagen',
+                            'rowCount' => 8,
                             'add'      => true,
                             'delete'   => true,
                             'columns'  => [
                                 [
+                                    'caption' => 'Typ',
+                                    'name'    => 'Type',
+                                    'width'   => '110px',
+                                    'add'     => 'PV',
+                                    'edit'    => [
+                                        'type'    => 'Select',
+                                        'options' => [
+                                            ['caption' => 'PV', 'value' => 'PV'],
+                                            ['caption' => 'Batterie', 'value' => 'Battery'],
+                                        ],
+                                    ],
+                                ],
+                                [
                                     'caption' => 'Name',
                                     'name'    => 'Name',
-                                    'width'   => '220px',
-                                    'add'     => 'PV',
+                                    'width'   => '180px',
+                                    'add'     => '',
                                     'edit'    => ['type' => 'ValidationTextBox'],
                                 ],
                                 [
                                     'caption' => 'Leistung',
                                     'name'    => 'VariableID',
-                                    'width'   => '320px',
+                                    'width'   => '280px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Erzeugte Energie',
+                                    'caption' => 'Energie (optional)',
                                     'name'    => 'EnergyVariableID',
-                                    'width'   => '320px',
+                                    'width'   => '280px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'SOC (nur Batterie)',
+                                    'name'    => 'SoCVariableID',
+                                    'width'   => '260px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                             ],
                         ],
-                        ['type' => 'Label', 'caption' => 'Batterie'],
-                        ['type' => 'SelectVariable', 'name' => 'BatteryOut', 'caption' => 'Batterie-Ausgang ins Haus (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'BatterySoC', 'caption' => 'Batterie-Ladezustand (%)'],
                     ],
                 ],
                 [
@@ -433,9 +450,8 @@ class Energiefluss extends IPSModuleStrict
     const RR = 34, COL0 = 530, COLW = 120;
 
     const MAIN = {
-        netz: { x: 110, y: 350, r: 46, ic: 'bolt',        icc: AC.grid, lab: 'Netz', lp: 'bot' },
-        haus: { x: 360, y: 350, r: 52, ic: 'house',       icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true },
-        batt: { x: 360, y: 548, r: 44, ic: 'battery-half', icc: AC.batt, lab: 'Batterie', lp: 'bot', ring: true }
+        netz: { x: 110, y: 350, r: 46, ic: 'bolt',  icc: AC.grid, lab: 'Netz', lp: 'bot' },
+        haus: { x: 360, y: 350, r: 52, ic: 'house', icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true }
     };
 
     const stage = document.getElementById('stage');
@@ -466,7 +482,6 @@ class Energiefluss extends IPSModuleStrict
     const ph = document.createElement('div'); ph.id = 'phases'; stage.appendChild(ph);
 
     const E = {
-        'batt-haus': { d: 'M360,504 L360,402', col: AC.batt },
         'netz-haus': { d: 'M156,350 L306,350', col: AC.grid }
     };
     const lineEl = {}, dotEl = {};
@@ -481,41 +496,51 @@ class Energiefluss extends IPSModuleStrict
     }
     for (const k in E) addEdge(k, E[k].d, E[k].col);
 
-    function producerPos(i, count) {
-        const minX = 240;
-        const maxX = 480;
-
+    function distributedPos(i, count, minX, maxX, y) {
         if (count <= 1) {
-            return { x: 360, y: 105 };
+            return { x: 360, y };
         }
 
-        const span = maxX - minX;
         return {
-            x: minX + (span * i / (count - 1)),
-            y: 105
+            x: minX + ((maxX - minX) * i / (count - 1)),
+            y
         };
     }
 
-    function buildProducers(list) {
-        document.querySelectorAll('.pv-node').forEach(e => e.remove());
-        Object.keys(lineEl).filter(k => k.startsWith('pv')).forEach(k => {
-            lineEl[k].remove();
-            dotEl[k].forEach(d => d.remove());
-            delete lineEl[k];
-            delete dotEl[k];
-        });
+    function pvPos(i, count) {
+        return distributedPos(i, count, 210, 510, 105);
+    }
 
+    function batteryPos(i, count) {
+        return distributedPos(i, count, 210, 510, 548);
+    }
+
+    function clearDynamicSources() {
+        document.querySelectorAll('.pv-node, .battery-node').forEach(e => e.remove());
+
+        Object.keys(lineEl)
+            .filter(k => k.startsWith('pv') || k.startsWith('bat'))
+            .forEach(k => {
+                lineEl[k].remove();
+                dotEl[k].forEach(d => d.remove());
+                delete lineEl[k];
+                delete dotEl[k];
+            });
+    }
+
+    function buildPVs(list) {
         list.forEach((pv, i) => {
-            const p = producerPos(i, list.length);
+            const p = pvPos(i, list.length);
+
             addNode(
                 'pv' + i,
                 {
                     x: p.x,
                     y: p.y,
-                    r: 46,
+                    r: 44,
                     ic: 'solar-panel',
                     icc: AC.solar,
-                    lab: pv.name || ('PV' + (i + 1)),
+                    lab: pv.name || ('PV ' + (i + 1)),
                     lp: 'top'
                 },
                 'pv-node'
@@ -527,22 +552,55 @@ class Energiefluss extends IPSModuleStrict
                     ? `<div class="sub" style="font-size:10px;line-height:1.25;">${pv.energy}</div>`
                     : '');
 
-            // Jede PV-Anlage geht mit einer geraden Leitung auf eine
-            // gemeinsame PV-Sammelschiene über dem Haus.
-            addEdge(
-                'pv' + i,
-                `M${p.x},151 L${p.x},250`,
-                AC.solar
-            );
+            // Gerade Leitung nach unten auf die gemeinsame PV-Sammelschiene.
+            addEdge('pv' + i, `M${p.x},149 L${p.x},250`, AC.solar);
         });
 
-        // Gemeinsame horizontale PV-Sammelschiene + gerade Leitung ins Haus.
         if (list.length > 0) {
-            const first = producerPos(0, list.length);
-            const last = producerPos(list.length - 1, list.length);
+            const first = pvPos(0, list.length);
+            const last = pvPos(list.length - 1, list.length);
 
             addEdge('pv-bus', `M${first.x},250 L${last.x},250`, AC.solar);
             addEdge('pv-house', 'M360,250 L360,298', AC.solar);
+        }
+    }
+
+    function buildBatteries(list) {
+        list.forEach((bat, i) => {
+            const p = batteryPos(i, list.length);
+
+            addNode(
+                'bat' + i,
+                {
+                    x: p.x,
+                    y: p.y,
+                    r: 42,
+                    ic: 'battery-half',
+                    icc: AC.batt,
+                    lab: bat.name || ('Batterie ' + (i + 1)),
+                    lp: 'bot',
+                    ring: true
+                },
+                'battery-node'
+            );
+
+            document.getElementById('body-bat' + i).innerHTML =
+                `<div class="sub" style="font-size:11px">${Math.round(bat.soc || 0)}%</div>` +
+                `<div class="val" style="color:${AC.batt}">${fmt(bat.value)}</div>` +
+                (bat.energy
+                    ? `<div class="sub" style="font-size:10px;line-height:1.25;">${bat.energy}</div>`
+                    : '');
+
+            // Gerade Leitung nach oben auf die gemeinsame Batterie-Sammelschiene.
+            addEdge('bat' + i, `M${p.x},506 L${p.x},455`, AC.batt);
+        });
+
+        if (list.length > 0) {
+            const first = batteryPos(0, list.length);
+            const last = batteryPos(list.length - 1, list.length);
+
+            addEdge('bat-bus', `M${first.x},455 L${last.x},455`, AC.batt);
+            addEdge('bat-house', 'M360,455 L360,402', AC.batt);
         }
     }
 
@@ -581,11 +639,14 @@ class Energiefluss extends IPSModuleStrict
         c.setAttribute('fill', 'none'); c.setAttribute('stroke', 'var(--w-line)'); c.setAttribute('stroke-width', 5);
         ringG.appendChild(c);
     }
-    function updateRings(segs, soc) {
+    function updateRings(segs, batteries) {
         ringG.innerHTML = '';
+
+        // Hausring: Herkunft der aktuell ins Haus fließenden Leistung.
         track(360, 350, 60);
         const tot = segs.reduce((a, s) => a + s[1], 0) || 1;
         let acc = 0;
+
         segs.forEach(([col, v]) => {
             if (v > 0) {
                 arc(360, 350, 60, col, v / tot, acc / tot);
@@ -593,8 +654,12 @@ class Energiefluss extends IPSModuleStrict
             }
         });
 
-        track(360, 548, 50);
-        arc(360, 548, 50, AC.batt, (soc || 0) / 100, 0);
+        // Separater SOC-Ring für jede Batterie.
+        batteries.forEach((bat, i) => {
+            const p = batteryPos(i, batteries.length);
+            track(p.x, p.y, 48);
+            arc(p.x, p.y, 48, AC.batt, Math.max(0, Math.min(100, bat.soc || 0)) / 100, 0);
+        });
     }
 
     const CFG = [
@@ -641,7 +706,7 @@ class Energiefluss extends IPSModuleStrict
     let edgeState = {};
     let layoutWidth = 540;
 
-    function updateLayout(groupCount, producerCount, showRightPanel) {
+    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel) {
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
@@ -655,9 +720,14 @@ class Energiefluss extends IPSModuleStrict
             graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
         }
 
-        if (producerCount > 0) {
-            const lastPVX = producerPos(producerCount - 1, producerCount).x;
+        if (pvCount > 0) {
+            const lastPVX = pvPos(pvCount - 1, pvCount).x;
             graphWidth = Math.max(graphWidth, lastPVX + 80);
+        }
+
+        if (batteryCount > 0) {
+            const lastBatX = batteryPos(batteryCount - 1, batteryCount).x;
+            graphWidth = Math.max(graphWidth, lastBatX + 80);
         }
 
         // Die SVG-Zeichenfläche ist 1080 px breit.
@@ -682,19 +752,19 @@ class Energiefluss extends IPSModuleStrict
         const l1 = d.l1 || 0, l2 = d.l2 || 0, l3 = d.l3 || 0;
         const grid = (d.grid !== undefined) ? d.grid : (l1 + l2 + l3);
         const imp = Math.max(grid, 0), exp = Math.max(-grid, 0);
-        const battOut = d.battOut || 0;
-        const producers = d.producers || [];
-        const pvTotal = producers.reduce((sum, pv) => sum + (pv.value || 0), 0);
+        const pvs = d.pvs || [];
+        const batteries = d.batteries || [];
 
-        // Alle Erzeuger sowie die Batterie speisen direkt in das Haus.
+        const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
+        const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
+
+        // PV und Batterien speisen direkt in das Haus.
         // Netzbezug ist positiv, Einspeisung negativ.
-        const haus = Math.max(pvTotal + battOut + grid, 0);
+        const haus = Math.max(pvTotal + batteryTotal + grid, 0);
 
-        buildProducers(producers);
-
-        document.getElementById('body-batt').innerHTML =
-            `<div class="sub" style="font-size:11px">${Math.round(d.soc || 0)}%</div>` +
-            `<div class="val" style="color:${AC.batt}">${fmt(battOut)}</div>`;
+        clearDynamicSources();
+        buildPVs(pvs);
+        buildBatteries(batteries);
         document.getElementById('body-netz').innerHTML =
             `<div class="val" style="color:${grid >= 0 ? AC.grid : AC.batt}">${fmt(Math.abs(grid))}</div>` +
             (d.gridImportEnergy
@@ -708,17 +778,26 @@ class Energiefluss extends IPSModuleStrict
 
         const groups = d.groups || [];
         buildGroups(groups);
-        updateRings([[AC.solar, pvTotal], [AC.batt, Math.max(battOut, 0)], [AC.grid, imp]], d.soc);
+        updateRings(
+            [[AC.solar, Math.max(pvTotal, 0)], [AC.batt, Math.max(batteryTotal, 0)], [AC.grid, imp]],
+            batteries
+        );
 
         edgeState = {
-            'batt-haus': { w: Math.abs(battOut), rev: battOut < 0 },
             'netz-haus': { w: Math.abs(grid), rev: grid < 0 }
         };
-        producers.forEach((pv, i) => {
+
+        pvs.forEach((pv, i) => {
             edgeState['pv' + i] = { w: Math.max(pv.value || 0, 0) };
         });
-        edgeState['pv-bus'] = { w: pvTotal };
-        edgeState['pv-house'] = { w: pvTotal };
+        edgeState['pv-bus'] = { w: Math.max(pvTotal, 0) };
+        edgeState['pv-house'] = { w: Math.max(pvTotal, 0) };
+
+        batteries.forEach((bat, i) => {
+            edgeState['bat' + i] = { w: Math.abs(bat.value || 0), rev: (bat.value || 0) < 0 };
+        });
+        edgeState['bat-bus'] = { w: Math.abs(batteryTotal), rev: batteryTotal < 0 };
+        edgeState['bat-house'] = { w: Math.abs(batteryTotal), rev: batteryTotal < 0 };
 
         groups.forEach((g, i) => { edgeState['grp' + i] = { w: g.value || 0 }; });
         for (const k in lineEl) {
@@ -745,7 +824,7 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('cfg').style.display = showRightPanel ? '' : 'none';
 
         // Breite nur für tatsächlich sichtbare Inhalte reservieren.
-        updateLayout(groups.length, producers.length, showRightPanel);
+        updateLayout(groups.length, pvs.length, batteries.length, showRightPanel);
     }
 
     // Pflicht-Funktion: empfängt Nachrichten vom Modul (UpdateVisualizationValue)
@@ -892,6 +971,11 @@ HTML;
                 if ($energyVariableID > 0) {
                     $ids[] = $energyVariableID;
                 }
+
+                $socVariableID = (int) ($producer['SoCVariableID'] ?? 0);
+                if ($socVariableID > 0) {
+                    $ids[] = $socVariableID;
+                }
             }
         }
 
@@ -952,34 +1036,49 @@ HTML;
             $grid *= -1;
         }
 
-        $producers = [];
-        $decodedProducers = json_decode($this->ReadPropertyString('Producers'), true);
-        if (is_array($decodedProducers)) {
-            foreach ($decodedProducers as $index => $producer) {
-                $variableID = (int) ($producer['VariableID'] ?? 0);
-                $energyVariableID = (int) ($producer['EnergyVariableID'] ?? 0);
+        $pvs = [];
+        $batteries = [];
 
-                // Nur tatsächlich konfigurierte Solaranlagen anzeigen.
+        $decodedSources = json_decode($this->ReadPropertyString('Producers'), true);
+        if (is_array($decodedSources)) {
+            foreach ($decodedSources as $source) {
+                $variableID = (int) ($source['VariableID'] ?? 0);
                 if ($variableID <= 0 || !IPS_VariableExists($variableID)) {
                     continue;
                 }
 
-                $producers[] = [
-                    'name'   => trim((string) ($producer['Name'] ?? '')) !== ''
-                        ? (string) $producer['Name']
-                        : 'PV' . (count($producers) + 1),
+                // Alte Listeneinträge ohne Type waren bisher PV-Anlagen.
+                $type = (string) ($source['Type'] ?? 'PV');
+                $isBattery = ($type === 'Battery');
+
+                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
+                $socVariableID = (int) ($source['SoCVariableID'] ?? 0);
+
+                $entry = [
+                    'name'   => trim((string) ($source['Name'] ?? '')) !== ''
+                        ? (string) $source['Name']
+                        : ($isBattery ? 'Batterie ' . (count($batteries) + 1) : 'PV ' . (count($pvs) + 1)),
                     'value'  => (float) GetValue($variableID),
                     'energy' => ($energyVariableID > 0 && IPS_VariableExists($energyVariableID))
                         ? GetValueFormatted($energyVariableID)
                         : '',
+                    'soc'    => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
+                        ? (float) GetValue($socVariableID)
+                        : 0.0,
                 ];
+
+                if ($isBattery) {
+                    $batteries[] = $entry;
+                } else {
+                    $pvs[] = $entry;
+                }
             }
         }
 
-        // Abwärtskompatibilität: Ist die neue Liste leer, werden vorhandene
-        // alte PV1/PV2-Zuordnungen weiterhin angezeigt.
-        if (count($producers) === 0) {
-            $legacy = [
+        // Bestehende alte PV1/PV2-Konfiguration nur dann als Fallback verwenden,
+        // wenn in der gemeinsamen Liste noch keine PV-Anlage vorhanden ist.
+        if (count($pvs) === 0) {
+            $legacyPV = [
                 [
                     'name' => $this->ReadPropertyString('PV1Name'),
                     'powerID' => $this->ReadPropertyInteger('SolarFlowPV'),
@@ -992,17 +1091,36 @@ HTML;
                 ],
             ];
 
-            foreach ($legacy as $entry) {
+            foreach ($legacyPV as $entry) {
                 if ($entry['powerID'] <= 0 || !IPS_VariableExists($entry['powerID'])) {
                     continue;
                 }
 
-                $producers[] = [
+                $pvs[] = [
                     'name'   => $entry['name'],
                     'value'  => (float) GetValue($entry['powerID']),
                     'energy' => ($entry['energyID'] > 0 && IPS_VariableExists($entry['energyID']))
                         ? GetValueFormatted($entry['energyID'])
                         : '',
+                    'soc'    => 0.0,
+                ];
+            }
+        }
+
+        // Alte einzelne Batterie bleibt als Fallback erhalten, bis eine Batterie
+        // in der gemeinsamen Liste angelegt wurde.
+        if (count($batteries) === 0) {
+            $legacyBatteryID = $this->ReadPropertyInteger('BatteryOut');
+            if ($legacyBatteryID > 0 && IPS_VariableExists($legacyBatteryID)) {
+                $legacySoCID = $this->ReadPropertyInteger('BatterySoC');
+
+                $batteries[] = [
+                    'name'   => 'Batterie',
+                    'value'  => (float) GetValue($legacyBatteryID),
+                    'energy' => '',
+                    'soc'    => ($legacySoCID > 0 && IPS_VariableExists($legacySoCID))
+                        ? (float) GetValue($legacySoCID)
+                        : 0.0,
                 ];
             }
         }
@@ -1052,9 +1170,8 @@ HTML;
         }
 
         return [
-            'producers' => $producers,
-            'battOut'   => $this->ReadVar('BatteryOut'),
-            'soc'       => $this->ReadVar('BatterySoC'),
+            'pvs'       => $pvs,
+            'batteries' => $batteries,
             'l1'        => $l1,
             'l2'        => $l2,
             'l3'        => $l3,
