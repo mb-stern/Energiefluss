@@ -323,21 +323,6 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        if ($Ident === 'SetDisplayMode') {
-            $mode = (string) $Value;
-
-            if (!in_array($mode, ['flow', 'house'], true)) {
-                return;
-            }
-
-            if ($mode !== $this->ReadPropertyString('DisplayMode')) {
-                IPS_SetProperty($this->InstanceID, 'DisplayMode', $mode);
-                IPS_ApplyChanges($this->InstanceID);
-            }
-
-            return;
-        }
-
         if (str_starts_with($Ident, 'Cfg')) {
             $field = substr($Ident, 3);
             if (!array_key_exists($field, self::CONFIG_MAP)) {
@@ -399,17 +384,11 @@ class Energiefluss extends IPSModuleStrict
         $houseDisplay = $showHouse ? 'block' : 'none';
 
         $html = <<<'HTML'
-<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
     body {
         margin: 0;
         font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
         background: transparent;
-        position: relative;
     }
     :root {
         --w-bg: #f6f6f3;
@@ -466,37 +445,6 @@ class Energiefluss extends IPSModuleStrict
         flex: 0 0 540px;
         overflow: hidden;
         position: relative;
-    }
-
-    #view-switch {
-        position: absolute;
-        top: 8px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 99999;
-        display: flex;
-        gap: 4px;
-        padding: 4px;
-        border-radius: 8px;
-        background: var(--w-surface);
-        border: 1px solid var(--w-border);
-        box-shadow: 0 2px 10px rgba(0,0,0,.15);
-    }
-
-    .view-switch-btn {
-        border: 0;
-        border-radius: 6px;
-        padding: 6px 10px;
-        background: transparent;
-        color: var(--w-text2);
-        font: inherit;
-        font-size: 12px;
-        cursor: pointer;
-    }
-
-    .view-switch-btn.active {
-        background: var(--w-text);
-        color: var(--w-surface);
     }
 
     /* Klassische Ansicht */
@@ -766,8 +714,6 @@ class Energiefluss extends IPSModuleStrict
 
 
 </style>
-</head>
-<body>
 <script src="/icons.js"></script>
 <script type="module"
         src="/user/Energiefluss/vendor/power-flow-card.js">
@@ -778,11 +724,6 @@ class Energiefluss extends IPSModuleStrict
         <div id="scale-root">
             <div id="wrap">
                 <div id="fit">
-
-                    <div id="view-switch">
-                        <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
-                        <button id="view-house" class="view-switch-btn" type="button">Haus</button>
-                    </div>
 
                     <!-- Klassische Energieflussansicht -->
                     <div id="stage">
@@ -1607,50 +1548,10 @@ class Energiefluss extends IPSModuleStrict
         updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
-    let currentDisplayMode = 'flow';
-
     function applyDisplayMode(mode) {
-        currentDisplayMode = mode === 'house' ? 'house' : 'flow';
-        const house = currentDisplayMode === 'house';
-
-        if (stage) {
-            stage.style.display = house ? 'none' : 'block';
-        }
-
-        if (houseStage) {
-            houseStage.style.display = house ? 'block' : 'none';
-        }
-
-        const flowButton = document.getElementById('view-flow');
-        const houseButton = document.getElementById('view-house');
-
-        if (flowButton) {
-            flowButton.classList.toggle('active', !house);
-        }
-
-        if (houseButton) {
-            houseButton.classList.toggle('active', house);
-        }
-    }
-
-    function switchDisplayMode(mode) {
-        const normalized = mode === 'house' ? 'house' : 'flow';
-
-        // Sofort sichtbar umschalten.
-        applyDisplayMode(normalized);
-
-        // Layout sofort passend machen.
-        const groups = document.querySelectorAll('.grp-node').length;
-        const pvs = document.querySelectorAll('.pv-node').length;
-        const batteries = document.querySelectorAll('.battery-node').length;
-        const cfgEl = document.getElementById('cfg');
-        const showRightPanel = !!(cfgEl && cfgEl.style.display !== 'none');
-
-        updateLayout(groups, pvs, batteries, showRightPanel, normalized);
-
-        // Dieselbe DisplayMode-Property persistent setzen,
-        // die auch das Konfigurationsformular verwendet.
-        requestAction('SetDisplayMode', normalized);
+        const house = mode === 'house';
+        if (stage) stage.style.display = house ? 'none' : 'block';
+        if (houseStage) houseStage.style.display = house ? 'block' : 'none';
     }
 
     // ---------- Regelung / Statistik ----------
@@ -1898,26 +1799,6 @@ class Energiefluss extends IPSModuleStrict
         setState(d);
     }
 
-    const viewFlowButton = document.getElementById('view-flow');
-    const viewHouseButton = document.getElementById('view-house');
-
-    if (viewFlowButton) {
-        viewFlowButton.addEventListener('click', function () {
-            switchDisplayMode('flow');
-        });
-    }
-
-    if (viewHouseButton) {
-        viewHouseButton.addEventListener('click', function () {
-            switchDisplayMode('house');
-        });
-    }
-
-    // Wie im Sankey zusätzlich den Message-Kanal anbinden.
-    window.addEventListener('message', function (event) {
-        handleMessage(event.data);
-    });
-
     // ---------- Animation ----------
     let last = performance.now();
 
@@ -2012,8 +1893,6 @@ class Energiefluss extends IPSModuleStrict
     fit();
     requestAnimationFrame(frame);
 </script>
-</body>
-</html>
 HTML;
 
         return str_replace(
