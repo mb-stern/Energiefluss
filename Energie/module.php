@@ -1,3 +1,655 @@
+ChatGPT Plus
+
+
+
+
+heute 12:11
+
+Pasted code.html
+Datei
+<?php
+
+// SolarFlowTile v1.6 (Build 7)
+
+declare(strict_types=1);
+
+class SolarFlowTile extends IPSModule
+{
+    // Idents der Einstellungs-Variablen, die das PID-Skript in der Kategorie
+    // "SolarFlow Einstellungen" anlegt. Schlüssel = Feld-ID in der Kachel.
+    private const CONFIG_MAP = [
+        'Kp'               => 'SF_Kp',
+        'Ki'               => 'SF_Ki',
+        'Kd'               => 'SF_Kd',
+        'TargetImport'     => 'SF_TargetImport',
+        'ReserveHours'     => 'SF_ReserveHours',
+        'FreeSoc'          => 'SF_FreeSocThreshold',
+        'LowSocOut'        => 'SF_LowSocOutput',
+        'LowSocThreshold'  => 'SF_LowSocThreshold',
+        'MinSocShutdown'   => 'SF_MinSocShutdown',
+        'MorningStart'     => 'SF_MorningStart',
+        'MorningEnd'       => 'SF_MorningEnd',
+    ];
+
+    public function Create()
+    {
+        parent::Create();
+
+        $this->RegisterPropertyInteger('SolarFlowPV', 0);
+        $this->RegisterPropertyInteger('HoymilesPV', 0);
+        $this->RegisterPropertyInteger('BatteryOut', 0);
+        $this->RegisterPropertyInteger('BatterySoC', 0);
+        $this->RegisterPropertyInteger('L1', 0);
+        $this->RegisterPropertyInteger('L2', 0);
+        $this->RegisterPropertyInteger('L3', 0);
+        $this->RegisterPropertyInteger('SettingsCategory', 0);
+        $this->RegisterPropertyString('Groups', '[]');
+        $this->RegisterPropertyInteger('DayProduction', 0);
+        $this->RegisterPropertyInteger('WeekProduction', 0);
+        $this->RegisterPropertyInteger('DayGridImport', 0);
+        $this->RegisterPropertyInteger('WeekGridImport', 0);
+
+        // HTML-SDK als Darstellung aktivieren
+        $this->SetVisualizationType(1);
+    }
+
+    public function ApplyChanges()
+    {
+        parent::ApplyChanges();
+
+        // Defensiv: Fehler hier dürfen niemals den Symcon-Start blockieren
+        try {
+            // Alte Nachrichten-Registrierungen entfernen
+            foreach ($this->GetMessageList() as $senderID => $messages) {
+                foreach ($messages as $message) {
+                    if ($message == VM_UPDATE) {
+                        $this->UnregisterMessage($senderID, VM_UPDATE);
+                    }
+                }
+            }
+            // Alte Referenzen entfernen
+            foreach ($this->GetReferenceList() as $referenceID) {
+                $this->UnregisterReference($referenceID);
+            }
+
+            // Für alle konfigurierten Variablen auf Änderungen lauschen + referenzieren
+            foreach ($this->CollectVariableIDs() as $id) {
+                if ($id > 0 && IPS_VariableExists($id)) {
+                    $this->RegisterMessage($id, VM_UPDATE);
+                    $this->RegisterReference($id);
+                }
+            }
+
+            // Aktuellen Stand an offene Kacheln pushen
+            if (IPS_GetKernelRunlevel() == KR_READY) {
+                $this->PushState();
+            }
+        } catch (Throwable $e) {
+            $this->LogMessage('ApplyChanges: ' . $e->getMessage(), KL_ERROR);
+        }
+    }
+
+    public function MessageSink($TimeStamp, $SenderID, $Message, $Data)
+    {
+        try {
+            if ($Message == VM_UPDATE && IPS_GetKernelRunlevel() == KR_READY) {
+                $this->PushState();
+            }
+        } catch (Throwable $e) {
+            $this->LogMessage('MessageSink: ' . $e->getMessage(), KL_ERROR);
+        }
+    }
+
+    // Von der Kachel (JavaScript requestAction) aufgerufen
+    public function RequestAction($Ident, $Value)
+    {
+        // Konfig-Felder: "Cfg<FeldID>" -> Einstellungs-Variable schreiben
+        if (strpos($Ident, 'Cfg') === 0) {
+            $field = substr($Ident, 3);
+            if (!array_key_exists($field, self::CONFIG_MAP)) {
+                return;
+            }
+            $catID = $this->ReadPropertyInteger('SettingsCategory');
+            if ($catID <= 0 || !IPS_ObjectExists($catID)) {
+                return;
+            }
+            $varID = @IPS_GetObjectIDByIdent(self::CONFIG_MAP[$field], $catID);
+            if ($varID === false || !IPS_VariableExists($varID)) {
+                return;
+            }
+            $type = IPS_GetVariable($varID)['VariableType'];
+            if ($type == VARIABLETYPE_STRING) {
+                SetValue($varID, (string) $Value);
+            } elseif ($type == VARIABLETYPE_INTEGER) {
+                SetValue($varID, (int) round(floatval($Value)));
+            } else {
+                SetValue($varID, floatval($Value));
+            }
+            $this->PushState();
+            return;
+        }
+    }
+
+    // Button im Konfigurationsformular
+    public function Refresh()
+    {
+        $this->PushState();
+    }
+
+    public function GetVisualizationTile()
+    {
+        try {
+            $html = file_get_contents(__DIR__ . '/module.html');
+            $payload = json_encode($this->BuildPayload());
+            // handleMessage() ist in module.html definiert; hier initial mit aktuellen Werten aufrufen
+            return $html . '<script>handleMessage(' . $payload . ');</script>';
+        } catch (Throwable $e) {
+            return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
+        }
+    }
+
+    private function PushState()
+    {
+        $this->UpdateVisualizationValue(json_encode($this->BuildPayload()));
+    }
+
+    private function ReadVar(string $property): float
+    {
+        $id = $this->ReadPropertyInteger($property);
+        if ($id > 0 && IPS_VariableExists($id)) {
+            return floatval(GetValue($id));
+        }
+        return 0.0;
+    }
+
+    private function CollectVariableIDs(): array
+    {
+        $ids = [];
+        foreach (['SolarFlowPV', 'HoymilesPV', 'BatteryOut', 'BatterySoC', 'L1', 'L2', 'L3', 'DayProduction', 'WeekProduction', 'DayGridImport', 'WeekGridImport'] as $p) {
+            $id = $this->ReadPropertyInteger($p);
+            if ($id > 0) {
+                $ids[] = $id;
+            }
+        }
+        $groups = json_decode($this->ReadPropertyString('Groups'), true);
+        if (is_array($groups)) {
+            foreach ($groups as $g) {
+                $vid = intval($g['VariableID'] ?? 0);
+                if ($vid > 0) {
+                    $ids[] = $vid;
+                }
+                $did = intval($g['DailyVariableID'] ?? 0);
+                if ($did > 0) {
+                    $ids[] = $did;
+                }
+            }
+        }
+        $catID = $this->ReadPropertyInteger('SettingsCategory');
+        if ($catID > 0 && IPS_ObjectExists($catID)) {
+            foreach (self::CONFIG_MAP as $ident) {
+                $vid = @IPS_GetObjectIDByIdent($ident, $catID);
+                if ($vid !== false) {
+                    $ids[] = $vid;
+                }
+            }
+        }
+        return array_values(array_unique($ids));
+    }
+
+    private function BuildConfig()
+    {
+        $catID = $this->ReadPropertyInteger('SettingsCategory');
+        if ($catID <= 0 || !IPS_ObjectExists($catID)) {
+            return null;
+        }
+        $out = [];
+        foreach (self::CONFIG_MAP as $field => $ident) {
+            $vid = @IPS_GetObjectIDByIdent($ident, $catID);
+            if ($vid !== false && IPS_VariableExists($vid)) {
+                $out[$field] = GetValue($vid);
+            }
+        }
+        return count($out) > 0 ? $out : null;
+    }
+
+    private function BuildPayload(): array
+    {
+        $l1 = $this->ReadVar('L1');
+        $l2 = $this->ReadVar('L2');
+        $l3 = $this->ReadVar('L3');
+        $grid = $l1 + $l2 + $l3;
+
+        $groups = [];
+        $decoded = json_decode($this->ReadPropertyString('Groups'), true);
+        if (is_array($decoded)) {
+            foreach ($decoded as $g) {
+                $vid = intval($g['VariableID'] ?? 0);
+                $val = ($vid > 0 && IPS_VariableExists($vid)) ? floatval(GetValue($vid)) : 0.0;
+                $did = intval($g['DailyVariableID'] ?? 0);
+                $daily = ($did > 0 && IPS_VariableExists($did)) ? GetValueFormatted($did) : '';
+                $groups[] = [
+                    'name'  => (string) ($g['Name'] ?? ''),
+                    'icon'  => (string) ($g['Icon'] ?? 'plug'),
+                    'value' => $val,
+                    'daily' => $daily,
+                ];
+            }
+        }
+
+        $config = $this->BuildConfig();
+
+        // Statistik: formatierte Werte (Einheit aus dem Variablenprofil)
+        $stats = [];
+        $statDefs = [
+            ['DayProduction',  'Tagesproduktion'],
+            ['WeekProduction', 'Wochenproduktion'],
+            ['DayGridImport',  'Netzbezug heute'],
+            ['WeekGridImport', 'Netzbezug Woche'],
+        ];
+        foreach ($statDefs as $def) {
+            $sid = $this->ReadPropertyInteger($def[0]);
+            if ($sid > 0 && IPS_VariableExists($sid)) {
+                $stats[] = [
+                    'label' => $def[1],
+                    'value' => GetValueFormatted($sid),
+                ];
+            }
+        }
+
+        return [
+            'solarflow' => $this->ReadVar('SolarFlowPV'),
+            'hoymiles'  => $this->ReadVar('HoymilesPV'),
+            'battOut'   => $this->ReadVar('BatteryOut'),
+            'soc'       => $this->ReadVar('BatterySoC'),
+            'l1'        => $l1,
+            'l2'        => $l2,
+            'l3'        => $l3,
+            'grid'      => $grid,
+            'groups'    => $groups,
+            'stats'     => $stats,
+            'hasConfig' => $config !== null,
+            'config'    => $config ?? (object) [],
+        ];
+    }
+}
+
+
+Pasted code(56).php
+Datei
+ich kann das modul nichte rtellen woe ist der fehelr
+
+
+Pasted code(57).php
+Datei
+
+Pasted code (2).html
+Datei
+bitte das html als Funktion ins moduel.php intgerieren, dann legen wir mit en modigfikatinen los
+
+
+Eingefügter Text(69).txt
+Dokument
+Das hat nicht funktioniert  da ist die ahsusnasicht leer nur das Umschaltmenu ist vorhanden bitte nun auch SVG einpflegen
+
+so was sähe auch echt cool aus
+
+Generiertes Bild: Energieflussübersicht für Smart Home
+
+
+Bearbeiten
+
+
+Generiertes Bild: Energieflussübersicht für Smart Homes
+
+
+Bearbeiten
+
+
+
+Überlegt, wie Bilder integriert werden können
+
+Generiertes Bild: Energieübersicht für modernes Zuhause
+
+
+Bearbeiten
+
+
+
+Überlegte die Bildintegration
+Ich setze es jetzt wirklich als Grafikhintergrund um: Haus, PV-Dach, Batterie, Wallbox, Auto und Netz bleiben als hochwertige Grafik erhalten; alle Texte, Werte, Karten und farbigen Flusslinien kommen dynamisch aus der module.php darüber. So sieht es wie dein Entwurf aus, ohne dass feste Beispielwerte im Bild stehen.
+
+
+Ich brauche dafür noch einen sauberen Hintergrund ohne feste Beispielwerte und ohne fest eingezeichnete Energieflüsse; sonst würden sich die statischen Werte mit deinen Live-Daten überlagern. Ich bereinige deshalb genau die Hausgrafik und bette sie anschließend direkt in die module.php ein.
+
+
+Generiertes Bild: Energiefluss-Übersicht des Hauses
+
+
+Bearbeiten
+
+
+vermutlich bruachen wir doch eien bilddatei oder?
+
+
+Eingefügter Text(70).txt
+Dokument
+was soll das jetzt mit deiner Module.phph voreher so und jetz gehst du augf eien uralte?
+
+Generiertes Bild: Moderne Energieübersicht bei Nacht
+
+
+Bearbeiten
+
+
+
+Überprüft Dateien und Pfade
+Ich mache jetzt zuerst die saubere Hintergrundgrafik in groß – nur Haus, PV, Wechselrichter, Batterie, Wallbox, Auto, Netz und Umgebung. Keine Karten, keine Werte, keine Flusslinien. Danach ersetze ich in deiner aktuell hochgeladenen module.php ausschließlich das eingebettete Bild durch house.png und lasse die dynamischen SVG-Linien darüber laufen.
+
+Das Bild ist groß genug, aber es hat wieder feste Karten/Werte erzeugt – genau das dürfen wir nicht haben. Ich entferne diese jetzt aus dieser Grafik und behalte nur Haus, PV, Wechselrichter, Batterie, Wallbox, Auto, Netz und Umgebung.
+
+
+Generiertes Bild: Moderne Solarenergie im Vorort design
+
+
+Bearbeiten
+
+Die saubere Hintergrundgrafik ist jetzt erstellt: ohne feste Werte, Karten und Energieflusslinien. Für die module.php brauche ich jetzt noch einmal deine aktuelle PHP-Datei als Upload, damit ich garantiert nicht wieder auf einen älteren Stand zurückgreife.
+
+
+Generiertes Bild: Moderne umweltfreundliche Architektur im Alltag
+
+
+Bearbeiten
+
+
+
+Eingefügter Text(71).txt
+Dokument
+
+gibt es eigentlich nichts vorgefertigtes im netz wo svg bereits drüber liegt. Wei ljetz sieht es so asu svg am falschen Ort etc
+
+Das sieht doch nicht im entferntesten so asu
+
+
+Eingefügter Text(72).txt
+Dokument
+ist eas daswas du integriern wolltet
+
+Erstens: Netz muss nur bis zum SMartmeter. Zweitetens: Hausverbrauch mussins Hsu nicht ins Dach. Drittens: Wenn eine zweite Solaranlage konfiguriert ist kann diejemige auf dem Caraport genommen werden, jetz ist nur diejenige im Haus aktiv. Viertens. Wenn keine Wallbox aktiviert ist, dann dieses Bild ausblenden. Fünftens. Die Leitung von der PVA auf dem Dach muss nicht rings um das Dach, sondern könnt direkter. Oder ist da irgendwas schon vogegebn das ds so eongerichtet ist
+
+Generiertes Bild: Energiefluss im Smart Home Dashboard
+
+
+Bearbeiten
+
+
+Generiertes Bild: Energieflussübersicht für modernes Zuhause
+
+
+Bearbeiten
+
+
+
+Eingefügter Text(73).txt
+Dokument
+Geh von dem aus, as andre funktioniert ja bestimmt niocht
+
+0ebc6e2d-aa12-4a51-a44f-cb242d3b50cc.png
+Mach die Linien nicht so krumm. VOrher war der Netzeingen besser, er ging in den Boden. Wallbox ist ok. Soalranlage Carport bitte die LEitung englang der Wallbox, Leitung legen und dann gleich unterhalb der Soalranlge beenden. Das gleiche bie der SOlaralnag dach, nicht schräg sondern gersde bis untern in die Panels führen
+
+Generiertes Bild: Modernes Haus mit Energiesystem-Übersicht
+
+
+Bearbeiten
+
+
+
+Eingefügter Text (2)(3).txt
+Dokument
+Du sollst nicht ein bild erseleln sondern da im code anpassen
+
+
+Analysiert
+from pathlib import Path
+import subprocess
+
+src = Path("/mnt/data/Eingefügter Text (2)(3).txt")
+code = src.read_text(encoding="utf-8")
+
+# ------------------------------------------------------------------
+# 1) Statische Grundkabel der Hausansicht geometrisch bereinigen
+# ------------------------------------------------------------------
+replacements = {
+    # PV Hausdach: komplett gerade/vertikal in die Panels.
+    '<path id="sig-cable-pv1" class="sig-cable" d="M 610 175 L 610 330 L 505 560"></path>':
+    '<path id="sig-cable-pv1" class="sig-cable" d="M 505 560 L 505 175"></path>',
+
+    # PV Carport: vom zentralen Bereich erst waagrecht Richtung Wallbox,
+    # dann senkrecht nach oben bis direkt unter die Carport-Panels.
+    '<path id="sig-cable-pv2" class="sig-cable" d="M 185 355 L 300 420 L 410 500 L 505 560" style="display:none"></path>':
+    '<path id="sig-cable-pv2" class="sig-cable" d="M 505 560 L 350 560 L 350 535 L 185 535 L 185 355" style="display:none"></path>',
+
+    # Hausverbrauch: nur rechtwinklige Segmente, Ziel klar im Haus.
+    '<path id="sig-cable-home" class="sig-cable" d="M 535 570 L 650 520 L 755 455"></path>':
+    '<path id="sig-cable-home" class="sig-cable" d="M 535 570 L 680 570 L 680 455 L 755 455"></path>',
+
+    # Netz: wieder mit senkrechtem Stück in den Boden.
+    '<path id="sig-cable-grid" class="sig-cable" d="M 600 645 L 740 695 L 790 695"></path>':
+    '<path id="sig-cable-grid" class="sig-cable" d="M 600 645 L 790 645 L 790 695 L 855 695 L 855 830"></path>',
+}
+
+for old, new in replacements.items():
+    if old not in code:
+        raise RuntimeError(f"Grundkabel nicht gefunden:\n{old}")
+    code = code.replace(old, new, 1)
+
+# ------------------------------------------------------------------
+# 2) Dynamische farbige Pfade exakt auf dieselben Linien legen
+# ------------------------------------------------------------------
+dynamic_replacements = {
+    # PV1
+    "'M 610 175 L 610 330 L 505 560',":
+    "'M 505 560 L 505 175',",
+
+    # PV2
+    "'M 185 355 L 300 420 L 410 500 L 505 560',":
+    "'M 505 560 L 350 560 L 350 535 L 185 535 L 185 355',",
+
+    # Haus
+    "'M 535 570 L 650 520 L 755 455',":
+    "'M 535 570 L 680 570 L 680 455 L 755 455',",
+
+    # Netz
+    "'M 600 645 L 740 695 L 790 695',":
+    "'M 600 645 L 790 645 L 790 695 L 855 695 L 855 830',",
+}
+
+for old, new in dynamic_replacements.items():
+    if old not in code:
+        raise RuntimeError(f"Dynamischer Pfad nicht gefunden: {old}")
+    code = code.replace(old, new, 1)
+
+# ------------------------------------------------------------------
+# 3) Kommentare im Code passend aktualisieren
+# ------------------------------------------------------------------
+code = code.replace(
+    "// PV 1: Hausdach -> zentraler SigenStor-Knoten.\n"
+    "        // Bewusst DIREKT, nicht mehr entlang/rings um das Dach.",
+    "// PV 1: vom zentralen Knoten senkrecht nach oben bis in die Dach-Panels."
+)
+
+code = code.replace(
+    "// PV 2: Carport -> derselbe zentrale Knoten.",
+    "// PV 2: vom zentralen Bereich entlang des Wallbox-Bereichs und dann senkrecht\n"
+    "        // nach oben bis direkt unter die Carport-Panels."
+)
+
+code = code.replace(
+    "// Hausverbrauch: vom SigenStor DIREKT ins Haus.",
+    "// Hausverbrauch: rechtwinklig vom zentralen Knoten direkt ins Haus."
+)
+
+code = code.replace(
+    "// Netz: nur bis zum Smartmeter. Der Pfad endet deshalb bereits bei 790/695.",
+    "// Netz: rechtwinklig zum Smartmeter und von dort senkrecht in den Boden."
+)
+
+# ------------------------------------------------------------------
+# 4) Ausgabe + PHP Syntaxprüfung
+# ------------------------------------------------------------------
+out = Path("/mnt/data/module_sigenergy_linien_gerade.php")
+out.write_text(code, encoding="utf-8")
+
+check = subprocess.run(
+    ["php", "-l", str(out)],
+    capture_output=True,
+    text=True
+)
+
+if check.returncode != 0:
+    raise RuntimeError(check.stdout + check.stderr)
+
+print(check.stdout.strip())
+print(out)
+STDOUT/STDERR
+No syntax errors detected in /mnt/data/module_sigenergy_linien_gerade.php
+/mnt/data/module_sigenergy_linien_gerade.php
+Erledigt — diesmal wirklich nur im Code deiner aktuellen Version. 
+
+
+Geändert habe ich:
+
+Dach-PV: jetzt senkrecht gerade von unten in die Panels
+
+Carport-PV: erst entlang des unteren/Wallbox-Bereichs, dann senkrecht nach oben bis unter die Carport-Panels
+
+Hausverbrauch: nur noch rechtwinklige Segmente
+
+Netz: wieder sauber zum Smartmeter und danach senkrecht in den Boden
+
+Batterie unverändert
+
+Wallbox unverändert
+
+Auch die grauen Grundlinien und die farbigen animierten Linien nutzen jetzt jeweils denselben Verlauf.
+
+PHP-Syntax ist geprüft: keine Fehler.
+
+module_sigenergy_linien_gerade.php 
+
+
+e3d24c38-508c-4d2d-a40a-2f815d2d5fe9.png
+Nur einen Winkel im Netzkabel und direkt ind en Boiden, nicht ins fenster eine. Die LEitung zum Caraport PVA entlang der LEitung wlallbox. Und die Leitung PVA  Dach bis zum anfang der Panels. UNd berücksichtige bitte das Smartmeter, unterssen get das einfach hindurch Ich zeig dir wie es saussiht du musst kein bild ersteleln
+
+
+Analysiert
+from pathlib import Path
+import subprocess
+
+src = Path("/mnt/data/module_sigenergy_linien_gerade.php")
+if not src.exists():
+    raise FileNotFoundError(src)
+
+code = src.read_text(encoding="utf-8")
+
+# ------------------------------------------------------------------
+# Gewünschte Geometrie:
+# - Netz: zentraler Knoten -> Smartmeter -> senkrecht Boden (1 Winkel)
+# - PV Carport: entlang Wallbox-Trasse, dann senkrecht zu den Panels
+# - PV Dach: senkrecht bis zum unteren Panelrand
+# ------------------------------------------------------------------
+
+# 1) Statische graue Grundpfade
+static_replacements = {
+    # Dach-PV endet am unteren Beginn der Panels, statt weit in die Module hinein.
+    '<path id="sig-cable-pv1" class="sig-cable" d="M 505 560 L 505 175"></path>':
+    '<path id="sig-cable-pv1" class="sig-cable" d="M 505 560 L 505 245"></path>',
+
+    # Carport-PV benutzt unten die gleiche Trasse wie die Wallbox,
+    # zweigt links ab und geht erst dort senkrecht zu den Carport-Panels hoch.
+    '<path id="sig-cable-pv2" class="sig-cable" d="M 505 560 L 350 560 L 350 535 L 185 535 L 185 355" style="display:none"></path>':
+    '<path id="sig-cable-pv2" class="sig-cable" d="M 475 600 L 350 560 L 290 535 L 185 495 L 185 390" style="display:none"></path>',
+
+    # Netz: nur EIN Winkel.
+    # Vom zentralen Knoten horizontal direkt in das Smartmeter,
+    # danach senkrecht nach unten in den Boden.
+    '<path id="sig-cable-grid" class="sig-cable" d="M 600 645 L 790 645 L 790 695 L 855 695 L 855 830"></path>':
+    '<path id="sig-cable-grid" class="sig-cable" d="M 600 645 L 790 645 L 790 830"></path>',
+}
+
+for old, new in static_replacements.items():
+    if old not in code:
+        raise RuntimeError(f"Statischer Pfad nicht gefunden:\n{old}")
+    code = code.replace(old, new, 1)
+
+# 2) Farbige dynamische Pfade exakt identisch
+dynamic_replacements = {
+    "'M 505 560 L 505 175',":
+    "'M 505 560 L 505 245',",
+
+    "'M 505 560 L 350 560 L 350 535 L 185 535 L 185 355',":
+    "'M 475 600 L 350 560 L 290 535 L 185 495 L 185 390',",
+
+    "'M 600 645 L 790 645 L 790 695 L 855 695 L 855 830',":
+    "'M 600 645 L 790 645 L 790 830',",
+}
+
+for old, new in dynamic_replacements.items():
+    if old not in code:
+        raise RuntimeError(f"Dynamischer Pfad nicht gefunden:\n{old}")
+    code = code.replace(old, new, 1)
+
+# Kommentare aktualisieren
+code = code.replace(
+    "// PV 1: vom zentralen Knoten senkrecht nach oben bis in die Dach-Panels.",
+    "// PV 1: senkrecht bis an den unteren Beginn der Dach-Panels."
+)
+code = code.replace(
+    "// PV 2: vom zentralen Bereich entlang des Wallbox-Bereichs und dann senkrecht\n"
+    "        // nach oben bis direkt unter die Carport-Panels.",
+    "// PV 2: nutzt zunächst die Wallbox-Trasse und steigt links senkrecht\n"
+    "        // bis direkt unter die Carport-Panels."
+)
+code = code.replace(
+    "// Netz: rechtwinklig zum Smartmeter und von dort senkrecht in den Boden.",
+    "// Netz: vom zentralen Punkt direkt zum Smartmeter und mit genau einem\n"
+    "        // 90°-Winkel senkrecht in den Boden."
+)
+
+out = Path("/mnt/data/module_sigenergy_linien_v2.php")
+out.write_text(code, encoding="utf-8")
+
+check = subprocess.run(["php", "-l", str(out)], capture_output=True, text=True)
+if check.returncode != 0:
+    raise RuntimeError(check.stdout + check.stderr)
+
+print(check.stdout.strip())
+print(out)
+STDOUT/STDERR
+No syntax errors detected in /mnt/data/module_sigenergy_linien_v2.php
+/mnt/data/module_sigenergy_linien_v2.php
+Jetzt ist nur der Code angepasst, ausgehend von der zuletzt funktionierenden Version.
+
+Geändert:
+
+Netz: nur noch ein Winkel: vom zentralen Punkt zum Smartmeter und dann senkrecht in den Boden.
+
+Carport-PV: nutzt unten die Wallbox-Trasse und geht erst links senkrecht zu den Carport-Panels hoch.
+
+Dach-PV: endet jetzt am unteren Beginn der Dach-Panels und läuft nicht mehr mitten hinein.
+
+Haus, Batterie und Wallbox sonst unverändert.
+
+PHP-Syntax geprüft: keine Fehler.
+
+module_sigenergy_linien_v2.php 
+
+
+Bibliothek
+/
+module_sigenergy_linien_v2.php
+
+
 <?php
 
 /*
@@ -788,10 +1440,10 @@ class Energiefluss extends IPSModuleStrict
                             >
                                 <g id="sig-static-cables">
                                     <!-- PV Hausdach direkt zum SigenStor / zentralen Knoten -->
-                                    <path id="sig-cable-pv1" class="sig-cable" d="M 505 560 L 505 175"></path>
+                                    <path id="sig-cable-pv1" class="sig-cable" d="M 505 560 L 505 245"></path>
 
                                     <!-- Zweite PV-Anlage auf dem Carport; nur sichtbar wenn PV2 konfiguriert -->
-                                    <path id="sig-cable-pv2" class="sig-cable" d="M 505 560 L 350 560 L 350 535 L 185 535 L 185 355" style="display:none"></path>
+                                    <path id="sig-cable-pv2" class="sig-cable" d="M 475 600 L 350 560 L 290 535 L 185 495 L 185 390" style="display:none"></path>
 
                                     <!-- Hausverbrauch vom zentralen Knoten direkt ins Gebäude -->
                                     <path id="sig-cable-home" class="sig-cable" d="M 535 570 L 680 570 L 680 455 L 755 455"></path>
@@ -800,7 +1452,7 @@ class Energiefluss extends IPSModuleStrict
                                     <path class="sig-cable" d="M 490 570 L 492 785"></path>
 
                                     <!-- Netz endet am Smartmeter, nicht weiter im Haus -->
-                                    <path id="sig-cable-grid" class="sig-cable" d="M 600 645 L 790 645 L 790 695 L 855 695 L 855 830"></path>
+                                    <path id="sig-cable-grid" class="sig-cable" d="M 600 645 L 790 645 L 790 830"></path>
 
                                     <!-- Wallbox; nur bei konfigurierter Wallbox sichtbar -->
                                     <path id="sig-cable-wallbox" class="sig-cable" d="M 75 485 L 75 455 L 290 535 L 350 560 L 475 600"></path>
@@ -1348,11 +2000,11 @@ class Energiefluss extends IPSModuleStrict
 
         // ---- Dynamische Energiepfade ---------------------------------------
 
-        // PV 1: vom zentralen Knoten senkrecht nach oben bis in die Dach-Panels.
+        // PV 1: senkrecht bis an den unteren Beginn der Dach-Panels.
         if (pv1 && (pv1.value || 0) > 0) {
             addHouseEdge(
                 'house-pv1',
-                'M 505 560 L 505 175',
+                'M 505 560 L 505 245',
                 AC.solar,
                 6
             );
@@ -1362,12 +2014,12 @@ class Energiefluss extends IPSModuleStrict
             };
         }
 
-        // PV 2: vom zentralen Bereich entlang des Wallbox-Bereichs und dann senkrecht
-        // nach oben bis direkt unter die Carport-Panels.
+        // PV 2: nutzt zunächst die Wallbox-Trasse und steigt links senkrecht
+        // bis direkt unter die Carport-Panels.
         if (pv2 && (pv2.value || 0) > 0) {
             addHouseEdge(
                 'house-pv2',
-                'M 505 560 L 350 560 L 350 535 L 185 535 L 185 355',
+                'M 475 600 L 350 560 L 290 535 L 185 495 L 185 390',
                 AC.solar,
                 6
             );
@@ -1405,11 +2057,12 @@ class Energiefluss extends IPSModuleStrict
             };
         }
 
-        // Netz: rechtwinklig zum Smartmeter und von dort senkrecht in den Boden.
+        // Netz: vom zentralen Punkt direkt zum Smartmeter und mit genau einem
+        // 90°-Winkel senkrecht in den Boden.
         if (Math.abs(grid) > 0) {
             addHouseEdge(
                 'house-grid',
-                'M 600 645 L 790 645 L 790 695 L 855 695 L 855 830',
+                'M 600 645 L 790 645 L 790 830',
                 gridColor,
                 6
             );
