@@ -1,6 +1,6 @@
 <?php
 
-class SolarFlowTile extends IPSModuleStrict
+class Energiefluss extends IPSModuleStrict
 {
     // Idents der Einstellungs-Variablen, die das PID-Skript in der Kategorie
     // "SolarFlow Einstellungen" anlegt. Schlüssel = Feld-ID in der Kachel.
