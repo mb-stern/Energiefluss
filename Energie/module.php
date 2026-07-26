@@ -426,7 +426,7 @@ class Energiefluss extends IPSModuleStrict
     /* Zweite Darstellung: stilisierte Hausansicht */
     #house-stage {
         position: relative;
-        width: 1080px;
+        width: 940px;
         height: 640px;
         display: none;
         overflow: hidden;
@@ -452,20 +452,20 @@ class Energiefluss extends IPSModuleStrict
     .house-label .energy { color: var(--w-text2); font-size: 11px; }
     #house-center {
         left: 355px;
-        top: 355px;
-        width: 250px;
+        top: 430px;
+        width: 220px;
         transform: translateX(-50%);
     }
     #house-grid-label {
-        left: 72px;
-        top: 300px;
+        left: 48px;
+        top: 438px;
         width: 120px;
     }
     #house-battery-area {
         position: absolute;
-        left: 690px;
-        top: 210px;
-        width: 250px;
+        left: 815px;
+        top: 285px;
+        width: 120px;
         z-index: 3;
         display: flex;
         flex-direction: column;
@@ -490,9 +490,9 @@ class Energiefluss extends IPSModuleStrict
     .house-battery-card .sub { color: var(--w-text2); font-size: 11px; margin-top: 3px; }
     #house-pv-area {
         position: absolute;
-        left: 210px;
+        left: 195px;
         top: 48px;
-        width: 420px;
+        width: 330px;
         z-index: 3;
         display: flex;
         justify-content: center;
@@ -527,26 +527,47 @@ class Energiefluss extends IPSModuleStrict
             </div>
 
             <div id="house-stage">
-                <svg id="house-svg" width="1080" height="640" viewBox="0 0 1080 640" aria-hidden="true">
+                <svg id="house-svg" width="940" height="640" viewBox="0 0 940 640" aria-hidden="true">
                     <g id="house-base">
+                        <!-- Boden -->
+                        <line x1="85" y1="520" x2="875" y2="520" stroke="var(--w-line)" stroke-width="2"></line>
+
                         <!-- Hauskörper -->
-                        <path class="roof" d="M220 305 L355 175 L490 305 Z"></path>
-                        <rect class="shell" x="245" y="305" width="220" height="185" rx="4"></rect>
+                        <path class="roof" d="M205 315 L355 165 L505 315 Z"></path>
+                        <rect class="shell" x="235" y="315" width="240" height="205" rx="6"></rect>
 
                         <!-- Dach-Solarmodule -->
-                        <g transform="translate(282 214) skewX(-26)">
-                            <rect class="panel" x="0" y="0" width="128" height="72" rx="3"></rect>
-                            <line class="panel-line" x1="42" y1="0" x2="42" y2="72"></line>
-                            <line class="panel-line" x1="84" y1="0" x2="84" y2="72"></line>
-                            <line class="panel-line" x1="0" y1="24" x2="128" y2="24"></line>
-                            <line class="panel-line" x1="0" y1="48" x2="128" y2="48"></line>
+                        <g transform="translate(268 215) skewX(-28)">
+                            <rect class="panel" x="0" y="0" width="150" height="78" rx="3"></rect>
+                            <line class="panel-line" x1="50" y1="0" x2="50" y2="78"></line>
+                            <line class="panel-line" x1="100" y1="0" x2="100" y2="78"></line>
+                            <line class="panel-line" x1="0" y1="26" x2="150" y2="26"></line>
+                            <line class="panel-line" x1="0" y1="52" x2="150" y2="52"></line>
                         </g>
 
                         <!-- Fenster/Tür -->
-                        <rect class="window" x="275" y="340" width="58" height="52" rx="2"></rect>
-                        <line class="window" x1="304" y1="340" x2="304" y2="392"></line>
-                        <line class="window" x1="275" y1="366" x2="333" y2="366"></line>
-                        <rect class="door" x="380" y="350" width="48" height="140" rx="3"></rect>
+                        <rect class="window" x="270" y="355" width="62" height="58" rx="2"></rect>
+                        <line class="window" x1="301" y1="355" x2="301" y2="413"></line>
+                        <line class="window" x1="270" y1="384" x2="332" y2="384"></line>
+                        <rect class="door" x="390" y="365" width="50" height="155" rx="3"></rect>
+
+                        <!-- Netz / Zähler links -->
+                        <rect x="75" y="330" width="62" height="82" rx="10"
+                              fill="var(--w-surface)" stroke="var(--w-line)" stroke-width="3"></rect>
+                        <path d="M108 344 L93 373 H106 L98 398 L123 365 H110 L119 344 Z"
+                              fill="#d9534f"></path>
+                        <text x="106" y="432" text-anchor="middle"
+                              fill="var(--w-text2)" font-size="13">Netz</text>
+
+                        <!-- Batterie-Symbol rechts -->
+                        <rect x="700" y="310" width="100" height="145" rx="14"
+                              fill="var(--w-surface)" stroke="var(--w-line)" stroke-width="3"></rect>
+                        <rect x="736" y="299" width="28" height="12" rx="3"
+                              fill="var(--w-line)"></rect>
+                        <rect x="716" y="330" width="68" height="105" rx="7"
+                              fill="none" stroke="#4F9A5B" stroke-width="3"></rect>
+                        <text x="750" y="478" text-anchor="middle"
+                              fill="var(--w-text2)" font-size="13">Batterie</text>
                     </g>
 
                     <g id="house-lines"></g>
@@ -793,21 +814,21 @@ class Energiefluss extends IPSModuleStrict
         // Energiepfade in der Hausansicht
         // PV -> Haus immer orange
         if (pvTotal > 0) {
-            addHouseEdge('hpv', 'M355,175 L355,120', AC.solar);
-            houseEdgeState['hpv'] = { w: pvTotal, rev: true };
+            addHouseEdge('hpv', 'M355,165 L355,315', AC.solar);
+            houseEdgeState['hpv'] = { w: pvTotal, rev: false };
         }
 
         // Netz horizontal zum Haus
         if (Math.abs(grid) > 0) {
-            addHouseEdge('hgrid', 'M120,335 L245,335', gridColor);
+            addHouseEdge('hgrid', 'M137,372 L235,372', gridColor);
             houseEdgeState['hgrid'] = { w: Math.abs(grid), rev: grid < 0 };
         }
 
         // Batterien rechts, je eigener Pfad
         batteries.forEach((bat, i) => {
-            const y = 255 + (i * 82);
+            const y = 350 + (i * 42);
             const color = (bat.value || 0) >= 0 ? AC.grid : AC.batt;
-            addHouseEdge('hbat' + i, `M465,${y} L675,${y}`, color);
+            addHouseEdge('hbat' + i, `M475,${y} L700,${y}`, color);
             // Pfad ist Haus -> Batterie gezeichnet; positive Batterieentladung
             // muss daher rückwärts Richtung Haus laufen.
             houseEdgeState['hbat' + i] = {
@@ -999,7 +1020,7 @@ class Energiefluss extends IPSModuleStrict
     let edgePhase = {};
     let layoutWidth = 540;
 
-    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel) {
+    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
@@ -1007,18 +1028,18 @@ class Energiefluss extends IPSModuleStrict
         // Verbraucher werden paarweise in zusätzlichen Spalten angeordnet.
         const columns = Math.ceil(groupCount / 2);
 
-        let graphWidth = 540;
+        let graphWidth = mode === 'house' ? 940 : 540;
 
-        if (columns > 0) {
+        if (mode !== 'house' && columns > 0) {
             graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
         }
 
-        if (pvCount > 0) {
+        if (mode !== 'house' && pvCount > 0) {
             const lastPVX = pvPos(pvCount - 1, pvCount).x;
             graphWidth = Math.max(graphWidth, lastPVX + 80);
         }
 
-        if (batteryCount > 0) {
+        if (mode !== 'house' && batteryCount > 0) {
             const lastBatX = batteryPos(batteryCount - 1, batteryCount).x;
             graphWidth = Math.max(graphWidth, lastBatX + 80);
         }
@@ -1117,17 +1138,17 @@ class Energiefluss extends IPSModuleStrict
                 const cv = d.config[f.id];
                 if (el && document.activeElement !== el && cv !== undefined && cv !== null) el.value = cv;
             }));
-            document.getElementById('cfg-out').textContent = fmt(battOut);
+            document.getElementById('cfg-out').textContent = fmt(batteryTotal);
         }
         const showRightPanel = !!(stats.length || hasCfg);
         document.getElementById('cfg').style.display = showRightPanel ? '' : 'none';
 
         // Breite nur für tatsächlich sichtbare Inhalte reservieren.
         if ((d.displayMode || 'flow') === 'house') {
-            // Hausansicht hat eine feste, kompakte Grundbreite.
-            updateLayout(0, 0, 0, showRightPanel);
+            // Hausansicht nutzt ihre eigene vollständige SVG-Breite.
+            updateLayout(0, 0, 0, showRightPanel, 'house');
         } else {
-            updateLayout(groups.length, pvs.length, batteries.length, showRightPanel);
+            updateLayout(groups.length, pvs.length, batteries.length, showRightPanel, 'flow');
         }
     }
 
