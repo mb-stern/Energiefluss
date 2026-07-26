@@ -21,12 +21,20 @@ class Energiefluss extends IPSModuleStrict
         parent::Create();
 
         $this->RegisterPropertyInteger('SolarFlowPV', 0);
+        $this->RegisterPropertyString('PV1Name', 'PV1');
+        $this->RegisterPropertyInteger('PV1Energy', 0);
+
         $this->RegisterPropertyInteger('HoymilesPV', 0);
+        $this->RegisterPropertyString('PV2Name', 'PV2');
+        $this->RegisterPropertyInteger('PV2Energy', 0);
+
         $this->RegisterPropertyInteger('BatteryOut', 0);
         $this->RegisterPropertyInteger('BatterySoC', 0);
         $this->RegisterPropertyInteger('L1', 0);
         $this->RegisterPropertyInteger('L2', 0);
         $this->RegisterPropertyInteger('L3', 0);
+        $this->RegisterPropertyBoolean('InvertGridPower', false);
+        $this->RegisterPropertyInteger('GridEnergyTotal', 0);
         $this->RegisterPropertyInteger('SettingsCategory', 0);
         $this->RegisterPropertyString('Groups', '[]');
         $this->RegisterPropertyInteger('DayProduction', 0);
@@ -83,23 +91,34 @@ class Energiefluss extends IPSModuleStrict
                     'type'    => 'ExpansionPanel',
                     'caption' => 'Erzeuger & Batterie',
                     'items'   => [
-                        ['type' => 'SelectVariable', 'name' => 'SolarFlowPV', 'caption' => 'SolarFlow PV-Leistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'HoymilesPV', 'caption' => 'Hoymiles PV-Leistung (W)'],
+                        ['type' => 'Label', 'caption' => 'PV1'],
+                        ['type' => 'ValidationTextBox', 'name' => 'PV1Name', 'caption' => 'Name'],
+                        ['type' => 'SelectVariable', 'name' => 'SolarFlowPV', 'caption' => 'Leistung (W)'],
+                        ['type' => 'SelectVariable', 'name' => 'PV1Energy', 'caption' => 'Erzeugte Energie gesamt (kWh)'],
+
+                        ['type' => 'Label', 'caption' => 'PV2'],
+                        ['type' => 'ValidationTextBox', 'name' => 'PV2Name', 'caption' => 'Name'],
+                        ['type' => 'SelectVariable', 'name' => 'HoymilesPV', 'caption' => 'Leistung (W)'],
+                        ['type' => 'SelectVariable', 'name' => 'PV2Energy', 'caption' => 'Erzeugte Energie gesamt (kWh)'],
+
+                        ['type' => 'Label', 'caption' => 'Batterie'],
                         ['type' => 'SelectVariable', 'name' => 'BatteryOut', 'caption' => 'Batterie-Ausgang ins Haus (W)'],
                         ['type' => 'SelectVariable', 'name' => 'BatterySoC', 'caption' => 'Batterie-Ladezustand (%)'],
                     ],
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'Netz (Shelly Pro3EM)',
+                    'caption' => 'Netz',
                     'items'   => [
                         [
                             'type'    => 'Label',
-                            'caption' => 'Netzbezug gesamt wird aus L1 + L2 + L3 berechnet (vorzeichenrichtig). L3 ist oft negativ (Batterie-Einspeisung).',
+                            'caption' => 'Netzleistung wird aus L1 + L2 + L3 berechnet. Bei Bedarf kann das Vorzeichen der Gesamtleistung umgekehrt werden.',
                         ],
                         ['type' => 'SelectVariable', 'name' => 'L1', 'caption' => 'L1 Leistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'L2', 'caption' => 'L2 Leistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'L3', 'caption' => 'L3 Leistung (W)'],
+                        ['type' => 'CheckBox', 'name' => 'InvertGridPower', 'caption' => 'Vorzeichen der Netzleistung umkehren'],
+                        ['type' => 'SelectVariable', 'name' => 'GridEnergyTotal', 'caption' => 'Netzenergie gesamt (kWh)'],
                     ],
                 ],
                 [
@@ -355,8 +374,8 @@ class Energiefluss extends IPSModuleStrict
     const RR = 34, COL0 = 530, COLW = 120;
 
     const MAIN = {
-        sf:   { x: 250, y: 82,  r: 46, ic: 'solar-panel',   icc: AC.solar, lab: 'SolarFlow', lp: 'top' },
-        hm:   { x: 470, y: 82,  r: 46, ic: 'solar-panel',   icc: AC.solar, lab: 'Hoymiles',  lp: 'top' },
+        sf:   { x: 250, y: 82,  r: 46, ic: 'solar-panel',   icc: AC.solar, lab: 'PV1', lp: 'top' },
+        hm:   { x: 470, y: 82,  r: 46, ic: 'solar-panel',   icc: AC.solar, lab: 'PV2',  lp: 'top' },
         batt: { x: 360, y: 232, r: 50, ic: 'battery-half',  icc: AC.batt,  lab: 'Batterie',  lp: 'top', ring: true },
         netz: { x: 110, y: 400, r: 46, ic: 'bolt',          icc: AC.grid,  lab: 'Netz',      lp: 'bot' },
         haus: { x: 360, y: 400, r: 52, ic: 'house',         icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true }
@@ -501,14 +520,26 @@ class Energiefluss extends IPSModuleStrict
         const battToHaus = Math.max(battOut - exp, 0);
         const haus = battToHaus + imp;
 
-        document.getElementById('body-sf').innerHTML = `<div class="val">${fmt(d.solarflow)}</div>`;
-        document.getElementById('body-hm').innerHTML = `<div class="val">${fmt(d.hoymiles)}</div>`;
+        const sfLabel = document.querySelector('#n-sf .lbl');
+        const hmLabel = document.querySelector('#n-hm .lbl');
+        if (sfLabel) sfLabel.textContent = d.pv1Name || 'PV1';
+        if (hmLabel) hmLabel.textContent = d.pv2Name || 'PV2';
+
+        document.getElementById('body-sf').innerHTML =
+            `<div class="val">${fmt(d.solarflow)}</div>` +
+            (d.pv1Energy ? `<div class="sub" style="font-size:10px; line-height:1.25;">${d.pv1Energy}</div>` : '');
+
+        document.getElementById('body-hm').innerHTML =
+            `<div class="val">${fmt(d.hoymiles)}</div>` +
+            (d.pv2Energy ? `<div class="sub" style="font-size:10px; line-height:1.25;">${d.pv2Energy}</div>` : '');
         document.getElementById('body-batt').innerHTML =
             `<div class="sub" style="font-size:11px">${Math.round(d.soc || 0)}%</div>` +
             `<div class="val" style="color:${AC.batt}">${fmt(battOut)}</div>`;
         document.getElementById('body-netz').innerHTML = (grid >= 0)
-            ? `<div class="val" style="color:${AC.grid}">&larr; ${fmt(imp)}</div>`
-            : `<div class="val" style="color:${AC.batt}">&rarr; ${fmt(exp)}</div>`;
+            ? `<div class="val" style="color:${AC.grid}">&larr; ${fmt(imp)}</div>` +
+              (d.gridEnergy ? `<div class="sub" style="font-size:10px; line-height:1.25;">${d.gridEnergy}</div>` : '')
+            : `<div class="val" style="color:${AC.batt}">&rarr; ${fmt(exp)}</div>` +
+              (d.gridEnergy ? `<div class="sub" style="font-size:10px; line-height:1.25;">${d.gridEnergy}</div>` : '');
         ph.innerHTML = `L1 ${Math.round(l1)} &middot; L2 ${Math.round(l2)} &middot; L3 ${Math.round(l3)} W`;
         document.getElementById('body-haus').innerHTML = `<div class="val" style="font-size:17px">${fmt(haus)}</div>`;
 
@@ -604,18 +635,31 @@ HTML;
         return 0.0;
     }
 
+    private function ReadVarFormatted(string $property): string
+    {
+        $id = $this->ReadPropertyInteger($property);
+        if ($id > 0 && IPS_VariableExists($id)) {
+            return GetValueFormatted($id);
+        }
+
+        return '';
+    }
+
     private function CollectVariableIDs(): array
     {
         $ids = [];
 
         foreach ([
             'SolarFlowPV',
+            'PV1Energy',
             'HoymilesPV',
+            'PV2Energy',
             'BatteryOut',
             'BatterySoC',
             'L1',
             'L2',
             'L3',
+            'GridEnergyTotal',
             'DayProduction',
             'WeekProduction',
             'DayGridImport',
@@ -680,6 +724,10 @@ HTML;
         $l3 = $this->ReadVar('L3');
         $grid = $l1 + $l2 + $l3;
 
+        if ($this->ReadPropertyBoolean('InvertGridPower')) {
+            $grid *= -1;
+        }
+
         $groups = [];
         $decoded = json_decode($this->ReadPropertyString('Groups'), true);
         if (is_array($decoded)) {
@@ -725,14 +773,19 @@ HTML;
         }
 
         return [
+            'pv1Name'   => $this->ReadPropertyString('PV1Name'),
             'solarflow' => $this->ReadVar('SolarFlowPV'),
+            'pv1Energy' => $this->ReadVarFormatted('PV1Energy'),
+            'pv2Name'   => $this->ReadPropertyString('PV2Name'),
             'hoymiles'  => $this->ReadVar('HoymilesPV'),
+            'pv2Energy' => $this->ReadVarFormatted('PV2Energy'),
             'battOut'   => $this->ReadVar('BatteryOut'),
             'soc'       => $this->ReadVar('BatterySoC'),
             'l1'        => $l1,
             'l2'        => $l2,
             'l3'        => $l3,
             'grid'      => $grid,
+            'gridEnergy'=> $this->ReadVarFormatted('GridEnergyTotal'),
             'groups'    => $groups,
             'stats'     => $stats,
             'hasConfig' => $config !== null,
