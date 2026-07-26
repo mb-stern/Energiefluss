@@ -811,7 +811,7 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('body-netz').innerHTML =
             `<div class="val" style="color:${gridColor}">${fmt(Math.abs(grid))}</div>` +
             (d.gridImportEnergy
-                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.grid}">&rarr; ${d.gridImportEnergy}</div>`
+                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.import}">&rarr; ${d.gridImportEnergy}</div>`
                 : '') +
             (d.gridExportEnergy
                 ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.batt}">&larr; ${d.gridExportEnergy}</div>`
