@@ -1,5 +1,18 @@
 <?php
 
+/*
+ * Hausansicht:
+ * Visual assets and calibrated flow geometry adapted from
+ * SpengeSec/Genergy-Dashboard
+ * https://github.com/SpengeSec/Genergy-Dashboard
+ *
+ * Licensed under CC BY-NC-SA 4.0:
+ * https://creativecommons.org/licenses/by-nc-sa/4.0/
+ *
+ * Changes: Integration into the IP-Symcon Energiefluss module,
+ * live-data binding, colors and animation logic adapted.
+ */
+
 declare(strict_types=1);
 
 class Energiefluss extends IPSModuleStrict
@@ -69,6 +82,10 @@ class Energiefluss extends IPSModuleStrict
         parent::ApplyChanges();
 
         try {
+            // Grafische Layer der Hausansicht aus dem Modulordner nach /user/
+            // kopieren, damit sie im Browser der HTML-SDK-Kachel erreichbar sind.
+            $this->EnsureHouseAssets();
+
             foreach ($this->GetMessageList() as $senderID => $messages) {
                 foreach ($messages as $message) {
                     if ($message === VM_UPDATE) {
@@ -531,302 +548,178 @@ class Energiefluss extends IPSModuleStrict
         font-family: inherit;
     }
 
-    /* Hausansicht V3 – Gebäude und Energiepfade in EINEM Koordinatensystem */
+    /* Hausansicht – Sigenergy/Genergy Layer-Komposition
+       Visual assets adapted from SpengeSec/Genergy-Dashboard,
+       CC BY-NC-SA 4.0. */
     #house-stage {
         position: relative;
-        width: 1000px;
+        width: 900px;
         height: 640px;
         display: __HOUSE_DISPLAY__;
         overflow: hidden;
         border-radius: 18px;
         box-sizing: border-box;
-        color: #eef4fa;
-        border: 1px solid #253342;
+        border: 1px solid #263443;
         background:
-            radial-gradient(circle at 52% 30%, rgba(42, 71, 94, 0.30), transparent 42%),
-            linear-gradient(180deg, #101923 0%, #0a1118 56%, #070b10 100%);
+            radial-gradient(circle at 50% 35%, rgba(36, 52, 68, .35), transparent 48%),
+            linear-gradient(180deg, #0d151e 0%, #090f15 100%);
+        color: #f1f5f8;
     }
 
-    #house-scene {
+    /* Das eigentliche Sigenergy-Haus hat exakt das Seitenverhältnis
+       der Original-Layer: 1170 x 1013. */
+    #sig-scene {
+        position: absolute;
+        left: 80px;
+        top: 0;
+        width: 740px;
+        height: 640px;
+        overflow: visible;
+    }
+
+    .sig-layer,
+    #sig-flow-svg {
         position: absolute;
         inset: 0;
-        width: 1000px;
-        height: 640px;
-        z-index: 1;
+        width: 100%;
+        height: 100%;
     }
 
-    #house-scene .scene-ground {
-        fill: #0b1712;
-        opacity: .82;
+    .sig-layer {
+        object-fit: fill;
+        pointer-events: none;
+        user-select: none;
     }
 
-    #house-scene .house-wall {
-        fill: #171f29;
-        stroke: #3a4858;
-        stroke-width: 2.5;
+    #sig-home-layer     { z-index: 1; }
+    #sig-battery-layer  { z-index: 2; }
+    #sig-meter-layer    { z-index: 3; }
+    #sig-charger-layer  { z-index: 4; }
+
+    #sig-flow-svg {
+        z-index: 5;
+        overflow: visible;
+        pointer-events: none;
     }
 
-    #house-scene .house-side {
-        fill: #111821;
-        stroke: #344251;
-        stroke-width: 2;
-    }
-
-    #house-scene .roof {
-        fill: #222c38;
-        stroke: #536172;
-        stroke-width: 2.5;
-    }
-
-    #house-scene .roof-edge {
+    #sig-flow-svg .sig-cable {
         fill: none;
-        stroke: #6c7885;
-        stroke-width: 3;
-        opacity: .72;
-    }
-
-    #house-scene .window {
-        fill: #132434;
-        stroke: #526578;
-        stroke-width: 1.5;
-    }
-
-    #house-scene .window-glow {
-        fill: #d99a38;
-        opacity: .62;
-    }
-
-    #house-scene .panel {
-        fill: #152c4a;
-        stroke: #7c93af;
-        stroke-width: 1.25;
-    }
-
-    #house-scene .panel-grid {
-        stroke: #68809d;
-        stroke-width: .8;
-        opacity: .8;
-    }
-
-    #house-scene .device {
-        fill: #e5eaee;
-        stroke: #7d8893;
-        stroke-width: 1.7;
-    }
-
-    #house-scene .device-dark {
-        fill: #18212a;
-        stroke: #657482;
-        stroke-width: 1.5;
-    }
-
-    #house-scene .grid-metal {
-        fill: none;
-        stroke: #9aa9b8;
-        stroke-width: 2;
-        opacity: .82;
-    }
-
-    #house-scene .flow-base {
-        fill: none;
-        stroke: #31404e;
-        stroke-width: 3;
+        stroke: rgba(135, 145, 154, .42);
+        stroke-width: 5;
         stroke-linecap: round;
         stroke-linejoin: round;
-        opacity: .68;
     }
 
-    #house-scene .flow-path {
+    #sig-flow-svg .flow-path {
         fill: none;
-        stroke-width: 4;
+        stroke-width: 6;
         stroke-linecap: round;
         stroke-linejoin: round;
-        opacity: .98;
+        opacity: .96;
         filter: drop-shadow(0 0 3px currentColor);
     }
 
-    #house-scene .device-caption {
-        fill: #aeb9c5;
-        font-size: 12px;
-        font-weight: 600;
+    #sig-flow-svg .soc-track {
+        fill: none;
+        stroke: rgba(140,150,160,.28);
+        stroke-width: 7;
     }
 
-    #house-scene .small-caption {
-        fill: #8493a2;
-        font-size: 10px;
+    #sig-flow-svg .soc-ring {
+        fill: none;
+        stroke-width: 7;
+        stroke-linecap: round;
+        transform-origin: 498px 585px;
+        transform: rotate(-90deg);
     }
 
-    .house-label {
+    .sig-label {
         position: absolute;
-        z-index: 5;
+        z-index: 8;
         min-width: 112px;
-        padding: 7px 9px;
+        padding: 6px 8px;
         box-sizing: border-box;
-        border: 1px solid rgba(129, 151, 172, .28);
-        border-radius: 9px;
-        background: rgba(8, 13, 19, .82);
-        box-shadow: 0 6px 18px rgba(0,0,0,.22);
-        line-height: 1.25;
+        border-radius: 8px;
+        border: 1px solid rgba(255,255,255,.09);
+        background: rgba(7, 12, 17, .76);
+        box-shadow: 0 5px 16px rgba(0,0,0,.18);
+        line-height: 1.18;
         pointer-events: none;
+        backdrop-filter: blur(2px);
     }
 
-    .house-label .name {
-        color: #b8c3ce;
-        font-size: 11px;
-        font-weight: 650;
-        margin-bottom: 2px;
-    }
-
-    .house-label .power {
-        font-size: 17px;
+    .sig-label .primary {
+        color: #f3f6f8;
+        font-size: 15px;
         font-weight: 700;
-        color: #f4f7f9;
+        white-space: nowrap;
     }
 
-    .house-label .sub {
+    .sig-label .secondary {
+        color: #8f9ba6;
         font-size: 10px;
+        font-weight: 600;
         margin-top: 2px;
-        color: #99a7b5;
+        text-transform: uppercase;
+        letter-spacing: .3px;
     }
 
-    #house-grid-label {
-        left: 28px;
-        top: 236px;
-        width: 128px;
-    }
-
-    #house-home-label {
-        left: 438px;
-        top: 338px;
-        width: 150px;
-        text-align: center;
-    }
-
-    #house-battery-label {
-        right: 28px;
-        top: 245px;
-        width: 142px;
-    }
-
-    #house-wallbox-label {
-        left: 168px;
-        top: 375px;
-        width: 150px;
-    }
-
-    #house-pv-list {
-        position: absolute;
-        left: 315px;
-        right: 245px;
-        top: 55px;
-        z-index: 5;
-        display: flex;
-        justify-content: center;
-        gap: 9px;
-        flex-wrap: wrap;
-        pointer-events: none;
-    }
-
-    .house-pv-chip {
-        min-width: 106px;
-        padding: 5px 8px;
-        box-sizing: border-box;
-        text-align: center;
-        border-radius: 9px;
-        background: rgba(10, 15, 22, .84);
-        border: 1px solid rgba(239, 160, 32, .38);
-        box-shadow: 0 4px 14px rgba(0,0,0,.18);
-    }
-
-    .house-pv-chip .name {
-        color: #efa020;
-        font-size: 10px;
-        font-weight: 700;
-    }
-
-    .house-pv-chip .power {
-        color: #f4f6f8;
-        font-size: 13px;
-        font-weight: 700;
-        margin-top: 1px;
-    }
-
-    .house-pv-chip .energy {
-        color: #9eabb7;
+    .sig-label .detail {
+        color: #aab5bf;
         font-size: 9px;
-        margin-top: 1px;
+        margin-top: 3px;
+        line-height: 1.25;
     }
 
-    .house-card-grid {
-        position: absolute;
-        left: 16px;
-        right: 16px;
-        bottom: 14px;
-        height: 126px;
-        z-index: 6;
-        display: grid;
-        grid-template-columns: repeat(5, minmax(0, 1fr));
-        gap: 8px;
+    /* Positionen entsprechend der veröffentlichten Sigenergy-House-Card. */
+    #sig-solar-label {
+        top: 2%;
+        left: 36%;
+        border-color: rgba(239,160,32,.28);
     }
 
-    .house-card {
-        min-width: 0;
-        padding: 9px 10px;
-        box-sizing: border-box;
-        overflow: hidden;
-        border: 1px solid #2e3c4b;
-        border-radius: 11px;
-        background: rgba(11, 17, 24, .94);
-        box-shadow: 0 8px 22px rgba(0,0,0,.18);
+    #sig-home-label {
+        top: 2%;
+        left: 55%;
+        border-color: rgba(77,159,255,.28);
     }
 
-    .house-card .head {
-        display: flex;
-        align-items: center;
-        gap: 6px;
-        margin-bottom: 5px;
-        color: #eaf0f5;
-        font-size: 11px;
-        font-weight: 700;
+    #sig-battery-label {
+        top: 72%;
+        left: 28%;
+        border-color: rgba(90,200,100,.25);
     }
 
-    .house-card .big {
-        margin-bottom: 2px;
-        font-size: 18px;
-        font-weight: 700;
+    #sig-grid-label {
+        top: 65%;
+        left: 72%;
+        border-color: rgba(255,80,70,.25);
     }
 
-    .house-card .small {
-        color: #9caab7;
-        font-size: 9px;
-        line-height: 1.3;
+    #sig-wallbox-label {
+        top: 54%;
+        left: 1%;
+        border-color: rgba(34,211,208,.28);
     }
 
-    .house-card .sep {
-        height: 1px;
-        margin: 5px 0;
-        background: #253342;
-    }
+    .c-solar { color: #EFA020 !important; }
+    .c-import { color: #ff4d43 !important; }
+    .c-export { color: #6fd32f !important; }
+    .c-discharge { color: #3ca0ff !important; }
+    .c-charge { color: #6fd32f !important; }
+    .c-wallbox { color: #22d3d0 !important; }
+    .c-home { color: #4d9fff !important; }
 
-    .house-card .list {
-        max-height: 42px;
-        overflow: hidden;
-        color: #aeb8c2;
-        font-size: 8.5px;
-        line-height: 1.3;
-    }
-
-    .c-solar { color: #EFA020; }
-    .c-import { color: #ff4d43; }
-    .c-export { color: #6fd32f; }
-    .c-discharge { color: #3ca0ff; }
-    .c-charge { color: #6fd32f; }
-    .c-wallbox { color: #22d3d0; }
-    .c-home { color: #4d9fff; }
-
-    @media (max-width: 700px) {
-        .house-card-grid { gap: 5px; }
-        .house-card { padding: 7px; }
+    /* Die alten Haus-Karten/Labels der Zwischenversion sind in dieser
+       Darstellung nicht mehr erforderlich. */
+    #house-pv-list,
+    #house-grid-label,
+    #house-home-label,
+    #house-battery-label,
+    #house-wallbox-label,
+    .house-card-grid,
+    .house-topbar {
+        display: none !important;
     }
 
 </style>
@@ -847,188 +740,94 @@ class Energiefluss extends IPSModuleStrict
                         </svg>
                     </div>
 
-                    <!-- Hausansicht V3: komplettes Gebäude als SVG -->
+                    <!-- Hausansicht: Sigenergy/Genergy Layer-Komposition -->
                     <div id="house-stage">
-                        <svg id="house-scene" viewBox="0 0 1000 640" aria-hidden="true">
-                            <defs>
-                                <linearGradient id="batteryBody" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stop-color="#283442"></stop>
-                                    <stop offset="100%" stop-color="#111820"></stop>
-                                </linearGradient>
-                                <linearGradient id="garageGlass" x1="0" y1="0" x2="1" y2="1">
-                                    <stop offset="0%" stop-color="#24384c"></stop>
-                                    <stop offset="100%" stop-color="#0c131a"></stop>
-                                </linearGradient>
-                            </defs>
+                        <div id="sig-scene">
+                            <img
+                                id="sig-home-layer"
+                                class="sig-layer"
+                                src="/user/Energiefluss/Sigenergy/home_has_solar_has_car.png"
+                                alt=""
+                            >
+                            <img
+                                id="sig-battery-layer"
+                                class="sig-layer"
+                                src="/user/Energiefluss/Sigenergy/sigenstor_home.png"
+                                alt=""
+                            >
+                            <img
+                                id="sig-meter-layer"
+                                class="sig-layer"
+                                src="/user/Energiefluss/Sigenergy/ammeter_home.png"
+                                alt=""
+                            >
+                            <img
+                                id="sig-charger-layer"
+                                class="sig-layer"
+                                src="/user/Energiefluss/Sigenergy/ac_charger_bg.png"
+                                alt=""
+                            >
 
-                            <!-- Umgebung -->
-                            <ellipse class="scene-ground" cx="510" cy="450" rx="420" ry="58"></ellipse>
-                            <path d="M0 430 C110 392 170 414 255 432 C350 451 430 428 520 427 C625 426 710 451 802 438 C880 427 940 414 1000 430 L1000 500 L0 500 Z"
-                                  fill="#0e2117" opacity=".62"></path>
-
-                            <!-- Netz -->
-                            <g id="grid-object">
-                                <path class="grid-metal" d="M88 335 L116 205 L144 335"></path>
-                                <line class="grid-metal" x1="99" y1="286" x2="133" y2="286"></line>
-                                <line class="grid-metal" x1="94" y1="257" x2="138" y2="257"></line>
-                                <line class="grid-metal" x1="88" y1="228" x2="144" y2="228"></line>
-                                <line class="grid-metal" x1="82" y1="335" x2="150" y2="335"></line>
-                                <text x="116" y="358" text-anchor="middle" class="device-caption">Netz</text>
-                            </g>
-
-                            <!-- Hauskörper -->
-                            <g id="house-object">
-                                <!-- Garage -->
-                                <path class="house-side" d="M205 390 L205 305 L315 232 L430 232 L485 286 L485 430 L205 430 Z"></path>
-                                <rect x="226" y="323" width="188" height="107" rx="3" fill="url(#garageGlass)" stroke="#364554" stroke-width="2"></rect>
-                                <line x1="226" y1="350" x2="414" y2="350" stroke="#283847" stroke-width="1.4"></line>
-                                <line x1="226" y1="377" x2="414" y2="377" stroke="#283847" stroke-width="1.4"></line>
-
-                                <!-- Haupthaus -->
-                                <path class="house-wall" d="M392 430 L392 245 L508 165 L675 165 L790 248 L790 430 Z"></path>
-                                <path class="roof" d="M352 255 L498 128 L682 128 L828 255 L785 274 L662 194 L518 194 L395 274 Z"></path>
-                                <path class="roof-edge" d="M352 255 L498 128 L682 128 L828 255"></path>
-
-                                <!-- Fenster / Tür -->
-                                <rect class="window" x="442" y="286" width="58" height="76" rx="2"></rect>
-                                <rect class="window-glow" x="451" y="296" width="40" height="56" rx="1"></rect>
-                                <line x1="471" y1="296" x2="471" y2="352" stroke="#304252" stroke-width="1.4"></line>
-
-                                <rect class="window" x="684" y="285" width="60" height="78" rx="2"></rect>
-                                <rect x="704" y="302" width="22" height="61" rx="2" fill="#10161d" stroke="#3d4c5b" stroke-width="1.4"></rect>
-
-                                <!-- PV -->
-                                <g id="pv-panels">
-                                    <polygon class="panel" points="474,150 540,150 569,184 500,184"></polygon>
-                                    <polygon class="panel" points="545,150 612,150 642,184 574,184"></polygon>
-                                    <polygon class="panel" points="617,150 674,150 706,184 647,184"></polygon>
-                                    <line class="panel-grid" x1="496" y1="150" x2="522" y2="184"></line>
-                                    <line class="panel-grid" x1="518" y1="150" x2="544" y2="184"></line>
-                                    <line class="panel-grid" x1="567" y1="150" x2="596" y2="184"></line>
-                                    <line class="panel-grid" x1="590" y1="150" x2="619" y2="184"></line>
-                                    <line class="panel-grid" x1="641" y1="150" x2="672" y2="184"></line>
-                                    <line class="panel-grid" x1="488" y1="167" x2="690" y2="167"></line>
+                            <!--
+                                ViewBox und Pfade entsprechen den nativen
+                                1170x1013-Grafik-Layern. Dadurch skalieren
+                                Bilder und Energiepfade als eine Einheit.
+                            -->
+                            <svg
+                                id="sig-flow-svg"
+                                viewBox="0 0 1170 1013"
+                                preserveAspectRatio="none"
+                                aria-hidden="true"
+                            >
+                                <g id="sig-static-cables">
+                                    <path class="sig-cable" d="M 475 85 L 335 270 L 505 320 L 505 560"></path>
+                                    <path class="sig-cable" d="M 535 570 L 535 330 L 640 360 L 840 420 L 990 200 L 750 140"></path>
+                                    <path class="sig-cable" d="M 490 570 L 492 785"></path>
+                                    <path class="sig-cable" d="M 600 645 L 740 695 L 790 695 L 855 680 L 855 830"></path>
+                                    <path class="sig-cable" d="M 75 485 L 75 455 L 290 535 L 350 560 L 295 585 L 475 600"></path>
                                 </g>
 
-                                <!-- Wechselrichter -->
-                                <g id="inverter-object">
-                                    <rect class="device" x="545" y="240" width="72" height="86" rx="10"></rect>
-                                    <rect class="device-dark" x="563" y="270" width="36" height="27" rx="5"></rect>
-                                    <circle cx="575" cy="283" r="3.2" fill="#6fd32f"></circle>
-                                    <circle cx="587" cy="283" r="3.2" fill="#3ca0ff"></circle>
-                                    <text x="581" y="340" text-anchor="middle" class="small-caption">Wechselrichter</text>
-                                </g>
-                            </g>
+                                <g id="house-flow-lines"></g>
+                                <g id="house-flow-dots"></g>
 
-                            <!-- Wallbox -->
-                            <g id="wallbox-object">
-                                <rect class="device" x="237" y="346" width="42" height="59" rx="8"></rect>
-                                <path d="M258 356 L248 375 H256 L252 393 L270 368 H261 L267 356 Z" fill="#22d3d0"></path>
-                                <path d="M277 382 C302 384 319 393 325 408" fill="none" stroke="#657789" stroke-width="2"></path>
-                                <text x="258" y="423" text-anchor="middle" class="device-caption">Wallbox</text>
-                            </g>
+                                <circle class="soc-track" cx="498" cy="585" r="32"></circle>
+                                <circle
+                                    id="sig-soc-ring"
+                                    class="soc-ring"
+                                    cx="498"
+                                    cy="585"
+                                    r="32"
+                                    stroke="#6fd32f"
+                                ></circle>
+                            </svg>
 
-                            <!-- Auto -->
-                            <g id="car-object">
-                                <path d="M280 403 C296 373 329 359 370 359 C407 359 436 374 450 403 Z"
-                                      fill="#c9d1d8" stroke="#697784" stroke-width="2"></path>
-                                <rect x="270" y="397" width="190" height="34" rx="15"
-                                      fill="#d6dce1" stroke="#697784" stroke-width="2"></rect>
-                                <path d="M319 373 L350 365 L394 365 L417 381 L323 381 Z"
-                                      fill="#192837" stroke="#687988" stroke-width="1.5"></path>
-                                <circle cx="310" cy="428" r="13" fill="#080b0f" stroke="#4d5a66" stroke-width="2"></circle>
-                                <circle cx="422" cy="428" r="13" fill="#080b0f" stroke="#4d5a66" stroke-width="2"></circle>
-                            </g>
-
-                            <!-- Batterie -->
-                            <g id="battery-object">
-                                <rect x="823" y="270" width="86" height="154" rx="13"
-                                      fill="url(#batteryBody)" stroke="#687889" stroke-width="2.2"></rect>
-                                <rect x="853" y="258" width="27" height="12" rx="3" fill="#6c7885"></rect>
-                                <rect x="837" y="290" width="58" height="112" rx="7"
-                                      fill="#101820" stroke="#41505e" stroke-width="1.5"></rect>
-                                <rect id="house-battery-fill" x="837" y="290" width="58" height="112" rx="7"
-                                      fill="#6fd32f" opacity=".80"></rect>
-                                <line x1="837" y1="327" x2="895" y2="327" stroke="#18242d" stroke-width="2"></line>
-                                <line x1="837" y1="364" x2="895" y2="364" stroke="#18242d" stroke-width="2"></line>
-                                <text x="866" y="444" text-anchor="middle" class="device-caption">Batterie</text>
-                            </g>
-
-                            <!-- Statische Leitungsbasis -->
-                            <g id="house-flow-base">
-                                <path class="flow-base" d="M574 184 L574 240"></path>
-                                <path class="flow-base" d="M150 300 L545 300"></path>
-                                <path class="flow-base" d="M617 300 L823 300"></path>
-                                <path class="flow-base" d="M581 326 L581 375"></path>
-                                <path class="flow-base" d="M545 330 L470 330 L470 385 L279 385"></path>
-                            </g>
-
-                            <!-- Dynamische Energiepfade -->
-                            <g id="house-flow-lines"></g>
-                            <g id="house-flow-dots"></g>
-                        </svg>
-
-                        <div id="house-pv-list"></div>
-
-                        <div id="house-grid-label" class="house-label">
-                            <div class="name">Netz</div>
-                            <div id="house-grid-power" class="power c-import">0 W</div>
-                            <div id="house-grid-mode" class="sub"></div>
-                        </div>
-
-                        <div id="house-home-label" class="house-label">
-                            <div class="name">Hausverbrauch</div>
-                            <div id="house-home-power" class="power c-home">0 W</div>
-                        </div>
-
-                        <div id="house-battery-label" class="house-label">
-                            <div class="name">Batterie</div>
-                            <div id="house-battery-power" class="power c-discharge">0 W</div>
-                            <div id="house-battery-mode" class="sub"></div>
-                            <div id="house-battery-soc" class="sub"></div>
-                        </div>
-
-                        <div id="house-wallbox-label" class="house-label">
-                            <div class="name" id="house-wallbox-name">Wallbox</div>
-                            <div id="house-wallbox-power" class="power c-wallbox">0 W</div>
-                            <div id="house-wallbox-energy" class="sub"></div>
-                        </div>
-
-                        <div class="house-card-grid">
-                            <div class="house-card">
-                                <div class="head"><span class="c-import">⚡</span> Netz</div>
-                                <div id="card-grid-power" class="big c-import">0 W</div>
-                                <div id="card-grid-mode" class="small"></div>
-                                <div class="sep"></div>
-                                <div id="card-grid-energy" class="small"></div>
+                            <div id="sig-solar-label" class="sig-label">
+                                <div id="sig-solar-power" class="primary c-solar">0 W</div>
+                                <div class="secondary">Solar</div>
+                                <div id="sig-solar-detail" class="detail"></div>
                             </div>
 
-                            <div class="house-card">
-                                <div class="head"><span class="c-solar">☀</span> PV gesamt</div>
-                                <div id="card-pv-power" class="big c-solar">0 W</div>
-                                <div id="card-pv-energy" class="small"></div>
-                                <div class="sep"></div>
-                                <div id="card-pv-list" class="list"></div>
+                            <div id="sig-home-label" class="sig-label">
+                                <div id="sig-home-power" class="primary c-home">0 W</div>
+                                <div class="secondary">Haus</div>
                             </div>
 
-                            <div class="house-card">
-                                <div class="head"><span class="c-home">⌂</span> Haus</div>
-                                <div id="card-home-power" class="big c-home">0 W</div>
-                                <div class="small">Verbrauch</div>
+                            <div id="sig-battery-label" class="sig-label">
+                                <div id="sig-battery-power" class="primary c-discharge">0 W · 0 %</div>
+                                <div id="sig-battery-name" class="secondary">Batterie</div>
+                                <div id="sig-battery-detail" class="detail"></div>
                             </div>
 
-                            <div class="house-card">
-                                <div class="head"><span class="c-charge">▯</span> Batterie</div>
-                                <div id="card-bat-soc" class="big c-charge">0 %</div>
-                                <div id="card-bat-power" class="small"></div>
-                                <div class="sep"></div>
-                                <div id="card-bat-list" class="list"></div>
+                            <div id="sig-grid-label" class="sig-label">
+                                <div id="sig-grid-power" class="primary c-import">0 W</div>
+                                <div class="secondary">Netz</div>
+                                <div id="sig-grid-detail" class="detail"></div>
                             </div>
 
-                            <div class="house-card">
-                                <div class="head"><span class="c-wallbox">ϟ</span> Wallbox</div>
-                                <div id="card-wallbox-power" class="big c-wallbox">0 W</div>
-                                <div id="card-wallbox-energy" class="small"></div>
+                            <div id="sig-wallbox-label" class="sig-label">
+                                <div id="sig-wallbox-power" class="primary c-wallbox">0 W</div>
+                                <div id="sig-wallbox-name" class="secondary">Wallbox</div>
+                                <div id="sig-wallbox-detail" class="detail"></div>
                             </div>
                         </div>
                     </div>
@@ -1413,127 +1212,149 @@ class Energiefluss extends IPSModuleStrict
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
+
         const mainBattery = batteries.length ? batteries[0] : null;
-        const mainSoc = mainBattery ? (mainBattery.soc || 0) : 0;
+        const mainSoc = mainBattery ? Math.max(0, Math.min(100, mainBattery.soc || 0)) : 0;
 
-        // PV oben.
-        const pvList = document.getElementById('house-pv-list');
-        pvList.innerHTML = pvs.map((pv, i) => `
-            <div class="house-pv-chip">
-                <div class="name">${pv.name || ('PV ' + (i + 1))}</div>
-                <div class="power">${fmt(pv.value)}</div>
-                ${pv.energy ? `<div class="energy">${pv.energy}</div>` : ''}
-            </div>
-        `).join('');
+        // ---- Live-Texte -----------------------------------------------------
+        const solarPower = document.getElementById('sig-solar-power');
+        const solarDetail = document.getElementById('sig-solar-detail');
+        if (solarPower) solarPower.textContent = fmt(pvTotal);
+        if (solarDetail) {
+            solarDetail.innerHTML = pvs.map((pv, i) =>
+                `${pv.name || ('PV ' + (i + 1))}: ${fmt(pv.value || 0)}${pv.energy ? ' · ' + pv.energy : ''}`
+            ).join('<br>');
+        }
 
-        // Hauptwerte.
+        const homePower = document.getElementById('sig-home-power');
+        if (homePower) homePower.textContent = fmt(haus);
+
         const gridColor = grid >= 0 ? AC.import : AC.export;
-        const gridMode = grid >= 0 ? 'Bezug →' : 'Einspeisung ←';
-
-        document.getElementById('house-grid-power').textContent = fmt(Math.abs(grid));
-        document.getElementById('house-grid-power').style.color = gridColor;
-        document.getElementById('house-grid-mode').textContent = gridMode;
-        document.getElementById('house-grid-mode').style.color = gridColor;
-
-        document.getElementById('house-home-power').textContent = fmt(haus);
+        const gridMode = grid >= 0 ? 'Bezug' : 'Einspeisung';
+        const gridPower = document.getElementById('sig-grid-power');
+        const gridDetail = document.getElementById('sig-grid-detail');
+        if (gridPower) {
+            gridPower.textContent = fmt(Math.abs(grid));
+            gridPower.style.color = gridColor;
+        }
+        if (gridDetail) {
+            const details = [gridMode];
+            if (d.gridImportEnergy) details.push('Bezug: ' + d.gridImportEnergy);
+            if (d.gridExportEnergy) details.push('Einspeisung: ' + d.gridExportEnergy);
+            gridDetail.innerHTML = details.join('<br>');
+            gridDetail.style.color = gridColor;
+        }
 
         const batColor = batteryTotal >= 0 ? AC.discharge : AC.charge;
-        const batMode = batteryTotal >= 0 ? '← Entladen' : '→ Laden';
-
-        document.getElementById('house-battery-power').textContent = fmt(Math.abs(batteryTotal));
-        document.getElementById('house-battery-power').style.color = batColor;
-        document.getElementById('house-battery-mode').textContent = batMode;
-        document.getElementById('house-battery-mode').style.color = batColor;
-        document.getElementById('house-battery-soc').textContent = `${Math.round(mainSoc)} %`;
-
-        // Batterie im Gebäude proportional zum SOC füllen.
-        const houseBatteryFill = document.getElementById('house-battery-fill');
-        if (houseBatteryFill) {
-            const soc = Math.max(0, Math.min(100, mainSoc));
-            const fullHeight = 112;
-            const fillHeight = fullHeight * soc / 100;
-            houseBatteryFill.setAttribute('y', 290 + (fullHeight - fillHeight));
-            houseBatteryFill.setAttribute('height', fillHeight);
-            houseBatteryFill.setAttribute('fill', batColor);
+        const batMode = batteryTotal >= 0 ? 'Entladen' : 'Laden';
+        const batteryPower = document.getElementById('sig-battery-power');
+        const batteryName = document.getElementById('sig-battery-name');
+        const batteryDetail = document.getElementById('sig-battery-detail');
+        if (batteryPower) {
+            batteryPower.textContent = `${fmt(Math.abs(batteryTotal))} · ${Math.round(mainSoc)} %`;
+            batteryPower.style.color = batColor;
+        }
+        if (batteryName) {
+            batteryName.textContent = mainBattery?.name || 'Batterie';
+        }
+        if (batteryDetail) {
+            batteryDetail.innerHTML = batteries.map((bat, i) => {
+                const mode = (bat.value || 0) >= 0 ? 'Entladen' : 'Laden';
+                return `${bat.name || ('Batterie ' + (i + 1))}: ${Math.round(bat.soc || 0)} % · ${fmt(Math.abs(bat.value || 0))} ${mode}`;
+            }).join('<br>') || batMode;
         }
 
-        document.getElementById('house-wallbox-name').textContent = wallbox.name || 'Wallbox';
-        document.getElementById('house-wallbox-power').textContent = fmt(wallbox.value || 0);
-        document.getElementById('house-wallbox-energy').textContent = wallbox.energy || '';
+        const wallboxPower = document.getElementById('sig-wallbox-power');
+        const wallboxName = document.getElementById('sig-wallbox-name');
+        const wallboxDetail = document.getElementById('sig-wallbox-detail');
+        if (wallboxPower) wallboxPower.textContent = fmt(wallbox.value || 0);
+        if (wallboxName) wallboxName.textContent = wallbox.name || 'Wallbox';
+        if (wallboxDetail) wallboxDetail.textContent = wallbox.energy || '';
 
-        // Karten unten.
-        document.getElementById('card-grid-power').textContent = fmt(Math.abs(grid));
-        document.getElementById('card-grid-power').style.color = gridColor;
-        document.getElementById('card-grid-mode').textContent = gridMode;
-        document.getElementById('card-grid-mode').style.color = gridColor;
-
-        const gridEnergy = [];
-        if (d.gridImportEnergy) {
-            gridEnergy.push(`<span class="c-import">Bezug: ${d.gridImportEnergy}</span>`);
+        // ---- Batterie-SOC-Ring ---------------------------------------------
+        const socRing = document.getElementById('sig-soc-ring');
+        if (socRing) {
+            const r = 32;
+            const circumference = 2 * Math.PI * r;
+            socRing.setAttribute('stroke-dasharray', `${circumference}`);
+            socRing.setAttribute(
+                'stroke-dashoffset',
+                `${circumference * (1 - mainSoc / 100)}`
+            );
+            socRing.setAttribute('stroke', batColor);
         }
-        if (d.gridExportEnergy) {
-            gridEnergy.push(`<span class="c-export">Einspeisung: ${d.gridExportEnergy}</span>`);
-        }
-        document.getElementById('card-grid-energy').innerHTML = gridEnergy.join('<br>');
 
-        document.getElementById('card-pv-power').textContent = fmt(pvTotal);
-        const pvEnergyValues = sumFormattedEnergy(pvs.map(pv => pv.energy));
-        document.getElementById('card-pv-energy').textContent =
-            pvEnergyValues.length === 1 ? pvEnergyValues[0] : '';
-        document.getElementById('card-pv-list').innerHTML = pvs.map((pv, i) =>
-            `<div><span class="c-solar">${pv.name || ('PV ' + (i + 1))}</span> · ${fmt(pv.value)}${pv.energy ? ' · ' + pv.energy : ''}</div>`
-        ).join('');
-
-        document.getElementById('card-home-power').textContent = fmt(haus);
-
-        document.getElementById('card-bat-soc').textContent = `${Math.round(mainSoc)} %`;
-        document.getElementById('card-bat-power').innerHTML =
-            `<span style="color:${batColor}">${fmt(Math.abs(batteryTotal))} · ${batMode}</span>`;
-        document.getElementById('card-bat-list').innerHTML = batteries.map((bat, i) => {
-            const c = (bat.value || 0) >= 0 ? AC.discharge : AC.charge;
-            const m = (bat.value || 0) >= 0 ? 'Entladen' : 'Laden';
-            return `<div><span style="color:${c}">${bat.name || ('Batterie ' + (i + 1))}</span> · ${Math.round(bat.soc || 0)} % · ${fmt(Math.abs(bat.value || 0))} ${m}</div>`;
-        }).join('');
-
-        document.getElementById('card-wallbox-power').textContent = fmt(wallbox.value || 0);
-        document.getElementById('card-wallbox-energy').textContent = wallbox.energy || '';
-
-        // Flusspfade direkt über dem Haus.
+        // ---- Original kalibrierte Kabelpfade -------------------------------
+        // Solar: PV-Dach -> SigenStor
         if (pvTotal > 0) {
-            addHouseEdge('house-pv', 'M574,184 L574,240', AC.solar);
-            houseEdgeState['house-pv'] = { w: pvTotal, rev: false };
-        }
-
-        if (grid >= 0 && Math.abs(grid) > 0) {
-            addHouseEdge('house-grid-import', 'M150,300 L545,300', AC.import);
-            houseEdgeState['house-grid-import'] = { w: Math.abs(grid), rev: false };
-        } else if (grid < 0) {
-            addHouseEdge('house-grid-export', 'M150,300 L545,300', AC.export);
-            houseEdgeState['house-grid-export'] = { w: Math.abs(grid), rev: true };
-        }
-
-        if (Math.abs(batteryTotal) > 0) {
-            addHouseEdge('house-battery', 'M617,300 L823,300', batColor);
-            // Pfad ist Wechselrichter -> Batterie. Entladen läuft rückwärts.
-            houseEdgeState['house-battery'] = {
-                w: Math.abs(batteryTotal),
-                rev: batteryTotal >= 0
+            addHouseEdge(
+                'house-pv',
+                'M 475 85 L 335 270 L 505 320 L 505 560',
+                AC.solar,
+                6
+            );
+            houseEdgeState['house-pv'] = {
+                w: pvTotal,
+                rev: false
             };
         }
 
+        // Haus: SigenStor -> Hausverbraucher
         if (haus > 0) {
-            addHouseEdge('house-home', 'M581,326 L581,375', AC.home);
+            addHouseEdge(
+                'house-home',
+                'M 535 570 L 535 330 L 640 360 L 840 420 L 990 200 L 750 140',
+                AC.home,
+                6
+            );
             houseEdgeState['house-home'] = {
                 w: haus,
                 rev: false
             };
         }
 
+        // Batteriepfad ist vom SigenStor nach unten zur Batterie definiert.
+        if (Math.abs(batteryTotal) > 0) {
+            addHouseEdge(
+                'house-battery',
+                'M 490 570 L 492 785',
+                batColor,
+                6
+            );
+            houseEdgeState['house-battery'] = {
+                w: Math.abs(batteryTotal),
+                // Positiv = Entladen, also Batterie -> Haus = rückwärts.
+                rev: batteryTotal >= 0
+            };
+        }
+
+        // Netzpfad ist vom Haus/Junction zum Netz definiert.
+        if (Math.abs(grid) > 0) {
+            addHouseEdge(
+                'house-grid',
+                'M 600 645 L 740 695 L 790 695 L 855 680 L 855 830',
+                gridColor,
+                6
+            );
+            houseEdgeState['house-grid'] = {
+                w: Math.abs(grid),
+                // Bezug = Netz -> Haus, also rückwärts.
+                rev: grid >= 0
+            };
+        }
+
+        // EV-Pfad ist vom Charger zur Haus-Junction definiert.
         if ((wallbox.value || 0) > 0) {
-            addHouseEdge('house-wallbox', 'M545,330 L470,330 L470,385 L279,385', AC.wallbox);
+            addHouseEdge(
+                'house-wallbox',
+                'M 75 485 L 75 455 L 290 535 L 350 560 L 295 585 L 475 600',
+                AC.wallbox,
+                6
+            );
             houseEdgeState['house-wallbox'] = {
-                w: wallbox.value || 0,
-                rev: false
+                w: Math.abs(wallbox.value || 0),
+                // Laden: Haus -> Wallbox, also rückwärts.
+                rev: true
             };
         }
     }
@@ -1623,7 +1444,7 @@ class Energiefluss extends IPSModuleStrict
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
 
-        let graphWidth = mode === 'house' ? 1000 : 540;
+        let graphWidth = mode === 'house' ? 900 : 540;
 
         if (mode !== 'house') {
             const columns = Math.ceil(groupCount / 2);
@@ -1891,6 +1712,70 @@ HTML;
             [$flowDisplay, $houseDisplay],
             $html
         );
+    }
+
+    private function EnsureHouseAssets(): void
+    {
+        $sourceDir = __DIR__;
+        $targetDir = IPS_GetKernelDir()
+            . 'user'
+            . DIRECTORY_SEPARATOR
+            . 'Energiefluss'
+            . DIRECTORY_SEPARATOR
+            . 'Sigenergy';
+
+        if (!is_dir($targetDir)) {
+            if (!@mkdir($targetDir, 0777, true) && !is_dir($targetDir)) {
+                $this->LogMessage(
+                    'Hausansicht: Zielverzeichnis konnte nicht erstellt werden: ' . $targetDir,
+                    KL_ERROR
+                );
+                return;
+            }
+        }
+
+        $assets = [
+            'home_has_solar_has_car.png',
+            'sigenstor_home.png',
+            'ammeter_home.png',
+            'ac_charger_bg.png',
+        ];
+
+        foreach ($assets as $asset) {
+            $source = $sourceDir . DIRECTORY_SEPARATOR . $asset;
+            $target = $targetDir . DIRECTORY_SEPARATOR . $asset;
+
+            if (!is_file($source)) {
+                $this->LogMessage(
+                    'Hausansicht: Datei fehlt im Modulordner: ' . $source,
+                    KL_ERROR
+                );
+                continue;
+            }
+
+            $copy = !is_file($target);
+
+            if (!$copy) {
+                $copy =
+                    @filesize($source) !== @filesize($target)
+                    || @filemtime($source) > @filemtime($target);
+            }
+
+            if ($copy) {
+                if (!@copy($source, $target)) {
+                    $this->LogMessage(
+                        'Hausansicht: Datei konnte nicht kopiert werden: ' . $asset,
+                        KL_ERROR
+                    );
+                    continue;
+                }
+
+                $mtime = @filemtime($source);
+                if ($mtime !== false) {
+                    @touch($target, $mtime);
+                }
+            }
+        }
     }
 
     private function PushState(): void
