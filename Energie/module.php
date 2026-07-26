@@ -32,6 +32,9 @@ class Energiefluss extends IPSModuleStrict
         // vorerst als Fallback für bestehende Konfigurationen erhalten.
         $this->RegisterPropertyString('Producers', '[]');
 
+        // Batterien werden separat konfiguriert.
+        $this->RegisterPropertyString('Batteries', '[]');
+
         $this->RegisterPropertyInteger('BatteryOut', 0);
         $this->RegisterPropertyInteger('BatterySoC', 0);
         $this->RegisterPropertyInteger('L1', 0);
@@ -99,24 +102,42 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'     => 'List',
                             'name'     => 'Producers',
-                            'caption'  => 'PV- und Batterieanlagen',
-                            'rowCount' => 8,
+                            'caption'  => 'PV-Anlagen',
+                            'rowCount' => 6,
                             'add'      => true,
                             'delete'   => true,
                             'columns'  => [
                                 [
-                                    'caption' => 'Typ',
-                                    'name'    => 'Type',
-                                    'width'   => '110px',
-                                    'add'     => 'PV',
-                                    'edit'    => [
-                                        'type'    => 'Select',
-                                        'options' => [
-                                            ['caption' => 'PV', 'value' => 'PV'],
-                                            ['caption' => 'Batterie', 'value' => 'Battery'],
-                                        ],
-                                    ],
+                                    'caption' => 'Name',
+                                    'name'    => 'Name',
+                                    'width'   => '200px',
+                                    'add'     => '',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
                                 ],
+                                [
+                                    'caption' => 'Leistung',
+                                    'name'    => 'VariableID',
+                                    'width'   => '320px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Energie (optional)',
+                                    'name'    => 'EnergyVariableID',
+                                    'width'   => '320px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                            ],
+                        ],
+                        [
+                            'type'     => 'List',
+                            'name'     => 'Batteries',
+                            'caption'  => 'Batterien',
+                            'rowCount' => 6,
+                            'add'      => true,
+                            'delete'   => true,
+                            'columns'  => [
                                 [
                                     'caption' => 'Name',
                                     'name'    => 'Name',
@@ -132,18 +153,25 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Energie (optional)',
-                                    'name'    => 'EnergyVariableID',
-                                    'width'   => '280px',
+                                    'caption' => 'SOC',
+                                    'name'    => 'SoCVariableID',
+                                    'width'   => '240px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'SOC (nur Batterie)',
-                                    'name'    => 'SoCVariableID',
+                                    'caption' => 'Energie (optional)',
+                                    'name'    => 'EnergyVariableID',
                                     'width'   => '260px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Fluss umkehren',
+                                    'name'    => 'InvertFlow',
+                                    'width'   => '120px',
+                                    'add'     => false,
+                                    'edit'    => ['type' => 'CheckBox'],
                                 ],
                             ],
                         ],
@@ -376,7 +404,7 @@ class Energiefluss extends IPSModuleStrict
     .lbl.bot { top: 100%; margin-top: 8px; }
     #phases {
         position: absolute;
-        left: 18px;
+        left: -34px;
         top: 330px;
         transform: none;
         font-size: 13px;
@@ -1051,6 +1079,18 @@ HTML;
             }
         }
 
+        $batteries = json_decode($this->ReadPropertyString('Batteries'), true);
+        if (is_array($batteries)) {
+            foreach ($batteries as $battery) {
+                foreach (['VariableID', 'EnergyVariableID', 'SoCVariableID'] as $key) {
+                    $variableID = (int) ($battery[$key] ?? 0);
+                    if ($variableID > 0) {
+                        $ids[] = $variableID;
+                    }
+                }
+            }
+        }
+
         $groups = json_decode($this->ReadPropertyString('Groups'), true);
         if (is_array($groups)) {
             foreach ($groups as $group) {
@@ -1111,44 +1151,30 @@ HTML;
         $pvs = [];
         $batteries = [];
 
-        $decodedSources = json_decode($this->ReadPropertyString('Producers'), true);
-        if (is_array($decodedSources)) {
-            foreach ($decodedSources as $source) {
+        // PV-Anlagen
+        $decodedPVs = json_decode($this->ReadPropertyString('Producers'), true);
+        if (is_array($decodedPVs)) {
+            foreach ($decodedPVs as $source) {
                 $variableID = (int) ($source['VariableID'] ?? 0);
                 if ($variableID <= 0 || !IPS_VariableExists($variableID)) {
                     continue;
                 }
 
-                // Alte Listeneinträge ohne Type waren bisher PV-Anlagen.
-                $type = (string) ($source['Type'] ?? 'PV');
-                $isBattery = ($type === 'Battery');
-
                 $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
-                $socVariableID = (int) ($source['SoCVariableID'] ?? 0);
 
-                $entry = [
+                $pvs[] = [
                     'name'   => trim((string) ($source['Name'] ?? '')) !== ''
                         ? (string) $source['Name']
-                        : ($isBattery ? 'Batterie ' . (count($batteries) + 1) : 'PV ' . (count($pvs) + 1)),
+                        : 'PV ' . (count($pvs) + 1),
                     'value'  => (float) GetValue($variableID),
                     'energy' => ($energyVariableID > 0 && IPS_VariableExists($energyVariableID))
                         ? GetValueFormatted($energyVariableID)
                         : '',
-                    'soc'    => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
-                        ? (float) GetValue($socVariableID)
-                        : 0.0,
                 ];
-
-                if ($isBattery) {
-                    $batteries[] = $entry;
-                } else {
-                    $pvs[] = $entry;
-                }
             }
         }
 
-        // Bestehende alte PV1/PV2-Konfiguration nur dann als Fallback verwenden,
-        // wenn in der gemeinsamen Liste noch keine PV-Anlage vorhanden ist.
+        // Alte PV1/PV2-Konfiguration als Fallback.
         if (count($pvs) === 0) {
             $legacyPV = [
                 [
@@ -1174,13 +1200,43 @@ HTML;
                     'energy' => ($entry['energyID'] > 0 && IPS_VariableExists($entry['energyID']))
                         ? GetValueFormatted($entry['energyID'])
                         : '',
-                    'soc'    => 0.0,
                 ];
             }
         }
 
-        // Alte einzelne Batterie bleibt als Fallback erhalten, bis eine Batterie
-        // in der gemeinsamen Liste angelegt wurde.
+        // Batterien
+        $decodedBatteries = json_decode($this->ReadPropertyString('Batteries'), true);
+        if (is_array($decodedBatteries)) {
+            foreach ($decodedBatteries as $source) {
+                $variableID = (int) ($source['VariableID'] ?? 0);
+                if ($variableID <= 0 || !IPS_VariableExists($variableID)) {
+                    continue;
+                }
+
+                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
+                $socVariableID = (int) ($source['SoCVariableID'] ?? 0);
+                $value = (float) GetValue($variableID);
+
+                if ((bool) ($source['InvertFlow'] ?? false)) {
+                    $value *= -1;
+                }
+
+                $batteries[] = [
+                    'name'   => trim((string) ($source['Name'] ?? '')) !== ''
+                        ? (string) $source['Name']
+                        : 'Batterie ' . (count($batteries) + 1),
+                    'value'  => $value,
+                    'energy' => ($energyVariableID > 0 && IPS_VariableExists($energyVariableID))
+                        ? GetValueFormatted($energyVariableID)
+                        : '',
+                    'soc'    => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
+                        ? (float) GetValue($socVariableID)
+                        : 0.0,
+                ];
+            }
+        }
+
+        // Alte einzelne Batterie als Fallback.
         if (count($batteries) === 0) {
             $legacyBatteryID = $this->ReadPropertyInteger('BatteryOut');
             if ($legacyBatteryID > 0 && IPS_VariableExists($legacyBatteryID)) {
