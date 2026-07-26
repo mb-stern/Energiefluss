@@ -788,19 +788,19 @@ class Energiefluss extends IPSModuleStrict
                             >
                                 <g id="sig-static-cables">
                                     <!-- PV Hausdach direkt zum SigenStor / zentralen Knoten -->
-                                    <path id="sig-cable-pv1" class="sig-cable" d="M 610 175 L 610 330 L 505 560"></path>
+                                    <path id="sig-cable-pv1" class="sig-cable" d="M 505 560 L 505 175"></path>
 
                                     <!-- Zweite PV-Anlage auf dem Carport; nur sichtbar wenn PV2 konfiguriert -->
-                                    <path id="sig-cable-pv2" class="sig-cable" d="M 185 355 L 300 420 L 410 500 L 505 560" style="display:none"></path>
+                                    <path id="sig-cable-pv2" class="sig-cable" d="M 505 560 L 350 560 L 350 535 L 185 535 L 185 355" style="display:none"></path>
 
                                     <!-- Hausverbrauch vom zentralen Knoten direkt ins Gebäude -->
-                                    <path id="sig-cable-home" class="sig-cable" d="M 535 570 L 650 520 L 755 455"></path>
+                                    <path id="sig-cable-home" class="sig-cable" d="M 535 570 L 680 570 L 680 455 L 755 455"></path>
 
                                     <!-- Batterie -->
                                     <path class="sig-cable" d="M 490 570 L 492 785"></path>
 
                                     <!-- Netz endet am Smartmeter, nicht weiter im Haus -->
-                                    <path id="sig-cable-grid" class="sig-cable" d="M 600 645 L 740 695 L 790 695"></path>
+                                    <path id="sig-cable-grid" class="sig-cable" d="M 600 645 L 790 645 L 790 695 L 855 695 L 855 830"></path>
 
                                     <!-- Wallbox; nur bei konfigurierter Wallbox sichtbar -->
                                     <path id="sig-cable-wallbox" class="sig-cable" d="M 75 485 L 75 455 L 290 535 L 350 560 L 475 600"></path>
@@ -1348,12 +1348,11 @@ class Energiefluss extends IPSModuleStrict
 
         // ---- Dynamische Energiepfade ---------------------------------------
 
-        // PV 1: Hausdach -> zentraler SigenStor-Knoten.
-        // Bewusst DIREKT, nicht mehr entlang/rings um das Dach.
+        // PV 1: vom zentralen Knoten senkrecht nach oben bis in die Dach-Panels.
         if (pv1 && (pv1.value || 0) > 0) {
             addHouseEdge(
                 'house-pv1',
-                'M 610 175 L 610 330 L 505 560',
+                'M 505 560 L 505 175',
                 AC.solar,
                 6
             );
@@ -1363,11 +1362,12 @@ class Energiefluss extends IPSModuleStrict
             };
         }
 
-        // PV 2: Carport -> derselbe zentrale Knoten.
+        // PV 2: vom zentralen Bereich entlang des Wallbox-Bereichs und dann senkrecht
+        // nach oben bis direkt unter die Carport-Panels.
         if (pv2 && (pv2.value || 0) > 0) {
             addHouseEdge(
                 'house-pv2',
-                'M 185 355 L 300 420 L 410 500 L 505 560',
+                'M 505 560 L 350 560 L 350 535 L 185 535 L 185 355',
                 AC.solar,
                 6
             );
@@ -1377,11 +1377,11 @@ class Energiefluss extends IPSModuleStrict
             };
         }
 
-        // Hausverbrauch: vom SigenStor DIREKT ins Haus.
+        // Hausverbrauch: rechtwinklig vom zentralen Knoten direkt ins Haus.
         if (haus > 0) {
             addHouseEdge(
                 'house-home',
-                'M 535 570 L 650 520 L 755 455',
+                'M 535 570 L 680 570 L 680 455 L 755 455',
                 AC.home,
                 6
             );
@@ -1405,11 +1405,11 @@ class Energiefluss extends IPSModuleStrict
             };
         }
 
-        // Netz: nur bis zum Smartmeter. Der Pfad endet deshalb bereits bei 790/695.
+        // Netz: rechtwinklig zum Smartmeter und von dort senkrecht in den Boden.
         if (Math.abs(grid) > 0) {
             addHouseEdge(
                 'house-grid',
-                'M 600 645 L 740 695 L 790 695',
+                'M 600 645 L 790 645 L 790 695 L 855 695 L 855 830',
                 gridColor,
                 6
             );
