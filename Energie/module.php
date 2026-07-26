@@ -873,20 +873,26 @@ class Energiefluss extends IPSModuleStrict
     let last = performance.now();
 
     function powerSpeed(w) {
-        // Leistung bestimmt die sichtbare Flussgeschwindigkeit.
-        // Kleine Leistungen bleiben gut sichtbar, hohe Leistungen
-        // werden schneller, aber bewusst begrenzt.
+        // Deutlich ruhigere Kennlinie:
+        // kleine Leistungen sehr langsam, normale Hausleistungen moderat,
+        // erst hohe Leistungen sichtbar schneller.
         const power = Math.max(0, Math.abs(w || 0));
 
-        // 0 W = keine Bewegung; ab ca. 50 W langsam sichtbar,
-        // danach logarithmisch steigend bis zum Maximalwert.
         if (power <= 0) return 0;
 
-        const minSpeed = 0.10;
-        const maxSpeed = 0.75;
-        const normalized = Math.min(1, Math.log10(power + 1) / 4);
+        // Beispielwerte ungefähr:
+        //   100 W  -> 0.035
+        //   500 W  -> 0.060
+        //  1000 W  -> 0.080
+        //  2000 W  -> 0.105
+        //  5000 W  -> 0.145
+        // 10000 W  -> 0.175
+        //
+        // Die Wurzelfunktion sorgt dafür, dass hohe Leistungen nicht
+        // unverhältnismäßig hektisch werden.
+        const speed = 0.018 + (Math.sqrt(power) * 0.00155);
 
-        return minSpeed + ((maxSpeed - minSpeed) * normalized);
+        return Math.min(speed, 0.18);
     }
 
     function frame(now) {
