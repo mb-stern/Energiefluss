@@ -608,6 +608,108 @@ class Energiefluss extends IPSModuleStrict
         box-sizing: border-box;
     }
 
+    #pfc-info-layer {
+        position: absolute;
+        inset: 0;
+        z-index: 7;
+        pointer-events: none;
+    }
+
+    .pfc-info {
+        position: absolute;
+        min-width: 118px;
+        max-width: 190px;
+        padding: 7px 9px;
+        box-sizing: border-box;
+        border-radius: 9px;
+        background: rgba(10, 16, 24, .88);
+        border: 1px solid rgba(255,255,255,.12);
+        box-shadow: 0 5px 18px rgba(0,0,0,.24);
+        color: #f3f4f6;
+        line-height: 1.25;
+        backdrop-filter: blur(2px);
+    }
+
+    .pfc-info .title {
+        color: #aeb8c3;
+        font-size: 10px;
+        font-weight: 650;
+        margin-bottom: 2px;
+    }
+
+    .pfc-info .main {
+        font-size: 17px;
+        font-weight: 700;
+        white-space: nowrap;
+    }
+
+    .pfc-info .sub {
+        color: #98a5b3;
+        font-size: 9px;
+        margin-top: 2px;
+        line-height: 1.3;
+    }
+
+    #pfc-info-solar {
+        left: 39%;
+        top: 7%;
+        border-color: rgba(239,160,32,.36);
+    }
+
+    #pfc-info-home {
+        right: 7%;
+        top: 28%;
+        border-color: rgba(77,159,255,.36);
+    }
+
+    #pfc-info-battery {
+        left: 27%;
+        bottom: 12%;
+        border-color: rgba(60,160,255,.36);
+    }
+
+    #pfc-info-wallbox {
+        left: 4%;
+        bottom: 14%;
+        border-color: rgba(34,211,208,.36);
+    }
+
+    /* Netz sitzt unten direkt bei den beiden Import-/Export-Leitungen. */
+    #pfc-info-grid {
+        right: 4%;
+        bottom: 4%;
+        min-width: 165px;
+        border-color: rgba(255,255,255,.16);
+    }
+
+    #pfc-grid-import {
+        color: #ff4d43;
+    }
+
+    #pfc-grid-export {
+        color: #6fd32f;
+    }
+
+    #pfc-battery-main.discharge {
+        color: #3ca0ff;
+    }
+
+    #pfc-battery-main.charge {
+        color: #6fd32f;
+    }
+
+    #pfc-solar-main {
+        color: #EFA020;
+    }
+
+    #pfc-home-main {
+        color: #4d9fff;
+    }
+
+    #pfc-wallbox-main {
+        color: #22d3d0;
+    }
+
 
 </style>
 <script src="/icons.js"></script>
@@ -635,6 +737,38 @@ class Energiefluss extends IPSModuleStrict
                         <div id="pfc-host"></div>
                         <div id="pfc-loading">Power Flow Card wird geladen …</div>
                         <div id="pfc-error"></div>
+
+                        <div id="pfc-info-layer">
+                            <div id="pfc-info-solar" class="pfc-info">
+                                <div id="pfc-solar-title" class="title">PV</div>
+                                <div id="pfc-solar-main" class="main">0 W</div>
+                                <div id="pfc-solar-sub" class="sub"></div>
+                            </div>
+
+                            <div id="pfc-info-home" class="pfc-info">
+                                <div class="title">Hausverbrauch</div>
+                                <div id="pfc-home-main" class="main">0 W</div>
+                            </div>
+
+                            <div id="pfc-info-battery" class="pfc-info">
+                                <div id="pfc-battery-title" class="title">Batterie</div>
+                                <div id="pfc-battery-main" class="main discharge">0 W</div>
+                                <div id="pfc-battery-sub" class="sub"></div>
+                            </div>
+
+                            <div id="pfc-info-wallbox" class="pfc-info">
+                                <div id="pfc-wallbox-title" class="title">Wallbox</div>
+                                <div id="pfc-wallbox-main" class="main">0 W</div>
+                                <div id="pfc-wallbox-sub" class="sub"></div>
+                            </div>
+
+                            <div id="pfc-info-grid" class="pfc-info">
+                                <div class="title">Netz</div>
+                                <div id="pfc-grid-import" class="main">→ 0 W</div>
+                                <div id="pfc-grid-export" class="main">← 0 W</div>
+                                <div id="pfc-grid-sub" class="sub"></div>
+                            </div>
+                        </div>
                     </div>
                 </div>
 
@@ -976,8 +1110,13 @@ class Energiefluss extends IPSModuleStrict
     let pfcInitPromise = null;
 
     function pfcState(value, unit = 'W') {
+        const numeric = Number(value);
+        const rounded = Number.isFinite(numeric)
+            ? (unit === 'W' ? Math.round(numeric) : numeric)
+            : 0;
+
         return {
-            state: String(Number.isFinite(Number(value)) ? Number(value) : 0),
+            state: String(rounded),
             attributes: {
                 unit_of_measurement: unit
             }
@@ -1019,23 +1158,23 @@ class Energiefluss extends IPSModuleStrict
                 battery_discharge_power: 'sensor.symcon_battery_discharge'
             },
 
-            solar_descriptor_enabled: true,
+            solar_descriptor_enabled: false,
             solar_descriptor_label: 'PV gesamt',
             solar_descriptor_entity: 'sensor.symcon_solar',
 
-            grid_descriptor_enabled: true,
+            grid_descriptor_enabled: false,
             grid_descriptor_label: 'Netz',
             grid_descriptor_entity: 'sensor.symcon_grid',
 
-            battery_descriptor_enabled: true,
+            battery_descriptor_enabled: false,
             battery_descriptor_label: 'Batterie',
             battery_descriptor_entity: 'sensor.symcon_battery_soc',
 
-            ev_descriptor_enabled: true,
+            ev_descriptor_enabled: false,
             ev_descriptor_label: 'Wallbox',
             ev_descriptor_entity: 'sensor.symcon_ev',
 
-            home_descriptor_enabled: true,
+            home_descriptor_enabled: false,
             home_descriptor_label: 'Haus',
             home_descriptor_entity: 'sensor.symcon_home'
         };
@@ -1098,6 +1237,14 @@ class Energiefluss extends IPSModuleStrict
 
                 .descriptor-label {
                     font-size: 19px !important;
+                }
+
+                .bat-discharge {
+                    stroke: #3ca0ff !important;
+                }
+
+                .bat-charge {
+                    stroke: #6fd32f !important;
                 }
             `;
             card.shadowRoot.appendChild(style);
@@ -1218,8 +1365,125 @@ class Energiefluss extends IPSModuleStrict
         return pfcInitPromise;
     }
 
+    function updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox) {
+        const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
+        const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
+
+        // PV: bei mehreren Anlagen Namen und Energie darunter auflisten.
+        const pvTitle = document.getElementById('pfc-solar-title');
+        const pvMain = document.getElementById('pfc-solar-main');
+        const pvSub = document.getElementById('pfc-solar-sub');
+
+        if (pvTitle) {
+            pvTitle.textContent = pvs.length === 1
+                ? (pvs[0].name || 'PV')
+                : 'PV gesamt';
+        }
+        if (pvMain) {
+            pvMain.textContent = fmt(pvTotal);
+        }
+        if (pvSub) {
+            pvSub.innerHTML = pvs.map((pv, i) => {
+                const name = pv.name || ('PV ' + (i + 1));
+                const energy = pv.energy ? ` · ${pv.energy}` : '';
+                return `${name}: ${fmt(pv.value || 0)}${energy}`;
+            }).join('<br>');
+        }
+
+        // Haus
+        const homeMain = document.getElementById('pfc-home-main');
+        if (homeMain) {
+            homeMain.textContent = fmt(haus);
+        }
+
+        // Batterie: blau = Entladung Richtung Haus, grün = Laden Richtung Batterie.
+        const batteryInfo = document.getElementById('pfc-info-battery');
+        const batteryTitle = document.getElementById('pfc-battery-title');
+        const batteryMain = document.getElementById('pfc-battery-main');
+        const batterySub = document.getElementById('pfc-battery-sub');
+
+        if (batteryInfo) {
+            batteryInfo.style.display = batteries.length ? '' : 'none';
+        }
+
+        if (batteries.length) {
+            const mainBat = batteries[0];
+            const discharge = batteryTotal >= 0;
+
+            if (batteryTitle) {
+                batteryTitle.textContent = batteries.length === 1
+                    ? (mainBat.name || 'Batterie')
+                    : 'Batterien';
+            }
+
+            if (batteryMain) {
+                batteryMain.textContent = fmt(Math.abs(batteryTotal));
+                batteryMain.classList.toggle('discharge', discharge);
+                batteryMain.classList.toggle('charge', !discharge);
+            }
+
+            if (batterySub) {
+                batterySub.innerHTML = batteries.map((bat, i) => {
+                    const name = bat.name || ('Batterie ' + (i + 1));
+                    const mode = (bat.value || 0) >= 0 ? 'Entladen' : 'Laden';
+                    const energy = bat.energy ? ` · ${bat.energy}` : '';
+                    return `${name}: ${Math.round(bat.soc || 0)} % · ${mode}${energy}`;
+                }).join('<br>');
+            }
+        }
+
+        // Wallbox
+        const wallboxInfo = document.getElementById('pfc-info-wallbox');
+        if (wallboxInfo) {
+            wallboxInfo.style.display = d.hasWallbox ? '' : 'none';
+        }
+
+        if (d.hasWallbox) {
+            const wallboxTitle = document.getElementById('pfc-wallbox-title');
+            const wallboxMain = document.getElementById('pfc-wallbox-main');
+            const wallboxSub = document.getElementById('pfc-wallbox-sub');
+
+            if (wallboxTitle) {
+                wallboxTitle.textContent = wallbox.name || 'Wallbox';
+            }
+            if (wallboxMain) {
+                wallboxMain.textContent = fmt(wallbox.value || 0);
+            }
+            if (wallboxSub) {
+                wallboxSub.textContent = wallbox.energy || '';
+            }
+        }
+
+        // Netz unten: beide Richtungen immer separat darstellen.
+        const gridImport = Math.max(grid, 0);
+        const gridExport = Math.max(-grid, 0);
+
+        const gridImportEl = document.getElementById('pfc-grid-import');
+        const gridExportEl = document.getElementById('pfc-grid-export');
+        const gridSub = document.getElementById('pfc-grid-sub');
+
+        if (gridImportEl) {
+            gridImportEl.textContent = `→ ${fmt(gridImport)}`;
+        }
+        if (gridExportEl) {
+            gridExportEl.textContent = `← ${fmt(gridExport)}`;
+        }
+
+        if (gridSub) {
+            const energy = [];
+            if (d.gridImportEnergy) {
+                energy.push('Bezug ' + d.gridImportEnergy);
+            }
+            if (d.gridExportEnergy) {
+                energy.push('Einspeisung ' + d.gridExportEnergy);
+            }
+            gridSub.innerHTML = energy.join('<br>');
+        }
+    }
+
     function updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox) {
         if (!pfcCard) {
+            updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox);
             pfcPendingData = [d, grid, haus, pvs, batteries, wallbox];
             ensurePowerFlowCard().catch(() => {});
             return;
@@ -1258,6 +1522,8 @@ class Energiefluss extends IPSModuleStrict
         };
 
         pfcCard.hass = { states };
+
+        updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox);
 
         installPfcShadowOverrides(pfcCard);
         applyPfcOptionalLayers(d, batteries, wallbox);
