@@ -531,7 +531,7 @@ class Energiefluss extends IPSModuleStrict
         font-family: inherit;
     }
 
-    /* Hausansicht V4 – detaillierte SVG-Hausillustration */
+    /* Hausansicht V3 – Gebäude und Energiepfade in EINEM Koordinatensystem */
     #house-stage {
         position: relative;
         width: 1000px;
@@ -541,10 +541,10 @@ class Energiefluss extends IPSModuleStrict
         border-radius: 18px;
         box-sizing: border-box;
         color: #eef4fa;
-        border: 1px solid #273747;
+        border: 1px solid #253342;
         background:
-            radial-gradient(circle at 58% 18%, rgba(54, 86, 117, .28), transparent 34%),
-            linear-gradient(180deg, #111b26 0%, #0b1219 58%, #07100d 100%);
+            radial-gradient(circle at 52% 30%, rgba(42, 71, 94, 0.30), transparent 42%),
+            linear-gradient(180deg, #101923 0%, #0a1118 56%, #070b10 100%);
     }
 
     #house-scene {
@@ -555,74 +555,87 @@ class Energiefluss extends IPSModuleStrict
         z-index: 1;
     }
 
-    #house-scene .wall-front {
-        fill: #222a33;
-        stroke: #53606d;
-        stroke-width: 2.2;
+    #house-scene .scene-ground {
+        fill: #0b1712;
+        opacity: .82;
     }
-    #house-scene .wall-side {
-        fill: #181f27;
-        stroke: #46525e;
-        stroke-width: 2;
-    }
-    #house-scene .roof-main {
-        fill: #111821;
-        stroke: #637181;
+
+    #house-scene .house-wall {
+        fill: #171f29;
+        stroke: #3a4858;
         stroke-width: 2.5;
     }
-    #house-scene .roof-side {
-        fill: #151d26;
-        stroke: #566473;
+
+    #house-scene .house-side {
+        fill: #111821;
+        stroke: #344251;
         stroke-width: 2;
     }
-    #house-scene .roof-highlight {
+
+    #house-scene .roof {
+        fill: #222c38;
+        stroke: #536172;
+        stroke-width: 2.5;
+    }
+
+    #house-scene .roof-edge {
         fill: none;
-        stroke: #8795a4;
-        stroke-width: 2.2;
-        opacity: .45;
-    }
-    #house-scene .window-frame {
-        fill: #111922;
-        stroke: #708092;
-        stroke-width: 1.4;
-    }
-    #house-scene .window-light {
-        fill: #d5933b;
+        stroke: #6c7885;
+        stroke-width: 3;
         opacity: .72;
     }
-    #house-scene .door {
-        fill: #111820;
-        stroke: #667584;
+
+    #house-scene .window {
+        fill: #132434;
+        stroke: #526578;
         stroke-width: 1.5;
     }
+
+    #house-scene .window-glow {
+        fill: #d99a38;
+        opacity: .62;
+    }
+
     #house-scene .panel {
-        fill: #132943;
-        stroke: #8ea1b8;
-        stroke-width: 1.2;
+        fill: #152c4a;
+        stroke: #7c93af;
+        stroke-width: 1.25;
     }
-    #house-scene .panel-line {
-        stroke: #7088a4;
+
+    #house-scene .panel-grid {
+        stroke: #68809d;
         stroke-width: .8;
-        opacity: .78;
+        opacity: .8;
     }
-    #house-scene .device-light {
-        fill: #e2e7eb;
-        stroke: #8995a0;
-        stroke-width: 1.6;
+
+    #house-scene .device {
+        fill: #e5eaee;
+        stroke: #7d8893;
+        stroke-width: 1.7;
     }
+
     #house-scene .device-dark {
-        fill: #131b23;
-        stroke: #586879;
+        fill: #18212a;
+        stroke: #657482;
         stroke-width: 1.5;
     }
+
+    #house-scene .grid-metal {
+        fill: none;
+        stroke: #9aa9b8;
+        stroke-width: 2;
+        opacity: .82;
+    }
+
     #house-scene .flow-base {
         fill: none;
-        stroke: #364553;
+        stroke: #31404e;
         stroke-width: 3;
         stroke-linecap: round;
         stroke-linejoin: round;
         opacity: .68;
     }
+
     #house-scene .flow-path {
         fill: none;
         stroke-width: 4;
@@ -631,111 +644,115 @@ class Energiefluss extends IPSModuleStrict
         opacity: .98;
         filter: drop-shadow(0 0 3px currentColor);
     }
-    #house-scene .grid-metal {
-        fill: none;
-        stroke: #a4b0bc;
-        stroke-width: 2;
-        opacity: .82;
-    }
-    #house-scene .caption {
-        fill: #aeb8c3;
-        font-size: 11px;
+
+    #house-scene .device-caption {
+        fill: #aeb9c5;
+        font-size: 12px;
         font-weight: 600;
+    }
+
+    #house-scene .small-caption {
+        fill: #8493a2;
+        font-size: 10px;
     }
 
     .house-label {
         position: absolute;
         z-index: 5;
-        min-width: 118px;
+        min-width: 112px;
         padding: 7px 9px;
         box-sizing: border-box;
-        border: 1px solid rgba(133, 153, 173, .28);
-        border-radius: 10px;
-        background: rgba(7, 12, 18, .82);
-        box-shadow: 0 7px 20px rgba(0,0,0,.23);
+        border: 1px solid rgba(129, 151, 172, .28);
+        border-radius: 9px;
+        background: rgba(8, 13, 19, .82);
+        box-shadow: 0 6px 18px rgba(0,0,0,.22);
         line-height: 1.25;
         pointer-events: none;
     }
 
     .house-label .name {
-        color: #bec8d2;
+        color: #b8c3ce;
         font-size: 11px;
         font-weight: 650;
         margin-bottom: 2px;
     }
+
     .house-label .power {
         font-size: 17px;
         font-weight: 700;
-        color: #f6f8fa;
+        color: #f4f7f9;
     }
+
     .house-label .sub {
         font-size: 10px;
         margin-top: 2px;
-        color: #9ba9b6;
+        color: #99a7b5;
     }
 
     #house-grid-label {
         left: 28px;
-        top: 230px;
-        width: 132px;
+        top: 236px;
+        width: 128px;
     }
 
     #house-home-label {
-        left: 505px;
-        top: 346px;
-        width: 155px;
+        left: 438px;
+        top: 338px;
+        width: 150px;
         text-align: center;
-        transform: translateX(-50%);
     }
 
     #house-battery-label {
-        right: 24px;
-        top: 252px;
-        width: 146px;
+        right: 28px;
+        top: 245px;
+        width: 142px;
     }
 
     #house-wallbox-label {
-        left: 188px;
-        top: 378px;
-        width: 152px;
+        left: 168px;
+        top: 375px;
+        width: 150px;
     }
 
     #house-pv-list {
         position: absolute;
-        left: 340px;
-        right: 230px;
-        top: 48px;
+        left: 315px;
+        right: 245px;
+        top: 55px;
         z-index: 5;
         display: flex;
         justify-content: center;
-        gap: 8px;
+        gap: 9px;
         flex-wrap: wrap;
         pointer-events: none;
     }
 
     .house-pv-chip {
-        min-width: 108px;
+        min-width: 106px;
         padding: 5px 8px;
         box-sizing: border-box;
         text-align: center;
         border-radius: 9px;
-        background: rgba(9, 14, 20, .84);
-        border: 1px solid rgba(239, 160, 32, .4);
-        box-shadow: 0 5px 16px rgba(0,0,0,.18);
+        background: rgba(10, 15, 22, .84);
+        border: 1px solid rgba(239, 160, 32, .38);
+        box-shadow: 0 4px 14px rgba(0,0,0,.18);
     }
+
     .house-pv-chip .name {
         color: #efa020;
         font-size: 10px;
         font-weight: 700;
     }
+
     .house-pv-chip .power {
-        color: #f5f7f9;
+        color: #f4f6f8;
         font-size: 13px;
         font-weight: 700;
         margin-top: 1px;
     }
+
     .house-pv-chip .energy {
-        color: #a0acb8;
+        color: #9eabb7;
         font-size: 9px;
         margin-top: 1px;
     }
@@ -757,39 +774,44 @@ class Energiefluss extends IPSModuleStrict
         padding: 9px 10px;
         box-sizing: border-box;
         overflow: hidden;
-        border: 1px solid #304052;
+        border: 1px solid #2e3c4b;
         border-radius: 11px;
-        background: rgba(10, 16, 23, .93);
+        background: rgba(11, 17, 24, .94);
         box-shadow: 0 8px 22px rgba(0,0,0,.18);
     }
+
     .house-card .head {
         display: flex;
         align-items: center;
         gap: 6px;
         margin-bottom: 5px;
-        color: #edf2f6;
+        color: #eaf0f5;
         font-size: 11px;
         font-weight: 700;
     }
+
     .house-card .big {
         margin-bottom: 2px;
         font-size: 18px;
         font-weight: 700;
     }
+
     .house-card .small {
         color: #9caab7;
         font-size: 9px;
         line-height: 1.3;
     }
+
     .house-card .sep {
         height: 1px;
         margin: 5px 0;
-        background: #273546;
+        background: #253342;
     }
+
     .house-card .list {
         max-height: 42px;
         overflow: hidden;
-        color: #b0bac4;
+        color: #aeb8c2;
         font-size: 8.5px;
         line-height: 1.3;
     }
@@ -825,124 +847,120 @@ class Energiefluss extends IPSModuleStrict
                         </svg>
                     </div>
 
-                    <!-- Hausansicht V4 -->
+                    <!-- Hausansicht V3: komplettes Gebäude als SVG -->
                     <div id="house-stage">
                         <svg id="house-scene" viewBox="0 0 1000 640" aria-hidden="true">
                             <defs>
-                                <linearGradient id="batCase" x1="0" y1="0" x2="0" y2="1">
-                                    <stop offset="0%" stop-color="#2d3a47"></stop>
+                                <linearGradient id="batteryBody" x1="0" y1="0" x2="0" y2="1">
+                                    <stop offset="0%" stop-color="#283442"></stop>
                                     <stop offset="100%" stop-color="#111820"></stop>
                                 </linearGradient>
-                                <linearGradient id="carBody" x1="0" y1="0" x2="1" y2="1">
-                                    <stop offset="0%" stop-color="#dce2e7"></stop>
-                                    <stop offset="100%" stop-color="#8e9aa5"></stop>
+                                <linearGradient id="garageGlass" x1="0" y1="0" x2="1" y2="1">
+                                    <stop offset="0%" stop-color="#24384c"></stop>
+                                    <stop offset="100%" stop-color="#0c131a"></stop>
                                 </linearGradient>
                             </defs>
 
-                            <!-- Landschaft -->
-                            <ellipse cx="520" cy="445" rx="430" ry="64" fill="#0b1711" opacity=".86"></ellipse>
-                            <path d="M0 432 C95 405 180 416 255 433 C348 454 431 434 526 431 C630 427 717 452 814 439 C890 428 945 416 1000 431 L1000 500 L0 500 Z"
-                                  fill="#102319" opacity=".58"></path>
+                            <!-- Umgebung -->
+                            <ellipse class="scene-ground" cx="510" cy="450" rx="420" ry="58"></ellipse>
+                            <path d="M0 430 C110 392 170 414 255 432 C350 451 430 428 520 427 C625 426 710 451 802 438 C880 427 940 414 1000 430 L1000 500 L0 500 Z"
+                                  fill="#0e2117" opacity=".62"></path>
 
                             <!-- Netz -->
                             <g id="grid-object">
-                                <path class="grid-metal" d="M92 337 L119 206 L146 337"></path>
-                                <line class="grid-metal" x1="102" y1="288" x2="136" y2="288"></line>
-                                <line class="grid-metal" x1="97" y1="258" x2="141" y2="258"></line>
-                                <line class="grid-metal" x1="92" y1="229" x2="146" y2="229"></line>
-                                <line class="grid-metal" x1="86" y1="337" x2="152" y2="337"></line>
-                                <text x="119" y="359" text-anchor="middle" class="caption">Netz</text>
+                                <path class="grid-metal" d="M88 335 L116 205 L144 335"></path>
+                                <line class="grid-metal" x1="99" y1="286" x2="133" y2="286"></line>
+                                <line class="grid-metal" x1="94" y1="257" x2="138" y2="257"></line>
+                                <line class="grid-metal" x1="88" y1="228" x2="144" y2="228"></line>
+                                <line class="grid-metal" x1="82" y1="335" x2="150" y2="335"></line>
+                                <text x="116" y="358" text-anchor="middle" class="device-caption">Netz</text>
                             </g>
 
-                            <!-- Gebäude -->
-                            <g id="building">
+                            <!-- Hauskörper -->
+                            <g id="house-object">
                                 <!-- Garage -->
-                                <path class="wall-side" d="M194 412 L194 312 L303 236 L444 236 L497 292 L497 430 L194 430 Z"></path>
-                                <path class="roof-side" d="M175 317 L298 219 L442 219 L513 286 L482 306 L429 255 L312 255 L217 330 Z"></path>
-                                <rect x="220" y="326" width="205" height="104" rx="3" fill="#111820" stroke="#485665" stroke-width="2"></rect>
-                                <line x1="220" y1="352" x2="425" y2="352" stroke="#293746" stroke-width="1.4"></line>
-                                <line x1="220" y1="378" x2="425" y2="378" stroke="#293746" stroke-width="1.4"></line>
+                                <path class="house-side" d="M205 390 L205 305 L315 232 L430 232 L485 286 L485 430 L205 430 Z"></path>
+                                <rect x="226" y="323" width="188" height="107" rx="3" fill="url(#garageGlass)" stroke="#364554" stroke-width="2"></rect>
+                                <line x1="226" y1="350" x2="414" y2="350" stroke="#283847" stroke-width="1.4"></line>
+                                <line x1="226" y1="377" x2="414" y2="377" stroke="#283847" stroke-width="1.4"></line>
 
                                 <!-- Haupthaus -->
-                                <path class="wall-front" d="M402 430 L402 247 L523 163 L690 163 L805 248 L805 430 Z"></path>
-                                <path class="roof-main" d="M366 257 L513 124 L695 124 L842 257 L800 278 L678 196 L531 196 L408 278 Z"></path>
-                                <path class="roof-highlight" d="M366 257 L513 124 L695 124 L842 257"></path>
+                                <path class="house-wall" d="M392 430 L392 245 L508 165 L675 165 L790 248 L790 430 Z"></path>
+                                <path class="roof" d="M352 255 L498 128 L682 128 L828 255 L785 274 L662 194 L518 194 L395 274 Z"></path>
+                                <path class="roof-edge" d="M352 255 L498 128 L682 128 L828 255"></path>
 
-                                <!-- Fenster links -->
-                                <rect class="window-frame" x="453" y="285" width="62" height="82" rx="2"></rect>
-                                <rect class="window-light" x="463" y="296" width="42" height="60" rx="1"></rect>
-                                <line x1="484" y1="296" x2="484" y2="356" stroke="#2f4050" stroke-width="1.2"></line>
+                                <!-- Fenster / Tür -->
+                                <rect class="window" x="442" y="286" width="58" height="76" rx="2"></rect>
+                                <rect class="window-glow" x="451" y="296" width="40" height="56" rx="1"></rect>
+                                <line x1="471" y1="296" x2="471" y2="352" stroke="#304252" stroke-width="1.4"></line>
 
-                                <!-- Fenster rechts + Tür -->
-                                <rect class="window-frame" x="682" y="279" width="62" height="85" rx="2"></rect>
-                                <rect class="window-light" x="692" y="290" width="42" height="64" rx="1"></rect>
-                                <rect class="door" x="748" y="309" width="35" height="121" rx="2"></rect>
+                                <rect class="window" x="684" y="285" width="60" height="78" rx="2"></rect>
+                                <rect x="704" y="302" width="22" height="61" rx="2" fill="#10161d" stroke="#3d4c5b" stroke-width="1.4"></rect>
 
-                                <!-- PV-Dach -->
+                                <!-- PV -->
                                 <g id="pv-panels">
-                                    <polygon class="panel" points="488,146 554,146 586,184 516,184"></polygon>
-                                    <polygon class="panel" points="559,146 627,146 660,184 591,184"></polygon>
-                                    <polygon class="panel" points="632,146 689,146 723,184 664,184"></polygon>
-
-                                    <line class="panel-line" x1="510" y1="146" x2="538" y2="184"></line>
-                                    <line class="panel-line" x1="532" y1="146" x2="560" y2="184"></line>
-                                    <line class="panel-line" x1="582" y1="146" x2="612" y2="184"></line>
-                                    <line class="panel-line" x1="605" y1="146" x2="635" y2="184"></line>
-                                    <line class="panel-line" x1="655" y1="146" x2="686" y2="184"></line>
-                                    <line class="panel-line" x1="500" y1="165" x2="707" y2="165"></line>
+                                    <polygon class="panel" points="474,150 540,150 569,184 500,184"></polygon>
+                                    <polygon class="panel" points="545,150 612,150 642,184 574,184"></polygon>
+                                    <polygon class="panel" points="617,150 674,150 706,184 647,184"></polygon>
+                                    <line class="panel-grid" x1="496" y1="150" x2="522" y2="184"></line>
+                                    <line class="panel-grid" x1="518" y1="150" x2="544" y2="184"></line>
+                                    <line class="panel-grid" x1="567" y1="150" x2="596" y2="184"></line>
+                                    <line class="panel-grid" x1="590" y1="150" x2="619" y2="184"></line>
+                                    <line class="panel-grid" x1="641" y1="150" x2="672" y2="184"></line>
+                                    <line class="panel-grid" x1="488" y1="167" x2="690" y2="167"></line>
                                 </g>
 
                                 <!-- Wechselrichter -->
                                 <g id="inverter-object">
-                                    <rect class="device-light" x="552" y="240" width="78" height="92" rx="10"></rect>
-                                    <rect class="device-dark" x="572" y="272" width="38" height="28" rx="5"></rect>
-                                    <circle cx="584" cy="286" r="3.2" fill="#6fd32f"></circle>
-                                    <circle cx="597" cy="286" r="3.2" fill="#3ca0ff"></circle>
-                                    <text x="591" y="347" text-anchor="middle" class="caption">Wechselrichter</text>
+                                    <rect class="device" x="545" y="240" width="72" height="86" rx="10"></rect>
+                                    <rect class="device-dark" x="563" y="270" width="36" height="27" rx="5"></rect>
+                                    <circle cx="575" cy="283" r="3.2" fill="#6fd32f"></circle>
+                                    <circle cx="587" cy="283" r="3.2" fill="#3ca0ff"></circle>
+                                    <text x="581" y="340" text-anchor="middle" class="small-caption">Wechselrichter</text>
                                 </g>
                             </g>
 
                             <!-- Wallbox -->
                             <g id="wallbox-object">
-                                <rect class="device-light" x="238" y="346" width="44" height="61" rx="8"></rect>
-                                <path d="M260 355 L249 375 H257 L253 394 L272 368 H262 L269 355 Z" fill="#22d3d0"></path>
-                                <path d="M280 382 C308 384 326 393 334 411" fill="none" stroke="#667889" stroke-width="2"></path>
-                                <text x="260" y="425" text-anchor="middle" class="caption">Wallbox</text>
+                                <rect class="device" x="237" y="346" width="42" height="59" rx="8"></rect>
+                                <path d="M258 356 L248 375 H256 L252 393 L270 368 H261 L267 356 Z" fill="#22d3d0"></path>
+                                <path d="M277 382 C302 384 319 393 325 408" fill="none" stroke="#657789" stroke-width="2"></path>
+                                <text x="258" y="423" text-anchor="middle" class="device-caption">Wallbox</text>
                             </g>
 
                             <!-- Auto -->
                             <g id="car-object">
-                                <path d="M285 403 C305 370 342 356 388 356 C429 356 460 374 475 403 Z"
-                                      fill="url(#carBody)" stroke="#798794" stroke-width="2"></path>
-                                <rect x="274" y="398" width="210" height="34" rx="16"
-                                      fill="#c9d0d6" stroke="#74818e" stroke-width="2"></rect>
-                                <path d="M328 371 L363 361 L412 361 L441 382 L331 382 Z"
-                                      fill="#162635" stroke="#718393" stroke-width="1.5"></path>
-                                <circle cx="316" cy="430" r="13" fill="#070b0f" stroke="#56636f" stroke-width="2"></circle>
-                                <circle cx="446" cy="430" r="13" fill="#070b0f" stroke="#56636f" stroke-width="2"></circle>
+                                <path d="M280 403 C296 373 329 359 370 359 C407 359 436 374 450 403 Z"
+                                      fill="#c9d1d8" stroke="#697784" stroke-width="2"></path>
+                                <rect x="270" y="397" width="190" height="34" rx="15"
+                                      fill="#d6dce1" stroke="#697784" stroke-width="2"></rect>
+                                <path d="M319 373 L350 365 L394 365 L417 381 L323 381 Z"
+                                      fill="#192837" stroke="#687988" stroke-width="1.5"></path>
+                                <circle cx="310" cy="428" r="13" fill="#080b0f" stroke="#4d5a66" stroke-width="2"></circle>
+                                <circle cx="422" cy="428" r="13" fill="#080b0f" stroke="#4d5a66" stroke-width="2"></circle>
                             </g>
 
                             <!-- Batterie -->
                             <g id="battery-object">
-                                <rect x="826" y="266" width="88" height="161" rx="14"
-                                      fill="url(#batCase)" stroke="#6a7a8b" stroke-width="2.2"></rect>
-                                <rect x="858" y="254" width="26" height="12" rx="3" fill="#6a7682"></rect>
-                                <rect x="840" y="288" width="60" height="116" rx="7"
-                                      fill="#101820" stroke="#455665" stroke-width="1.5"></rect>
-                                <rect id="house-battery-fill" x="840" y="288" width="60" height="116" rx="7"
-                                      fill="#6fd32f" opacity=".82"></rect>
-                                <line x1="840" y1="327" x2="900" y2="327" stroke="#18242d" stroke-width="2"></line>
-                                <line x1="840" y1="366" x2="900" y2="366" stroke="#18242d" stroke-width="2"></line>
-                                <text x="870" y="447" text-anchor="middle" class="caption">Batterie</text>
+                                <rect x="823" y="270" width="86" height="154" rx="13"
+                                      fill="url(#batteryBody)" stroke="#687889" stroke-width="2.2"></rect>
+                                <rect x="853" y="258" width="27" height="12" rx="3" fill="#6c7885"></rect>
+                                <rect x="837" y="290" width="58" height="112" rx="7"
+                                      fill="#101820" stroke="#41505e" stroke-width="1.5"></rect>
+                                <rect id="house-battery-fill" x="837" y="290" width="58" height="112" rx="7"
+                                      fill="#6fd32f" opacity=".80"></rect>
+                                <line x1="837" y1="327" x2="895" y2="327" stroke="#18242d" stroke-width="2"></line>
+                                <line x1="837" y1="364" x2="895" y2="364" stroke="#18242d" stroke-width="2"></line>
+                                <text x="866" y="444" text-anchor="middle" class="device-caption">Batterie</text>
                             </g>
 
-                            <!-- Basisleitungen -->
+                            <!-- Statische Leitungsbasis -->
                             <g id="house-flow-base">
-                                <path class="flow-base" d="M588 184 L588 240"></path>
-                                <path class="flow-base" d="M152 302 L552 302"></path>
-                                <path class="flow-base" d="M630 302 L826 302"></path>
-                                <path class="flow-base" d="M591 332 L591 379"></path>
-                                <path class="flow-base" d="M552 332 L485 332 L485 386 L282 386"></path>
+                                <path class="flow-base" d="M574 184 L574 240"></path>
+                                <path class="flow-base" d="M150 300 L545 300"></path>
+                                <path class="flow-base" d="M617 300 L823 300"></path>
+                                <path class="flow-base" d="M581 326 L581 375"></path>
+                                <path class="flow-base" d="M545 330 L470 330 L470 385 L279 385"></path>
                             </g>
 
                             <!-- Dynamische Energiepfade -->
@@ -1428,12 +1446,13 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('house-battery-mode').style.color = batColor;
         document.getElementById('house-battery-soc').textContent = `${Math.round(mainSoc)} %`;
 
+        // Batterie im Gebäude proportional zum SOC füllen.
         const houseBatteryFill = document.getElementById('house-battery-fill');
         if (houseBatteryFill) {
             const soc = Math.max(0, Math.min(100, mainSoc));
-            const fullHeight = 116;
+            const fullHeight = 112;
             const fillHeight = fullHeight * soc / 100;
-            houseBatteryFill.setAttribute('y', 288 + (fullHeight - fillHeight));
+            houseBatteryFill.setAttribute('y', 290 + (fullHeight - fillHeight));
             houseBatteryFill.setAttribute('height', fillHeight);
             houseBatteryFill.setAttribute('fill', batColor);
         }
@@ -1481,20 +1500,20 @@ class Energiefluss extends IPSModuleStrict
 
         // Flusspfade direkt über dem Haus.
         if (pvTotal > 0) {
-            addHouseEdge('house-pv', 'M588,184 L588,240', AC.solar);
+            addHouseEdge('house-pv', 'M574,184 L574,240', AC.solar);
             houseEdgeState['house-pv'] = { w: pvTotal, rev: false };
         }
 
         if (grid >= 0 && Math.abs(grid) > 0) {
-            addHouseEdge('house-grid-import', 'M152,302 L552,302', AC.import);
+            addHouseEdge('house-grid-import', 'M150,300 L545,300', AC.import);
             houseEdgeState['house-grid-import'] = { w: Math.abs(grid), rev: false };
         } else if (grid < 0) {
-            addHouseEdge('house-grid-export', 'M152,302 L552,302', AC.export);
+            addHouseEdge('house-grid-export', 'M150,300 L545,300', AC.export);
             houseEdgeState['house-grid-export'] = { w: Math.abs(grid), rev: true };
         }
 
         if (Math.abs(batteryTotal) > 0) {
-            addHouseEdge('house-battery', 'M630,302 L826,302', batColor);
+            addHouseEdge('house-battery', 'M617,300 L823,300', batColor);
             // Pfad ist Wechselrichter -> Batterie. Entladen läuft rückwärts.
             houseEdgeState['house-battery'] = {
                 w: Math.abs(batteryTotal),
@@ -1502,8 +1521,16 @@ class Energiefluss extends IPSModuleStrict
             };
         }
 
+        if (haus > 0) {
+            addHouseEdge('house-home', 'M581,326 L581,375', AC.home);
+            houseEdgeState['house-home'] = {
+                w: haus,
+                rev: false
+            };
+        }
+
         if ((wallbox.value || 0) > 0) {
-            addHouseEdge('house-wallbox', 'M552,332 L485,332 L485,386 L282,386', AC.wallbox);
+            addHouseEdge('house-wallbox', 'M545,330 L470,330 L470,385 L279,385', AC.wallbox);
             houseEdgeState['house-wallbox'] = {
                 w: wallbox.value || 0,
                 rev: false
