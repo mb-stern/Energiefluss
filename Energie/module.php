@@ -356,15 +356,22 @@ class Energiefluss extends IPSModuleStrict
             );
 
             // HTML ist direkt in diesem Modul integriert.
-            return $this->GetVisualizationHtml() . '<script>handleMessage(' . $payload . ');</script>';
+            // Die gewählte Ansicht wird bereits serverseitig sichtbar ausgeliefert,
+            // damit die Hausansicht nicht von einer erfolgreichen JS-Umschaltung abhängt.
+            return $this->GetVisualizationHtml($this->ReadPropertyString('DisplayMode'))
+                . '<script>handleMessage(' . $payload . ');</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
     }
 
-    private function GetVisualizationHtml(): string
+    private function GetVisualizationHtml(string $displayMode): string
     {
-        return <<<'HTML'
+        $showHouse = $displayMode === 'house';
+        $flowDisplay = $showHouse ? 'none' : 'block';
+        $houseDisplay = $showHouse ? 'block' : 'none';
+
+        $html = <<<'HTML'
 <style>
     body { margin: 0; font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif; }
     :root {
@@ -400,7 +407,7 @@ class Energiefluss extends IPSModuleStrict
         transform-origin: 0 0;
     }
     #fit { width: 540px; flex: 0 0 540px; overflow: hidden; }
-    #stage { position: relative; width: 1080px; height: 640px; }
+    #stage { position: relative; width: 1080px; height: 640px; display: __FLOW_DISPLAY__; }
     #svg { position: absolute; inset: 0; z-index: 1; }
     #svg #lines line, #svg #lines path { stroke: var(--w-line); }
     .node { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; background: var(--w-surface); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2; text-align: center; }
@@ -428,14 +435,14 @@ class Energiefluss extends IPSModuleStrict
         position: relative;
         width: 940px;
         height: 640px;
-        display: none;
+        display: __HOUSE_DISPLAY__;
         overflow: hidden;
     }
     #house-svg { position: absolute; inset: 0; z-index: 1; }
-    #house-svg .shell { fill: var(--w-surface); stroke: var(--w-line); stroke-width: 3; }
-    #house-svg .roof { fill: var(--w-surface); stroke: var(--w-line); stroke-width: 3; }
-    #house-svg .window { fill: none; stroke: var(--w-line); stroke-width: 2; }
-    #house-svg .door { fill: none; stroke: var(--w-line); stroke-width: 2; }
+    #house-svg .shell { fill: var(--w-surface, #ffffff); stroke: var(--w-line, #8d8d88); stroke-width: 3; }
+    #house-svg .roof { fill: var(--w-surface, #ffffff); stroke: var(--w-line, #8d8d88); stroke-width: 3; }
+    #house-svg .window { fill: none; stroke: var(--w-line, #8d8d88); stroke-width: 2; }
+    #house-svg .door { fill: none; stroke: var(--w-line, #8d8d88); stroke-width: 2; }
     #house-svg .panel { fill: #24384a; stroke: #56728c; stroke-width: 1.5; }
     #house-svg .panel-line { stroke: #56728c; stroke-width: 1; }
     #house-svg .hline { fill: none; stroke-width: 3; stroke-linecap: round; stroke-linejoin: round; }
@@ -527,10 +534,13 @@ class Energiefluss extends IPSModuleStrict
             </div>
 
             <div id="house-stage">
+                <div style="position:absolute;left:28px;top:18px;z-index:4;color:var(--w-text,#20201e);font-size:14px;font-weight:600;">
+                    Energiefluss – Hausansicht
+                </div>
                 <svg id="house-svg" width="940" height="640" viewBox="0 0 940 640" aria-hidden="true">
                     <g id="house-base">
                         <!-- Boden -->
-                        <line x1="85" y1="520" x2="875" y2="520" stroke="var(--w-line)" stroke-width="2"></line>
+                        <line x1="85" y1="520" x2="875" y2="520" stroke="var(--w-line, #8d8d88)" stroke-width="2"></line>
 
                         <!-- Hauskörper -->
                         <path class="roof" d="M205 315 L355 165 L505 315 Z"></path>
@@ -553,21 +563,21 @@ class Energiefluss extends IPSModuleStrict
 
                         <!-- Netz / Zähler links -->
                         <rect x="75" y="330" width="62" height="82" rx="10"
-                              fill="var(--w-surface)" stroke="var(--w-line)" stroke-width="3"></rect>
+                              fill="var(--w-surface, #ffffff)" stroke="var(--w-line, #8d8d88)" stroke-width="3"></rect>
                         <path d="M108 344 L93 373 H106 L98 398 L123 365 H110 L119 344 Z"
                               fill="#d9534f"></path>
                         <text x="106" y="432" text-anchor="middle"
-                              fill="var(--w-text2)" font-size="13">Netz</text>
+                              fill="var(--w-text2, #6c6c66)" font-size="13">Netz</text>
 
                         <!-- Batterie-Symbol rechts -->
                         <rect x="700" y="310" width="100" height="145" rx="14"
-                              fill="var(--w-surface)" stroke="var(--w-line)" stroke-width="3"></rect>
+                              fill="var(--w-surface, #ffffff)" stroke="var(--w-line, #8d8d88)" stroke-width="3"></rect>
                         <rect x="736" y="299" width="28" height="12" rx="3"
-                              fill="var(--w-line)"></rect>
+                              fill="var(--w-line, #8d8d88)"></rect>
                         <rect x="716" y="330" width="68" height="105" rx="7"
                               fill="none" stroke="#4F9A5B" stroke-width="3"></rect>
                         <text x="750" y="478" text-anchor="middle"
-                              fill="var(--w-text2)" font-size="13">Batterie</text>
+                              fill="var(--w-text2, #6c6c66)" font-size="13">Batterie</text>
                     </g>
 
                     <g id="house-lines"></g>
@@ -770,7 +780,7 @@ class Energiefluss extends IPSModuleStrict
 
         // PV-Karten
         const pvArea = document.getElementById('house-pv-area');
-        pvArea.innerHTML = pvs.map((pv, i) => `
+        if (pvArea) pvArea.innerHTML = pvs.map((pv, i) => `
             <div class="house-pv-card">
                 <div class="name">${pv.name || ('PV ' + (i + 1))}</div>
                 <div class="power" style="color:${AC.solar}">${fmt(pv.value)}</div>
@@ -779,12 +789,16 @@ class Energiefluss extends IPSModuleStrict
         `).join('');
 
         // Haus
-        document.getElementById('house-center-power').textContent = fmt(haus);
+        const houseCenterPower = document.getElementById('house-center-power');
+        if (houseCenterPower) houseCenterPower.textContent = fmt(haus);
 
         // Netz
         const gridColor = grid >= 0 ? '#d9534f' : AC.batt;
-        document.getElementById('house-grid-power').style.color = gridColor;
-        document.getElementById('house-grid-power').textContent = fmt(Math.abs(grid));
+        const houseGridPower = document.getElementById('house-grid-power');
+        if (houseGridPower) {
+            houseGridPower.style.color = gridColor;
+            houseGridPower.textContent = fmt(Math.abs(grid));
+        }
 
         const gridEnergy = [];
         if (d.gridImportEnergy) {
@@ -793,11 +807,12 @@ class Energiefluss extends IPSModuleStrict
         if (d.gridExportEnergy) {
             gridEnergy.push(`<span style="color:${AC.batt}">← ${d.gridExportEnergy}</span>`);
         }
-        document.getElementById('house-grid-energy').innerHTML = gridEnergy.join('<br>');
+        const houseGridEnergy = document.getElementById('house-grid-energy');
+        if (houseGridEnergy) houseGridEnergy.innerHTML = gridEnergy.join('<br>');
 
         // Batterien
         const batteryArea = document.getElementById('house-battery-area');
-        batteryArea.innerHTML = batteries.map((bat, i) => {
+        if (batteryArea) batteryArea.innerHTML = batteries.map((bat, i) => {
             const batColor = (bat.value || 0) >= 0 ? AC.grid : AC.batt;
             return `
                 <div class="house-battery-card" id="house-bat-${i}">
@@ -840,8 +855,8 @@ class Energiefluss extends IPSModuleStrict
 
     function applyDisplayMode(mode) {
         const house = mode === 'house';
-        stage.style.display = house ? 'none' : '';
-        houseStage.style.display = house ? '' : 'none';
+        if (stage) stage.style.display = house ? 'none' : 'block';
+        if (houseStage) houseStage.style.display = house ? 'block' : 'none';
     }
 
     function buildPVs(list) {
@@ -1289,6 +1304,12 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 HTML;
+
+        return str_replace(
+            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__'],
+            [$flowDisplay, $houseDisplay],
+            $html
+        );
     }
 
     private function PushState(): void
