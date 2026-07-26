@@ -651,8 +651,8 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-info-solar {
-        left: 60%;
-        top: 4%;
+        left: 64%;
+        top: 7%;
         border-color: rgba(239,160,32,.36);
     }
 
@@ -664,7 +664,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-battery {
         left: 55%;
-        bottom: 17%;
+        bottom: 9%;
         transform: translateX(-50%);
         border-color: rgba(60,160,255,.36);
     }
@@ -1257,25 +1257,16 @@ class Energiefluss extends IPSModuleStrict
 
         const batteryContainer =
             pfcCard.shadowRoot.getElementById('svg-container-battery');
-
-        // Die Wallbox benutzt jetzt den früheren Grid-Import-Container "primary".
-        const wallboxContainer =
-            pfcCard.shadowRoot.getElementById('svg-container-primary');
-
-        // Der alte EV-Pfad wird nicht mehr verwendet.
-        const oldEvContainer =
+        const evContainer =
             pfcCard.shadowRoot.getElementById('svg-container-ev');
 
         if (batteryContainer) {
             batteryContainer.style.display = hasBattery ? '' : 'none';
         }
 
-        if (wallboxContainer) {
-            wallboxContainer.style.display = hasWallbox ? '' : 'none';
-        }
-
-        if (oldEvContainer) {
-            oldEvContainer.style.display = 'none';
+        if (evContainer) {
+            // Entfernt sowohl die EV-/Wallbox-Grafik als auch deren Flusslinie.
+            evContainer.style.display = hasWallbox ? '' : 'none';
         }
 
         // Die Descriptor-Gruppen befinden sich im SVG-Overlay.
