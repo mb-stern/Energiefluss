@@ -309,14 +309,14 @@ class Energiefluss extends IPSModuleStrict
         position: relative;
     }
     #scale-root {
-        width: 1344px;
+        width: 540px;
         height: 640px;
         position: absolute;
         left: 0;
         top: 0;
         transform-origin: 0 0;
     }
-    #fit { width: 1080px; flex: 0 0 1080px; overflow: hidden; }
+    #fit { width: 540px; flex: 0 0 540px; overflow: hidden; }
     #stage { position: relative; width: 1080px; height: 640px; }
     #svg { position: absolute; inset: 0; z-index: 1; }
     #svg #lines line, #svg #lines path { stroke: var(--w-line); }
@@ -327,7 +327,7 @@ class Energiefluss extends IPSModuleStrict
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 8px; }
     #phases { position: absolute; left: 110px; top: 486px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
-    #wrap { display: flex; gap: 14px; align-items: flex-start; width: 1344px; height: 640px; }
+    #wrap { display: flex; gap: 14px; align-items: flex-start; width: 540px; height: 640px; }
     #cfg { flex: 0 0 250px; width: 250px; border-left: 0.5px solid var(--w-border); padding-left: 14px; box-sizing: border-box; }
     #cfgsec { margin-top: 12px; }
     #statsec + #cfgsec[style=""] { border-top: 0.5px solid var(--w-border); padding-top: 10px; }
@@ -540,6 +540,43 @@ class Energiefluss extends IPSModuleStrict
     buildCfg();
 
     let edgeState = {};
+    let layoutWidth = 540;
+
+    function updateLayout(groupCount, showRightPanel) {
+        const fitEl = document.getElementById('fit');
+        const wrapEl = document.getElementById('wrap');
+        const rootEl = document.getElementById('scale-root');
+
+        // Grundbereich enthält PV, Batterie, Netz und Haus.
+        // Verbraucher werden paarweise in zusätzlichen Spalten angeordnet.
+        const columns = Math.ceil(groupCount / 2);
+
+        // Erste Verbraucher-Spalte sitzt bei x=530. Ohne Verbraucher
+        // brauchen wir diesen bislang reservierten Bereich nicht.
+        let graphWidth = 540;
+        if (columns > 0) {
+            // Genug Platz für Kreis + Beschriftung rechts der letzten Spalte.
+            graphWidth = 650 + ((columns - 1) * COLW);
+        }
+
+        // Maximal die bisherige Zeichenfläche nutzen.
+        graphWidth = Math.min(graphWidth, 1080);
+
+        const rightWidth = showRightPanel ? 264 : 0; // 14px Abstand + 250px Panel
+        layoutWidth = graphWidth + rightWidth;
+
+        fitEl.style.width = graphWidth + 'px';
+        fitEl.style.flexBasis = graphWidth + 'px';
+
+        wrapEl.style.width = layoutWidth + 'px';
+        rootEl.style.width = layoutWidth + 'px';
+
+        // Die rechte Spalte soll bei Nichtbenutzung auch keinen Flex-Abstand erzeugen.
+        wrapEl.style.gap = showRightPanel ? '14px' : '0px';
+
+        fit();
+    }
+
     function setState(d) {
         const l1 = d.l1 || 0, l2 = d.l2 || 0, l3 = d.l3 || 0;
         const grid = (d.grid !== undefined) ? d.grid : (l1 + l2 + l3);
@@ -605,7 +642,11 @@ class Energiefluss extends IPSModuleStrict
             }));
             document.getElementById('cfg-out').textContent = fmt(battOut);
         }
-        document.getElementById('cfg').style.display = (stats.length || hasCfg) ? '' : 'none';
+        const showRightPanel = !!(stats.length || hasCfg);
+        document.getElementById('cfg').style.display = showRightPanel ? '' : 'none';
+
+        // Breite nur für tatsächlich sichtbare Inhalte reservieren.
+        updateLayout(groups.length, showRightPanel);
     }
 
     // Pflicht-Funktion: empfängt Nachrichten vom Modul (UpdateVisualizationValue)
@@ -636,7 +677,7 @@ class Energiefluss extends IPSModuleStrict
         const root = document.getElementById('scale-root');
         if (!host || !root) return;
 
-        const baseWidth = 1344;
+        const baseWidth = layoutWidth;
         const baseHeight = 640;
 
         const availableWidth = host.clientWidth;
