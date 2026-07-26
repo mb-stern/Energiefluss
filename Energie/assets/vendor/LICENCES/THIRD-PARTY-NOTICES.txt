@@ -1,0 +1,18 @@
+Third-Party Components
+
+This directory contains third-party open-source software used by the
+Energiefluss module.
+
+1. power-flow-card
+   Author: Florian Stamer
+   Project: LordGuenni/power-flow-card
+   License: MIT
+   License text: power-flow-card-MIT.txt
+
+2. Lit
+   Copyright (c) 2017 Google LLC
+   License: BSD 3-Clause
+   License text: lit-BSD-3-Clause.txt
+
+The license of the Energiefluss module itself remains separate and is not
+replaced by these third-party licenses.
