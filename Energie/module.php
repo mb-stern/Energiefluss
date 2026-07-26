@@ -77,6 +77,10 @@ class Energiefluss extends IPSModuleStrict
         // flow = klassische Energieflussansicht, house = Hausansicht.
         $this->RegisterPropertyString('DisplayMode', 'flow');
 
+        // Wichtig für requestAction() aus der HTML-SDK-Kachel.
+        // Entspricht dem funktionierenden Muster aus dem Sankey-Modul.
+        $this->EnableAction('DisplayMode');
+
         $this->SetVisualizationType(1);
     }
 
@@ -323,23 +327,14 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        if ($Ident === 'DisplayModeRuntime') {
+        if ($Ident === 'DisplayMode') {
             $mode = (string) $Value;
             if (!in_array($mode, ['flow', 'house'], true)) {
                 return;
             }
 
-            // HTML-SDK: geöffnete Darstellung direkt aktualisieren.
-            // Kein ApplyChanges und kein Neuaufbau der Instanz nötig.
-            $this->UpdateVisualizationValue(
-                json_encode(
-                    [
-                        'command' => 'displayMode',
-                        'mode'    => $mode,
-                    ],
-                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                )
-            );
+            IPS_SetProperty($this->InstanceID, 'DisplayMode', $mode);
+            IPS_ApplyChanges($this->InstanceID);
             return;
         }
 
@@ -468,28 +463,36 @@ class Energiefluss extends IPSModuleStrict
         position: relative;
     }
 
-    /* Browser-Umschaltung: natives Select, damit dieselbe onchange/requestAction-
-       Kette wie bei den bestehenden Eingabefeldern verwendet wird. */
+    /* Browser-Umschaltung */
     #view-switch {
         position: absolute;
         top: 10px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 10000;
-        pointer-events: auto;
+        display: flex;
+        gap: 4px;
+        padding: 4px;
+        border-radius: 9px;
+        background: var(--w-surface);
+        border: 0.5px solid var(--w-border);
+        box-shadow: 0 2px 10px rgba(0,0,0,.12);
     }
 
-    #view-mode {
-        min-width: 145px;
-        padding: 6px 28px 6px 10px;
-        border: 1px solid var(--w-border);
-        border-radius: 7px;
-        background: var(--w-surface);
-        color: var(--w-text);
+    .view-switch-btn {
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: var(--w-text2);
+        padding: 6px 11px;
         font: inherit;
         font-size: 12px;
         cursor: pointer;
-        pointer-events: auto;
+    }
+
+    .view-switch-btn.active {
+        background: var(--w-text);
+        color: var(--w-surface);
     }
 
     /* Klassische Ansicht */
@@ -766,11 +769,8 @@ class Energiefluss extends IPSModuleStrict
 
 <div id="eflow">
     <div id="view-switch">
-        <select id="view-mode"
-                onchange="requestAction('DisplayModeRuntime', this.value)">
-            <option value="flow">Energiefluss</option>
-            <option value="house">Hausansicht</option>
-        </select>
+        <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
+        <button id="view-house" class="view-switch-btn" type="button">Haus</button>
     </div>
 
     <div id="scale-host">
@@ -1601,18 +1601,24 @@ class Energiefluss extends IPSModuleStrict
         updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
-    let browserDisplayMode = null;
-
     function applyDisplayMode(mode) {
-        const normalized = mode === 'house' ? 'house' : 'flow';
-        const house = normalized === 'house';
+        const house = mode === 'house';
 
-        if (stage) stage.style.display = house ? 'none' : 'block';
-        if (houseStage) houseStage.style.display = house ? 'block' : 'none';
+        if (stage) {
+            stage.style.display = house ? 'none' : 'block';
+        }
+        if (houseStage) {
+            houseStage.style.display = house ? 'block' : 'none';
+        }
 
-        const viewMode = document.getElementById('view-mode');
-        if (viewMode && viewMode.value !== normalized) {
-            viewMode.value = normalized;
+        const flowButton = document.getElementById('view-flow');
+        const houseButton = document.getElementById('view-house');
+
+        if (flowButton) {
+            flowButton.classList.toggle('active', !house);
+        }
+        if (houseButton) {
+            houseButton.classList.toggle('active', house);
         }
     }
 
@@ -1812,11 +1818,7 @@ class Energiefluss extends IPSModuleStrict
 
         // Hausansicht V2.
         buildHouseView(d, grid, haus, pvs, batteries, wallbox);
-
-        if (browserDisplayMode === null) {
-            browserDisplayMode = d.displayMode === 'house' ? 'house' : 'flow';
-        }
-        applyDisplayMode(browserDisplayMode);
+        applyDisplayMode(d.displayMode || 'flow');
 
         // Statistik.
         const stats = d.stats || [];
@@ -1850,7 +1852,7 @@ class Energiefluss extends IPSModuleStrict
             pvs.length,
             batteries.length,
             showRightPanel,
-            browserDisplayMode || (d.displayMode === 'house' ? 'house' : 'flow')
+            (d.displayMode || 'flow') === 'house' ? 'house' : 'flow'
         );
     }
 
@@ -1862,31 +1864,32 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        if (d && d.command === 'displayMode') {
-            browserDisplayMode = d.mode === 'house' ? 'house' : 'flow';
-            applyDisplayMode(browserDisplayMode);
-
-            // Hausansicht braucht 900 px, Energiefluss 540 px.
-            const statsVisible = document.getElementById('statsec')?.style.display !== 'none';
-            const cfgVisible = document.getElementById('cfgsec')?.style.display !== 'none';
-            const showRightPanel = !!(statsVisible || cfgVisible);
-
-            const groupCount = document.querySelectorAll('.grp-node').length;
-            const pvCount = document.querySelectorAll('.pv-node').length;
-            const batteryCount = document.querySelectorAll('.battery-node').length;
-
-            updateLayout(
-                groupCount,
-                pvCount,
-                batteryCount,
-                showRightPanel,
-                browserDisplayMode
-            );
-            return;
-        }
-
         setState(d);
     }
+
+    // ---------- Browser-Umschaltung ----------
+    // Genau das Muster aus dem funktionierenden Sankey-Modul:
+    // addEventListener -> requestAction -> RequestAction/ApplyChanges.
+    const viewFlowButton = document.getElementById('view-flow');
+    const viewHouseButton = document.getElementById('view-house');
+
+    if (viewFlowButton) {
+        viewFlowButton.addEventListener('click', function () {
+            requestAction('DisplayMode', 'flow');
+        });
+    }
+
+    if (viewHouseButton) {
+        viewHouseButton.addEventListener('click', function () {
+            requestAction('DisplayMode', 'house');
+        });
+    }
+
+    // Ebenfalls wie im Sankey-Modul: SDK-Nachrichten explizit an
+    // handleMessage() weiterreichen.
+    window.addEventListener('message', function (event) {
+        handleMessage(event.data);
+    });
 
     // ---------- Animation ----------
     let last = performance.now();
