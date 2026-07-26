@@ -200,8 +200,8 @@ class Energiefluss extends IPSModuleStrict
             'actions' => [
                 [
                     'type'    => 'Button',
-                    'caption' => 'Werte jetzt aktualisieren',
-                    'onClick' => 'ENERGIE_Refresh($id);',
+                    'caption' => 'HTML neu laden',
+                    'onClick' => 'ENERGIE_ReloadHtml($id);',
                 ],
             ],
             'status' => [],
@@ -258,10 +258,16 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-    // Button im Konfigurationsformular
-    public function Refresh(): void
+    // Lädt nur den HTML-Kontext der geöffneten Kachel neu.
+    // Die komplette Symcon-Seite muss dafür nicht neu geladen werden.
+    public function RLoadHtml(): void
     {
-        $this->PushState();
+        $this->UpdateVisualizationValue(
+            json_encode(
+                ['command' => 'reloadHtml'],
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            )
+        );
     }
 
     public function GetVisualizationTile(): string
@@ -652,6 +658,12 @@ class Energiefluss extends IPSModuleStrict
     // Pflicht-Funktion: empfängt Nachrichten vom Modul (UpdateVisualizationValue)
     function handleMessage(data) {
         const d = (typeof data === 'string') ? JSON.parse(data) : data;
+
+        if (d && d.command === 'reloadHtml') {
+            window.location.reload();
+            return;
+        }
+
         setState(d);
     }
 
@@ -690,7 +702,11 @@ class Energiefluss extends IPSModuleStrict
         // horizontal oder vertikal abgeschnitten wird.
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
-        const scale = Math.min(1, scaleX, scaleY);
+
+        // Keine Begrenzung mehr auf 100 %. Bei ausreichend großer Kachel
+        // wird die komplette Darstellung auch über die Originalgröße hinaus
+        // proportional vergrößert.
+        const scale = Math.min(scaleX, scaleY);
 
         root.style.transform = `scale(${scale})`;
 
