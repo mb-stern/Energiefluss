@@ -292,9 +292,11 @@ class Energiefluss extends IPSModuleStrict
         --w-bg: #1b1b19; --w-surface: #272725; --w-text: #f1f1ee;
         --w-text2: #9a9a93; --w-line: #3b3b38; --w-border: #343431;
     }
-    #eflow { border-radius: 12px; padding: 10px; background: var(--w-bg); }
-    #fit { width: 100%; overflow: hidden; }
-    #stage { position: relative; width: 1080px; height: 640px; transform-origin: 0 0; }
+    #eflow { border-radius: 12px; padding: 10px; background: var(--w-bg); overflow: hidden; }
+    #scale-host { width: 100%; overflow: hidden; }
+    #scale-root { width: 1344px; height: 640px; transform-origin: 0 0; }
+    #fit { width: 1080px; flex: 0 0 1080px; overflow: hidden; }
+    #stage { position: relative; width: 1080px; height: 640px; }
     #svg { position: absolute; inset: 0; z-index: 1; }
     #svg #lines line, #svg #lines path { stroke: var(--w-line); }
     .node { position: absolute; transform: translate(-50%, -50%); border-radius: 50%; background: var(--w-surface); display: flex; flex-direction: column; align-items: center; justify-content: center; z-index: 2; text-align: center; }
@@ -304,9 +306,8 @@ class Energiefluss extends IPSModuleStrict
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 8px; }
     #phases { position: absolute; left: 110px; top: 486px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
-    #wrap { display: flex; gap: 14px; align-items: flex-start; }
-    #fit { flex: 1 1 auto; min-width: 0; }
-    #cfg { flex: 0 0 250px; width: 250px; border-left: 0.5px solid var(--w-border); padding-left: 14px; }
+    #wrap { display: flex; gap: 14px; align-items: flex-start; width: 1344px; height: 640px; }
+    #cfg { flex: 0 0 250px; width: 250px; border-left: 0.5px solid var(--w-border); padding-left: 14px; box-sizing: border-box; }
     #cfgsec { margin-top: 12px; }
     #statsec + #cfgsec[style=""] { border-top: 0.5px solid var(--w-border); padding-top: 10px; }
     .cfg-h { font-size: 14px; font-weight: 500; color: var(--w-text); margin-bottom: 10px; }
@@ -322,8 +323,10 @@ class Energiefluss extends IPSModuleStrict
 <script src="/icons.js"></script>
 
 <div id="eflow">
-    <div id="wrap">
-        <div id="fit">
+    <div id="scale-host">
+        <div id="scale-root">
+            <div id="wrap">
+                <div id="fit">
             <div id="stage">
                 <svg id="svg" width="1080" height="640" viewBox="0 0 1080 640" aria-hidden="true">
                     <g id="lines" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></g>
@@ -344,6 +347,8 @@ class Energiefluss extends IPSModuleStrict
                     <div class="lv"><span>Regelziel</span><b>Nulleinspeisung</b></div>
                 </div>
                 <div id="cfg-body"></div>
+            </div>
+                </div>
             </div>
         </div>
     </div>
@@ -606,12 +611,23 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function fit() {
-        const f = document.getElementById('fit');
-        const k = f.clientWidth / 1080;
-        stage.style.transform = 'scale(' + k + ')';
-        f.style.height = (640 * k) + 'px';
+        const host = document.getElementById('scale-host');
+        const root = document.getElementById('scale-root');
+        if (!host || !root) return;
+
+        const baseWidth = 1344;
+        const baseHeight = 640;
+        const availableWidth = host.clientWidth;
+
+        // Nicht über Originalgröße hinaus vergrößern, aber bei kleineren
+        // Kacheln die komplette Darstellung proportional skalieren.
+        const scale = Math.min(1, availableWidth / baseWidth);
+
+        root.style.transform = `scale(${scale})`;
+        host.style.height = `${baseHeight * scale}px`;
     }
-    new ResizeObserver(fit).observe(document.getElementById('fit'));
+
+    new ResizeObserver(fit).observe(document.getElementById('scale-host'));
     window.addEventListener('resize', fit);
     fit();
     requestAnimationFrame(frame);
