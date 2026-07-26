@@ -34,7 +34,8 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('L2', 0);
         $this->RegisterPropertyInteger('L3', 0);
         $this->RegisterPropertyBoolean('InvertGridPower', false);
-        $this->RegisterPropertyInteger('GridEnergyTotal', 0);
+        $this->RegisterPropertyInteger('GridImportEnergy', 0);
+        $this->RegisterPropertyInteger('GridExportEnergy', 0);
         $this->RegisterPropertyInteger('SettingsCategory', 0);
         $this->RegisterPropertyString('Groups', '[]');
         $this->RegisterPropertyInteger('DayProduction', 0);
@@ -118,7 +119,8 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'L2', 'caption' => 'L2 Leistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'L3', 'caption' => 'L3 Leistung (W)'],
                         ['type' => 'CheckBox', 'name' => 'InvertGridPower', 'caption' => 'Vorzeichen der Netzleistung umkehren'],
-                        ['type' => 'SelectVariable', 'name' => 'GridEnergyTotal', 'caption' => 'Netzenergie gesamt (kWh)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridImportEnergy', 'caption' => 'Netzbezug gesamt (kWh)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridExportEnergy', 'caption' => 'Einspeisung gesamt (kWh)'],
                     ],
                 ],
                 [
@@ -301,7 +303,7 @@ class Energiefluss extends IPSModuleStrict
     .lbl { position: absolute; left: 50%; transform: translateX(-50%); color: var(--w-text2); white-space: nowrap; }
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 8px; }
-    #phases { position: absolute; left: 110px; top: 466px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
+    #phases { position: absolute; left: 110px; top: 486px; transform: translateX(-50%); font-size: 13px; color: var(--w-text2); white-space: nowrap; }
     #wrap { display: flex; gap: 14px; align-items: flex-start; }
     #fit { flex: 1 1 auto; min-width: 0; }
     #cfg { flex: 0 0 250px; width: 250px; border-left: 0.5px solid var(--w-border); padding-left: 14px; }
@@ -535,11 +537,14 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('body-batt').innerHTML =
             `<div class="sub" style="font-size:11px">${Math.round(d.soc || 0)}%</div>` +
             `<div class="val" style="color:${AC.batt}">${fmt(battOut)}</div>`;
-        document.getElementById('body-netz').innerHTML = (grid >= 0)
-            ? `<div class="val" style="color:${AC.grid}">&larr; ${fmt(imp)}</div>` +
-              (d.gridEnergy ? `<div class="sub" style="font-size:10px; line-height:1.25;">${d.gridEnergy}</div>` : '')
-            : `<div class="val" style="color:${AC.batt}">&rarr; ${fmt(exp)}</div>` +
-              (d.gridEnergy ? `<div class="sub" style="font-size:10px; line-height:1.25;">${d.gridEnergy}</div>` : '');
+        document.getElementById('body-netz').innerHTML =
+            `<div class="val" style="color:${grid >= 0 ? AC.grid : AC.batt}">${fmt(Math.abs(grid))}</div>` +
+            (d.gridImportEnergy
+                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.grid}">&larr; ${d.gridImportEnergy}</div>`
+                : '') +
+            (d.gridExportEnergy
+                ? `<div class="sub" style="font-size:10px; line-height:1.25;color:${AC.batt}">&rarr; ${d.gridExportEnergy}</div>`
+                : '');
         ph.innerHTML = `L1 ${Math.round(l1)} &middot; L2 ${Math.round(l2)} &middot; L3 ${Math.round(l3)} W`;
         document.getElementById('body-haus').innerHTML = `<div class="val" style="font-size:17px">${fmt(haus)}</div>`;
 
@@ -659,7 +664,8 @@ HTML;
             'L1',
             'L2',
             'L3',
-            'GridEnergyTotal',
+            'GridImportEnergy',
+            'GridExportEnergy',
             'DayProduction',
             'WeekProduction',
             'DayGridImport',
@@ -784,9 +790,10 @@ HTML;
             'l1'        => $l1,
             'l2'        => $l2,
             'l3'        => $l3,
-            'grid'      => $grid,
-            'gridEnergy'=> $this->ReadVarFormatted('GridEnergyTotal'),
-            'groups'    => $groups,
+            'grid'             => $grid,
+            'gridImportEnergy' => $this->ReadVarFormatted('GridImportEnergy'),
+            'gridExportEnergy' => $this->ReadVarFormatted('GridExportEnergy'),
+            'groups'           => $groups,
             'stats'     => $stats,
             'hasConfig' => $config !== null,
             'config'    => $config ?? (object) [],
