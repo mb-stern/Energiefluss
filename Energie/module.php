@@ -11,6 +11,8 @@
  * Die Home-Assistant-Datenanbindung wird hier nicht verwendet.
  * Stattdessen erzeugt das IP-Symcon-Modul ein kompatibles State-Objekt
  * aus seinem bestehenden BuildPayload().
+ * power-flow-card.js und Lit werden beim ersten ApplyChanges() lokal
+ * unter /user/Energiefluss/vendor/ abgelegt.
  */
 
 declare(strict_types=1);
@@ -82,6 +84,8 @@ class Energiefluss extends IPSModuleStrict
         parent::ApplyChanges();
 
         try {
+            $this->EnsureVisualizationAssets();
+
             foreach ($this->GetMessageList() as $senderID => $messages) {
                 foreach ($messages as $message) {
                     if ($message === VM_UPDATE) {
@@ -603,39 +607,11 @@ class Energiefluss extends IPSModuleStrict
         box-sizing: border-box;
     }
 
-    #pfc-pv-details {
-        position: absolute;
-        left: 12px;
-        bottom: 12px;
-        z-index: 8;
-        display: flex;
-        gap: 6px;
-        flex-wrap: wrap;
-        max-width: 70%;
-        pointer-events: none;
-    }
-
-    .pfc-pv-chip {
-        padding: 5px 8px;
-        border-radius: 8px;
-        border: 1px solid rgba(239,160,32,.35);
-        background: rgba(8,13,20,.80);
-        color: #e5e7eb;
-        font-size: 9px;
-        line-height: 1.25;
-        box-shadow: 0 4px 14px rgba(0,0,0,.18);
-    }
-
-    .pfc-pv-chip b {
-        color: #EFA020;
-        font-size: 10px;
-        font-weight: 700;
-    }
 
 </style>
 <script src="/icons.js"></script>
 <script type="module"
-        src="https://cdn.jsdelivr.net/gh/LordGuenni/power-flow-card@master/power-flow-card.js">
+        src="/user/Energiefluss/vendor/power-flow-card.js">
 </script>
 
 <div id="eflow">
@@ -658,7 +634,6 @@ class Energiefluss extends IPSModuleStrict
                         <div id="pfc-host"></div>
                         <div id="pfc-loading">Power Flow Card wird geladen …</div>
                         <div id="pfc-error"></div>
-                        <div id="pfc-pv-details"></div>
                     </div>
                 </div>
 
@@ -994,7 +969,6 @@ class Energiefluss extends IPSModuleStrict
     const pfcHost = document.getElementById('pfc-host');
     const pfcLoading = document.getElementById('pfc-loading');
     const pfcError = document.getElementById('pfc-error');
-    const pfcPvDetails = document.getElementById('pfc-pv-details');
 
     let pfcCard = null;
     let pfcPendingData = null;
@@ -1134,30 +1108,38 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        const batteryContainer = pfcCard.shadowRoot.getElementById('svg-container-battery');
-        const evContainer = pfcCard.shadowRoot.getElementById('svg-container-ev');
+        const hasBattery = batteries.length > 0;
+        const hasWallbox = !!d.hasWallbox;
+
+        const batteryContainer =
+            pfcCard.shadowRoot.getElementById('svg-container-battery');
+        const evContainer =
+            pfcCard.shadowRoot.getElementById('svg-container-ev');
 
         if (batteryContainer) {
-            batteryContainer.style.display = batteries.length ? '' : 'none';
+            batteryContainer.style.display = hasBattery ? '' : 'none';
         }
 
         if (evContainer) {
-            evContainer.style.display = d.hasWallbox ? '' : 'none';
+            // Entfernt sowohl die EV-/Wallbox-Grafik als auch deren Flusslinie.
+            evContainer.style.display = hasWallbox ? '' : 'none';
+        }
+
+        // Die Descriptor-Gruppen befinden sich im SVG-Overlay.
+        const batteryDescriptor =
+            pfcCard.shadowRoot.querySelector('.descriptor-battery');
+        const evDescriptor =
+            pfcCard.shadowRoot.querySelector('.descriptor-ev');
+
+        if (batteryDescriptor) {
+            batteryDescriptor.style.display = hasBattery ? '' : 'none';
+        }
+
+        if (evDescriptor) {
+            evDescriptor.style.display = hasWallbox ? '' : 'none';
         }
     }
 
-    function updatePfcPvDetails(pvs) {
-        if (!pfcPvDetails) {
-            return;
-        }
-
-        pfcPvDetails.innerHTML = pvs.map((pv, i) => {
-            const name = pv.name || ('PV ' + (i + 1));
-            const energy = pv.energy ? `<div>${pv.energy}</div>` : '';
-
-            return `<div class="pfc-pv-chip"><b>${name}: ${fmt(pv.value || 0)}</b>${energy}</div>`;
-        }).join('');
-    }
 
     async function ensurePowerFlowCard() {
         if (pfcCard) {
@@ -1225,7 +1207,7 @@ class Energiefluss extends IPSModuleStrict
                     pfcError.style.display = 'flex';
                     pfcError.textContent =
                         'Power Flow Card konnte nicht geladen werden. ' +
-                        'Die Visualisierung benötigt einmalig Zugriff auf cdn.jsdelivr.net und unpkg.com.';
+                        'Prüfe das Symcon-Log. Die lokalen Visualisierungsdateien konnten möglicherweise nicht initialisiert werden.';
                 }
 
                 throw err;
@@ -1278,7 +1260,6 @@ class Energiefluss extends IPSModuleStrict
 
         installPfcShadowOverrides(pfcCard);
         applyPfcOptionalLayers(d, batteries, wallbox);
-        updatePfcPvDetails(pvs);
 
         // Upstream updateFlow() wird bereits vom hass-Setter ausgelöst.
         // Für den Fall eines noch laufenden Initialisierungszyklus nochmals
@@ -1648,6 +1629,137 @@ HTML;
             $html
         );
     }
+
+    private function EnsureVisualizationAssets(): void
+    {
+        // Feste Quellen: Es wird NICHT bei jedem Start die neueste Version geladen.
+        // Die Dateien werden nur beim ersten Fehlen heruntergeladen.
+        $powerFlowUrl =
+            'https://raw.githubusercontent.com/LordGuenni/power-flow-card/master/power-flow-card.js';
+
+        // Offizielles, bereits gebündeltes Lit-Core-Modul ohne weitere Abhängigkeiten.
+        $litUrl =
+            'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js';
+
+        $targetDir = IPS_GetKernelDir()
+            . 'user'
+            . DIRECTORY_SEPARATOR
+            . 'Energiefluss'
+            . DIRECTORY_SEPARATOR
+            . 'vendor';
+
+        if (!is_dir($targetDir)) {
+            if (!@mkdir($targetDir, 0777, true) && !is_dir($targetDir)) {
+                $this->LogMessage(
+                    'Hausansicht: Vendor-Verzeichnis konnte nicht erstellt werden: ' . $targetDir,
+                    KL_ERROR
+                );
+                return;
+            }
+        }
+
+        $powerFlowTarget =
+            $targetDir . DIRECTORY_SEPARATOR . 'power-flow-card.js';
+        $litTarget =
+            $targetDir . DIRECTORY_SEPARATOR . 'lit-core.min.js';
+
+        // 1) Lit lokal bereitstellen.
+        if (!is_file($litTarget) || @filesize($litTarget) < 1000) {
+            $lit = $this->DownloadVisualizationAsset($litUrl);
+
+            if ($lit === null) {
+                $this->LogMessage(
+                    'Hausansicht: Lit konnte nicht heruntergeladen werden.',
+                    KL_ERROR
+                );
+                return;
+            }
+
+            if (@file_put_contents($litTarget, $lit, LOCK_EX) === false) {
+                $this->LogMessage(
+                    'Hausansicht: Lit konnte nicht gespeichert werden: ' . $litTarget,
+                    KL_ERROR
+                );
+                return;
+            }
+        }
+
+        // 2) Power-Flow-Card herunterladen und den Online-Lit-Import
+        //    dauerhaft auf unsere lokale Datei umstellen.
+        if (!is_file($powerFlowTarget) || @filesize($powerFlowTarget) < 1000) {
+            $powerFlow = $this->DownloadVisualizationAsset($powerFlowUrl);
+
+            if ($powerFlow === null) {
+                $this->LogMessage(
+                    'Hausansicht: power-flow-card.js konnte nicht heruntergeladen werden.',
+                    KL_ERROR
+                );
+                return;
+            }
+
+            $powerFlow = str_replace(
+                [
+                    'https://unpkg.com/lit?module',
+                    'https://cdn.jsdelivr.net/gh/lit/dist@3/core/lit-core.min.js',
+                ],
+                '/user/Energiefluss/vendor/lit-core.min.js',
+                $powerFlow
+            );
+
+            if (
+                !str_contains(
+                    $powerFlow,
+                    '/user/Energiefluss/vendor/lit-core.min.js'
+                )
+            ) {
+                $this->LogMessage(
+                    'Hausansicht: Lit-Import in power-flow-card.js konnte nicht lokalisiert werden.',
+                    KL_ERROR
+                );
+                return;
+            }
+
+            if (@file_put_contents($powerFlowTarget, $powerFlow, LOCK_EX) === false) {
+                $this->LogMessage(
+                    'Hausansicht: power-flow-card.js konnte nicht gespeichert werden: '
+                    . $powerFlowTarget,
+                    KL_ERROR
+                );
+                return;
+            }
+        }
+    }
+
+    private function DownloadVisualizationAsset(string $url): ?string
+    {
+        // Kurzer Timeout, damit ein fehlender Internetzugang ApplyChanges()
+        // nicht unnötig lange blockiert.
+        $context = stream_context_create([
+            'http' => [
+                'method'          => 'GET',
+                'timeout'         => 15,
+                'follow_location' => 1,
+                'max_redirects'   => 5,
+                'header'          => [
+                    'User-Agent: IP-Symcon Energiefluss Module',
+                    'Accept: */*',
+                ],
+            ],
+            'ssl' => [
+                'verify_peer'      => true,
+                'verify_peer_name' => true,
+            ],
+        ]);
+
+        $data = @file_get_contents($url, false, $context);
+
+        if ($data === false || strlen($data) < 1000) {
+            return null;
+        }
+
+        return $data;
+    }
+
 
     private function PushState(): void
     {
