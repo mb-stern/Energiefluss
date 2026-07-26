@@ -2,8 +2,6 @@
 
 class Energiefluss extends IPSModuleStrict
 {
-    // Idents der Einstellungs-Variablen, die das PID-Skript in der Kategorie
-    // "SolarFlow Einstellungen" anlegt. Schlüssel = Feld-ID in der Kachel.
     private const CONFIG_MAP = [
         'Kp'               => 'SF_Kp',
         'Ki'               => 'SF_Ki',
