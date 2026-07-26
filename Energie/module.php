@@ -470,33 +470,45 @@ class Energiefluss extends IPSModuleStrict
 
     #view-switch {
         position: absolute;
-        top: 8px;
+        top: 6px;
         left: 50%;
         transform: translateX(-50%);
         z-index: 99999;
-        display: flex;
-        gap: 4px;
-        padding: 4px;
-        border-radius: 8px;
+        display: inline-flex;
+        gap: 2px;
+        padding: 2px;
+        border-radius: 6px;
         background: var(--w-surface);
         border: 1px solid var(--w-border);
-        box-shadow: 0 2px 10px rgba(0,0,0,.15);
+        box-shadow: 0 1px 6px rgba(0,0,0,.12);
+        pointer-events: auto;
     }
 
     .view-switch-btn {
+        display: block;
+        box-sizing: border-box;
+        min-width: 0;
         border: 0;
-        border-radius: 6px;
-        padding: 6px 10px;
+        border-radius: 4px;
+        padding: 4px 7px;
+        margin: 0;
         background: transparent;
         color: var(--w-text2);
         font: inherit;
-        font-size: 12px;
+        font-size: 11px;
+        line-height: 1.15;
         cursor: pointer;
+        pointer-events: auto;
+        touch-action: manipulation;
     }
 
     .view-switch-btn.active {
         background: var(--w-text);
         color: var(--w-surface);
+    }
+
+    .view-switch-btn * {
+        pointer-events: none;
     }
 
     /* Klassische Ansicht */
