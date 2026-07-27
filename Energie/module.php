@@ -999,14 +999,25 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
-    function buildWallbox(wallbox, hasWallbox) {
+    function buildWallbox(wallbox, hasWallbox, groupCount) {
         if (!hasWallbox) {
             return;
         }
 
-        // Direkt rechts vom Haus. Die Leitung wird wie alle anderen
-        // klassischen Flüsse über edgeState / animateEdges animiert.
-        const p = { x: 500, y: 350, r: 34 };
+        // Wallbox immer ans Ende der Verbraucherlinie setzen.
+        // Ohne Verbraucher direkt rechts vom Haus; mit Verbrauchern
+        // wird die Linie bis hinter die letzte Verbraucherspalte verlängert.
+        const columns = Math.ceil(groupCount / 2);
+        const lastConsumerX = columns > 0
+            ? (COL0 + ((columns - 1) * COLW))
+            : 412;
+
+        const lineStartX = columns > 0 ? lastConsumerX : 412;
+        const p = {
+            x: lineStartX + 120,
+            y: 350,
+            r: 34
+        };
 
         addNode(
             'wallbox',
@@ -1033,10 +1044,9 @@ class Energiefluss extends IPSModuleStrict
             body.innerHTML = inner;
         }
 
-        // Haus -> Wallbox
         addEdge(
             'wallbox',
-            `M412,350 L${p.x - p.r},350`,
+            `M${lineStartX},350 L${p.x - p.r},350`,
             AC.wallbox
         );
     }
@@ -1652,7 +1662,7 @@ class Energiefluss extends IPSModuleStrict
     // ---------- Layout ----------
     let layoutWidth = 540;
 
-    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
+    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow', hasWallbox = false) {
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
@@ -1664,6 +1674,13 @@ class Energiefluss extends IPSModuleStrict
 
             if (columns > 0) {
                 graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
+            }
+
+            if (hasWallbox) {
+                const wallboxX = columns > 0
+                    ? (COL0 + ((columns - 1) * COLW) + 120)
+                    : 532;
+                graphWidth = Math.max(graphWidth, wallboxX + 60);
             }
 
             graphWidth = Math.min(graphWidth, 1080);
@@ -1703,8 +1720,8 @@ class Energiefluss extends IPSModuleStrict
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
-        buildWallbox(wallbox, !!d.hasWallbox);
         buildGroups(groups);
+        buildWallbox(wallbox, !!d.hasWallbox, groups.length);
 
         const gridColor = grid >= 0 ? AC.import : AC.export;
         const gridNode = document.getElementById('n-netz');
@@ -1816,7 +1833,8 @@ class Energiefluss extends IPSModuleStrict
             pvs.length,
             batteries.length,
             showRightPanel,
-            (d.displayMode || 'flow') === 'house' ? 'house' : 'flow'
+            (d.displayMode || 'flow') === 'house' ? 'house' : 'flow',
+            !!d.hasWallbox
         );
     }
 
