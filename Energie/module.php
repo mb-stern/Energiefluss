@@ -1018,11 +1018,11 @@ class Energiefluss extends IPSModuleStrict
             ? (COL0 + ((columns - 1) * COLW))
             : 412;
 
-        const lineStartX = columns > 0 ? lastConsumerX : 412;
+        const lineStartX = 412;
         const p = {
-            x: lineStartX + 120,
+            x: (columns > 0 ? lastConsumerX : 412) + 120,
             y: 350,
-            r: 34
+            r: 42
         };
 
         addNode(
@@ -1034,7 +1034,8 @@ class Energiefluss extends IPSModuleStrict
                 ic: 'charging-station',
                 icc: AC.wallbox,
                 lab: wallbox.name || 'Wallbox',
-                lp: 'bot'
+                lp: 'bot',
+                ring: true
             },
             'wallbox-node'
         );
@@ -1103,6 +1104,37 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+    function wallboxSocPercent(wallbox) {
+        if (!wallbox || !wallbox.hasSoc || !wallbox.socText) {
+            return null;
+        }
+
+        const raw = String(wallbox.socText).replace(',', '.');
+
+        // Für den Ring nur eine Prozentzahl bestimmen.
+        // Die Textanzeige selbst bleibt unverändert.
+        const percentMatch = raw.match(/([-+]?\d+(?:\.\d+)?)\s*%/);
+        if (percentMatch) {
+            return Math.max(0, Math.min(100, Number(percentMatch[1])));
+        }
+
+        const numbers = raw.match(/[-+]?\d+(?:\.\d+)?/g);
+        if (!numbers || !numbers.length) {
+            return null;
+        }
+
+        let value = Number(numbers[numbers.length - 1]);
+        if (!Number.isFinite(value)) {
+            return null;
+        }
+
+        if (value > 0 && value < 1) {
+            value *= 100;
+        }
+
+        return Math.max(0, Math.min(100, value));
+    }
+
     function arc(cx, cy, r, col, frac, off) {
         const C = 2 * Math.PI * r;
         const seg = Math.max(frac * C, 0);
@@ -1131,7 +1163,7 @@ class Energiefluss extends IPSModuleStrict
         ringG.appendChild(c);
     }
 
-    function updateRings(segs, batteries) {
+    function updateRings(segs, batteries, wallbox, hasWallbox, groupCount) {
         ringG.innerHTML = '';
 
         track(360, 350, 60);
@@ -1151,6 +1183,22 @@ class Energiefluss extends IPSModuleStrict
             track(p.x, p.y, 48);
             arc(p.x, p.y, 48, batColor, Math.max(0, Math.min(100, bat.soc || 0)) / 100, 0);
         });
+
+        if (hasWallbox) {
+            const columns = Math.ceil(groupCount / 2);
+            const lastConsumerX = columns > 0
+                ? (COL0 + ((columns - 1) * COLW))
+                : 412;
+
+            const wallboxX = lastConsumerX + 120;
+            const soc = wallboxSocPercent(wallbox);
+
+            track(wallboxX, 350, 48);
+
+            if (soc !== null) {
+                arc(wallboxX, 350, 48, AC.wallbox, soc / 100, 0);
+            }
+        }
     }
 
     // ---------- Hausansicht: Adapter für LordGuenni/power-flow-card ----------
@@ -1777,7 +1825,10 @@ class Energiefluss extends IPSModuleStrict
                 [AC.discharge, Math.max(batteryTotal, 0)],
                 [AC.import, imp]
             ],
-            batteries
+            batteries,
+            wallbox,
+            !!d.hasWallbox,
+            groups.length
         );
 
         edgeState = {
