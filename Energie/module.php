@@ -437,18 +437,31 @@ class Energiefluss extends IPSModuleStrict
         width: 100%;
         height: 100vh;
         box-sizing: border-box;
-        position: relative;
         border-radius: 12px;
-        padding: 10px;
+        padding: 8px 10px 10px;
         background: transparent;
         overflow: hidden;
+
+        /* Bedienung und Grafik sind zwei getrennte Layoutbereiche.
+           Damit kann die Grafik den Umschalter nicht überdecken. */
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
     }
+
+    #view-switch-bar {
+        flex: 0 0 auto;
+        display: flex;
+        justify-content: center;
+        align-items: center;
+        min-height: 30px;
+        margin-bottom: 4px;
+        position: relative;
+        z-index: 1000;
+        pointer-events: auto;
+    }
+
     #view-switch {
-        position: absolute;
-        top: 8px;
-        left: 50%;
-        transform: translateX(-50%);
-        z-index: 100;
         display: inline-flex;
         gap: 3px;
         padding: 3px;
@@ -456,6 +469,7 @@ class Energiefluss extends IPSModuleStrict
         border-radius: 9px;
         background: var(--w-surface);
         box-shadow: 0 2px 10px rgba(0,0,0,.14);
+        pointer-events: auto;
     }
     .view-switch-btn {
         border: 0;
@@ -468,6 +482,13 @@ class Energiefluss extends IPSModuleStrict
         font-weight: 600;
         cursor: pointer;
         white-space: nowrap;
+        pointer-events: auto;
+        user-select: none;
+    }
+
+    .view-switch-btn:hover {
+        background: var(--w-border);
+        color: var(--w-text);
     }
     .view-switch-btn.active {
         background: var(--w-text);
@@ -476,9 +497,12 @@ class Energiefluss extends IPSModuleStrict
 
     #scale-host {
         width: 100%;
-        height: 100%;
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
         overflow: hidden;
         position: relative;
+        z-index: 1;
     }
     #scale-root {
         width: 540px;
@@ -783,9 +807,11 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="eflow">
-    <div id="view-switch" role="group" aria-label="Darstellung">
-        <button id="view-flow" class="view-switch-btn" type="button" onclick="setDisplayModeFromHtml('flow')">Energiefluss</button>
-        <button id="view-house" class="view-switch-btn" type="button" onclick="setDisplayModeFromHtml('house')">Hausansicht</button>
+    <div id="view-switch-bar">
+        <div id="view-switch" role="group" aria-label="Darstellung">
+            <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
+            <button id="view-house" class="view-switch-btn" type="button">Hausansicht</button>
+        </div>
     </div>
 
     <div id="scale-host">
@@ -1742,6 +1768,22 @@ class Energiefluss extends IPSModuleStrict
         // RequestAction setzt die echte Modul-Property DisplayMode und
         // führt anschließend IPS_ApplyChanges() aus.
         requestAction('SetDisplayMode', mode);
+    }
+
+    // Wie beim Sankey-Modul: normale DOM-Click-Listener statt Inline-onclick.
+    const viewFlowButton = document.getElementById('view-flow');
+    const viewHouseButton = document.getElementById('view-house');
+
+    if (viewFlowButton) {
+        viewFlowButton.addEventListener('click', function () {
+            setDisplayModeFromHtml('flow');
+        });
+    }
+
+    if (viewHouseButton) {
+        viewHouseButton.addEventListener('click', function () {
+            setDisplayModeFromHtml('house');
+        });
     }
 
     function applyDisplayMode(mode) {
