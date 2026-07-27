@@ -65,6 +65,7 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyString('WallboxName', 'Wallbox');
         $this->RegisterPropertyInteger('WallboxPower', 0);
         $this->RegisterPropertyInteger('WallboxEnergy', 0);
+        $this->RegisterPropertyInteger('WallboxSoC', 0);
 
         // Weitere Darstellung.
         $this->RegisterPropertyInteger('SettingsCategory', 0);
@@ -218,6 +219,7 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'ValidationTextBox', 'name' => 'WallboxName', 'caption' => 'Name'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxPower', 'caption' => 'Ladeleistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxEnergy', 'caption' => 'Ladeenergie (optional)'],
+                        ['type' => 'SelectVariable', 'name' => 'WallboxSoC', 'caption' => 'Fahrzeug-SOC (optional)'],
                     ],
                 ],
                 [
@@ -920,8 +922,8 @@ class Energiefluss extends IPSModuleStrict
         return { x: sourceX(i), y: 548 };
     }
 
-    function gpos(i) {
-        const col = Math.floor(i / 2);
+    function gpos(i, columnOffset = 0) {
+        const col = Math.floor(i / 2) + columnOffset;
         const top = i % 2 === 0;
         return {
             x: COL0 + col * COLW,
@@ -931,10 +933,10 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function clearDynamicSources() {
-        document.querySelectorAll('.pv-node, .battery-node').forEach(e => e.remove());
+        document.querySelectorAll('.pv-node, .battery-node, .wallbox-node').forEach(e => e.remove());
 
         Object.keys(lineEl)
-            .filter(k => k.startsWith('pv') || k.startsWith('bat'))
+            .filter(k => k.startsWith('pv') || k.startsWith('bat') || k === 'wallbox')
             .forEach(k => {
                 lineEl[k].remove();
                 dotEl[k].forEach(d => d.remove());
@@ -1010,7 +1012,44 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
-    function buildGroups(list) {
+    function buildWallbox(wallbox, hasWallbox) {
+        if (!hasWallbox) {
+            return;
+        }
+
+        const x = COL0;
+        const y = 350;
+
+        addNode(
+            'wallbox',
+            {
+                x: x,
+                y: y,
+                r: 40,
+                ic: 'car',
+                icc: AC.wallbox,
+                lab: wallbox.name || 'Wallbox',
+                lp: 'bot'
+            },
+            'wallbox-node'
+        );
+
+        const socLine = wallbox.hasSoc
+            ? `<div class="sub" style="font-size:11px">${Math.round(wallbox.soc || 0)}%</div>`
+            : '';
+        const energyLine = wallbox.energy
+            ? `<div class="sub" style="font-size:10px;line-height:1.25;">${wallbox.energy}</div>`
+            : '';
+
+        document.getElementById('body-wallbox').innerHTML =
+            socLine +
+            `<div class="val" style="color:${AC.wallbox}">${fmt(wallbox.value || 0)}</div>` +
+            energyLine;
+
+        addEdge('wallbox', `M412,350 L${x - 40},350`, AC.wallbox);
+    }
+
+    function buildGroups(list, columnOffset = 0) {
         document.querySelectorAll('.grp-node').forEach(e => e.remove());
 
         Object.keys(lineEl)
@@ -1023,7 +1062,7 @@ class Energiefluss extends IPSModuleStrict
             });
 
         list.forEach((g, i) => {
-            const p = gpos(i);
+            const p = gpos(i, columnOffset);
 
             addNode(
                 'r' + i,
@@ -1454,7 +1493,14 @@ class Energiefluss extends IPSModuleStrict
                 wallboxMain.textContent = fmt(wallbox.value || 0);
             }
             if (wallboxSub) {
-                wallboxSub.textContent = wallbox.energy || '';
+                const parts = [];
+                if (wallbox.hasSoc) {
+                    parts.push('SOC ' + Math.round(wallbox.soc || 0) + ' %');
+                }
+                if (wallbox.energy) {
+                    parts.push(wallbox.energy);
+                }
+                wallboxSub.textContent = parts.join(' · ');
             }
         }
 
@@ -1678,7 +1724,7 @@ class Energiefluss extends IPSModuleStrict
         const pvs = d.pvs || [];
         const batteries = d.batteries || [];
         const groups = d.groups || [];
-        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '' };
+        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', soc: 0, hasSoc: false };
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -1690,7 +1736,8 @@ class Energiefluss extends IPSModuleStrict
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
-        buildGroups(groups);
+        buildWallbox(wallbox, !!d.hasWallbox);
+        buildGroups(groups, d.hasWallbox ? 1 : 0);
 
         const gridColor = grid >= 0 ? AC.import : AC.export;
         const gridNode = document.getElementById('n-netz');
@@ -1748,6 +1795,10 @@ class Energiefluss extends IPSModuleStrict
             };
         });
 
+        if (d.hasWallbox) {
+            edgeState['wallbox'] = { w: Math.max(wallbox.value || 0, 0), rev: false };
+        }
+
         groups.forEach((g, i) => {
             edgeState['grp' + i] = { w: g.value || 0, rev: false };
         });
@@ -1791,7 +1842,7 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('cfg').style.display = showRightPanel ? '' : 'none';
 
         updateLayout(
-            groups.length,
+            groups.length + (d.hasWallbox ? 2 : 0),
             pvs.length,
             batteries.length,
             showRightPanel,
@@ -2058,6 +2109,7 @@ HTML;
             'GridExportEnergy',
             'WallboxPower',
             'WallboxEnergy',
+            'WallboxSoC',
             'DayProduction',
             'WeekProduction',
             'DayGridImport',
@@ -2264,10 +2316,15 @@ HTML;
         }
 
         // Wallbox.
+        $wallboxSoCID = $this->ReadPropertyInteger('WallboxSoC');
+        $wallboxHasSoC = $wallboxSoCID > 0 && IPS_VariableExists($wallboxSoCID);
+
         $wallbox = [
             'name'   => $this->ReadPropertyString('WallboxName'),
             'value'  => $this->ReadVar('WallboxPower'),
             'energy' => $this->ReadVarFormatted('WallboxEnergy'),
+            'soc'    => $wallboxHasSoC ? (float) GetValue($wallboxSoCID) : 0.0,
+            'hasSoc' => $wallboxHasSoC,
         ];
 
         // Verbrauchergruppen.
