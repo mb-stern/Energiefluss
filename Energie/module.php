@@ -207,7 +207,12 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'ValidationTextBox', 'name' => 'WallboxName', 'caption' => 'Name'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxPower', 'caption' => 'Ladeleistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxEnergy', 'caption' => 'Ladeenergie (optional)'],
-                        ['type' => 'SelectVariable', 'name' => 'WallboxSoC', 'caption' => 'Fahrzeug-SOC (optional, beliebiger Variablentyp)'],
+                        [
+                            'type'               => 'SelectVariable',
+                            'name'               => 'WallboxSoC',
+                            'caption'            => 'Fahrzeug-SOC (optional, beliebiger Variablentyp)',
+                            'validVariableTypes' => [0, 1, 2, 3],
+                        ],
                     ],
                 ],
                 [
