@@ -2092,32 +2092,33 @@ HTML;
 
         $value = GetValue($id);
 
-        // Boolean kann keinen realen Ladezustand zwischen 0 und 100 abbilden.
-        // Deshalb true NICHT mehr als 100 % interpretieren.
+        // Boolean ist kein sinnvoller SOC-Wert.
         if (is_bool($value)) {
             return null;
         }
 
-        // Bei numerischen Variablen zuerst prüfen, ob das Profil bereits
-        // einen Prozentwert formatiert. Dann diesen Wert verwenden.
+        // Bei Integer/Float ausschließlich den echten Rohwert verwenden.
+        // GetValueFormatted() wird hier bewusst NICHT verwendet, weil
+        // Variablenprofile/Assoziationen einen anderen Text wie "100 %"
+        // liefern können und dadurch ein falscher SOC entstehen würde.
         if (is_int($value) || is_float($value)) {
-            $formatted = GetValueFormatted($id);
-            if (is_string($formatted) && str_contains($formatted, '%')) {
-                $normalized = str_replace(',', '.', trim($formatted));
-                if (preg_match('/[-+]?\d+(?:\.\d+)?/', $normalized, $match) === 1) {
-                    return max(0.0, min(100.0, (float) $match[0]));
-                }
+            $soc = (float) $value;
+
+            if (!is_finite($soc)) {
+                return null;
             }
 
-            return max(0.0, min(100.0, (float) $value));
+            return max(0.0, min(100.0, $soc));
         }
 
+        // Nur bei einer echten String-Variable Text auswerten.
         if (is_string($value)) {
             $normalized = str_replace(',', '.', trim($value));
 
             // Beispiele: "72", "72 %", "SOC: 72%", "72.5 Prozent".
             if (preg_match('/[-+]?\d+(?:\.\d+)?/', $normalized, $match) === 1) {
-                return max(0.0, min(100.0, (float) $match[0]));
+                $soc = (float) $match[0];
+                return max(0.0, min(100.0, $soc));
             }
         }
 
