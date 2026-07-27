@@ -487,8 +487,15 @@ class Energiefluss extends IPSModuleStrict
         z-index: 2;
         text-align: center;
     }
-    .node .val { color: var(--w-text); font-weight: 500; }
-    .node .sub { color: var(--w-text2); }
+    .node .val { color: #ffffff !important; font-weight: 500; }
+    .node .sub { color: #ffffff !important; }
+
+    /* Icons/Werte innerhalb der Kreise sollen unabhängig vom Symcon-Theme
+       immer gut lesbar sein. */
+    .node .body,
+    .node .body * {
+        color: #ffffff !important;
+    }
     .lbl {
         position: absolute;
         left: 50%;
@@ -496,7 +503,7 @@ class Energiefluss extends IPSModuleStrict
         color: var(--w-text2);
         white-space: nowrap;
     }
-    .lbl.top { bottom: 100%; margin-bottom: 8px; }
+    .lbl.top { bottom: 100%; margin-bottom: 15px; }
     .lbl.bot { top: 100%; margin-top: 14px; }
 
     #n-haus .lbl {
@@ -1011,7 +1018,7 @@ class Energiefluss extends IPSModuleStrict
             ? gpos(0)
             : { x: 532, y: 350, lp: 'bot' };
 
-        const radius = withConsumers ? RR : 42;
+        const radius = withConsumers ? 39 : 42;
 
         addNode(
             'wallbox',
@@ -1188,7 +1195,7 @@ class Energiefluss extends IPSModuleStrict
         if (hasWallbox) {
             const withConsumers = groupCount > 0;
             const p = withConsumers ? gpos(0) : { x: 532, y: 350 };
-            const ringRadius = withConsumers ? (RR + 6) : 48;
+            const ringRadius = withConsumers ? 45 : 48;
             const soc = wallboxSocPercent(wallbox);
 
             track(p.x, p.y, ringRadius);
