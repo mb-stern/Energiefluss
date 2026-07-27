@@ -394,8 +394,13 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            return $this->GetVisualizationHtml($this->ReadPropertyString('DisplayMode'))
-                . '<script>handleMessage(' . $payload . ');</script>';
+            $html = $this->GetVisualizationHtml($this->ReadPropertyString('DisplayMode'));
+
+            return str_replace(
+                '</body>',
+                '<script>handleMessage(' . $payload . ');</script></body>',
+                $html
+            );
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
@@ -408,6 +413,11 @@ class Energiefluss extends IPSModuleStrict
         $houseDisplay = $showHouse ? 'block' : 'none';
 
         $html = <<<'HTML'
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
     body {
         margin: 0;
@@ -489,6 +499,11 @@ class Energiefluss extends IPSModuleStrict
     .view-switch-btn:hover {
         background: var(--w-border);
         color: var(--w-text);
+    }
+
+    .view-switch-btn:active {
+        transform: translateY(1px);
+        opacity: .72;
     }
     .view-switch-btn.active {
         background: var(--w-text);
@@ -801,6 +816,8 @@ class Energiefluss extends IPSModuleStrict
 
 
 </style>
+</head>
+<body>
 <script src="/icons.js"></script>
 <script type="module"
         src="/user/Energiefluss/vendor/power-flow-card.js">
@@ -2191,6 +2208,8 @@ class Energiefluss extends IPSModuleStrict
     fit();
     requestAnimationFrame(frame);
 </script>
+</body>
+</html>
 HTML;
 
         return str_replace(
