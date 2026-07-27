@@ -2090,6 +2090,47 @@ HTML;
         return '';
     }
 
+    /**
+     * Liest einen SOC aus einer beliebigen Symcon-Variable.
+     *
+     * Unterstützt Boolean, Integer, Float und String. Bei Strings wird die
+     * erste Zahl erkannt, z. B. "72", "72 %", "SOC: 72%" oder "72,5 %".
+     * Boolean wird als 0 % / 100 % interpretiert. Ungültige Inhalte liefern null.
+     */
+    private function ReadSocValue(int $variableID): ?float
+    {
+        if ($variableID <= 0 || !IPS_VariableExists($variableID)) {
+            return null;
+        }
+
+        $value = GetValue($variableID);
+
+        if (is_bool($value)) {
+            return $value ? 100.0 : 0.0;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return max(0.0, min(100.0, (float) $value));
+        }
+
+        if (is_string($value)) {
+            $text = trim($value);
+            if ($text === '') {
+                return null;
+            }
+
+            // Deutsche Dezimaltrennzeichen ebenfalls akzeptieren.
+            if (preg_match('/[-+]?\d+(?:[.,]\d+)?/', $text, $matches) !== 1) {
+                return null;
+            }
+
+            $number = (float) str_replace(',', '.', $matches[0]);
+            return max(0.0, min(100.0, $number));
+        }
+
+        return null;
+    }
+
     private function CollectVariableIDs(): array
     {
         $ids = [];
@@ -2315,16 +2356,16 @@ HTML;
             }
         }
 
-        // Wallbox.
+        // Wallbox. Der Fahrzeug-SOC darf aus jedem Symcon-Variablentyp kommen.
         $wallboxSoCID = $this->ReadPropertyInteger('WallboxSoC');
-        $wallboxHasSoC = $wallboxSoCID > 0 && IPS_VariableExists($wallboxSoCID);
+        $wallboxSoC = $this->ReadSocValue($wallboxSoCID);
 
         $wallbox = [
             'name'   => $this->ReadPropertyString('WallboxName'),
             'value'  => $this->ReadVar('WallboxPower'),
             'energy' => $this->ReadVarFormatted('WallboxEnergy'),
-            'soc'    => $wallboxHasSoC ? (float) GetValue($wallboxSoCID) : 0.0,
-            'hasSoc' => $wallboxHasSoC,
+            'soc'    => $wallboxSoC ?? 0.0,
+            'hasSoc' => $wallboxSoC !== null,
         ];
 
         // Verbrauchergruppen.
