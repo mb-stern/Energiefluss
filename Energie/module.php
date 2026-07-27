@@ -493,6 +493,22 @@ class Energiefluss extends IPSModuleStrict
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 14px; }
 
+    #n-haus .lbl {
+        top: 16px !important;
+        bottom: auto !important;
+        left: 50% !important;
+        transform: translateX(-50%) !important;
+        margin: 0 !important;
+        width: 90px;
+        text-align: center;
+        font-size: 12px !important;
+        line-height: 1;
+    }
+
+    #n-haus .body {
+        padding-top: 16px;
+    }
+
     /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
@@ -981,14 +997,18 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        // Ohne weitere Verbraucher: direkt rechts neben dem Haus.
-        // Mit Verbrauchern: mittig in der ersten Verbraucherspalte,
-        // nach oben ausgerichtet wie ein oberer Verbraucher.
         const withConsumers = groupCount > 0;
 
-        const p = withConsumers
-            ? { x: COL0, y: 205, r: 42, lp: 'top' }
-            : { x: 532, y: 350, r: 42, lp: 'bot' };
+        // Mit weiteren Verbrauchern ersetzt die Wallbox eine komplette
+        // Verbraucherspalte: sie sitzt mittig zwischen der sonst oberen
+        // und unteren Verbraucherposition. Dadurch gibt es keinen
+        // "leeren unteren Platz" innerhalb dieser Spalte.
+        const p = {
+            x: withConsumers ? COL0 : 532,
+            y: 350,
+            r: 42,
+            lp: 'bot'
+        };
 
         addNode(
             'wallbox',
@@ -1022,13 +1042,9 @@ class Energiefluss extends IPSModuleStrict
             body.innerHTML = inner;
         }
 
-        const endY = withConsumers ? (p.y + p.r) : p.y;
-
         addEdge(
             'wallbox',
-            withConsumers
-                ? `M412,350 L${p.x},350 L${p.x},${endY}`
-                : `M412,350 L${p.x - p.r},350`,
+            `M412,350 L${p.x - p.r},350`,
             AC.room
         );
     }
@@ -1159,9 +1175,8 @@ class Energiefluss extends IPSModuleStrict
         });
 
         if (hasWallbox) {
-            const withConsumers = groupCount > 0;
-            const wallboxX = withConsumers ? COL0 : 532;
-            const wallboxY = withConsumers ? 205 : 350;
+            const wallboxX = groupCount > 0 ? COL0 : 532;
+            const wallboxY = 350;
             const soc = wallboxSocPercent(wallbox);
 
             track(wallboxX, wallboxY, 48);
