@@ -53,6 +53,7 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyString('WallboxName', 'Wallbox');
         $this->RegisterPropertyInteger('WallboxPower', 0);
         $this->RegisterPropertyInteger('WallboxEnergy', 0);
+        $this->RegisterPropertyInteger('WallboxSoC', 0);
 
         // Weitere Darstellung.
         $this->RegisterPropertyInteger('SettingsCategory', 0);
@@ -206,6 +207,7 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'ValidationTextBox', 'name' => 'WallboxName', 'caption' => 'Name'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxPower', 'caption' => 'Ladeleistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxEnergy', 'caption' => 'Ladeenergie (optional)'],
+                        ['type' => 'SelectVariable', 'name' => 'WallboxSoC', 'caption' => 'Fahrzeug-SOC (optional, beliebiger Variablentyp)'],
                     ],
                 ],
                 [
@@ -572,7 +574,7 @@ class Energiefluss extends IPSModuleStrict
         --energy-grid-return-color: #6fd32f;
         --energy-battery-charge-color: #6fd32f;
         --energy-battery-discharge-color: #3ca0ff;
-        --energy-car-color: #22d3d0;
+        --energy-car-color: #a855f7;
     }
 
     #pfc-loading,
@@ -661,7 +663,7 @@ class Energiefluss extends IPSModuleStrict
         left: 19%;
         top: 39%;
         bottom: auto;
-        border-color: rgba(34,211,208,.36);
+        border-color: rgba(168,85,247,.42);
     }
 
     /* Netz sitzt unten direkt bei den beiden Import-/Export-Leitungen. */
@@ -697,7 +699,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-wallbox-main {
-        color: #22d3d0;
+        color: #a855f7;
     }
 
 
@@ -818,7 +820,7 @@ class Energiefluss extends IPSModuleStrict
         export: '#6fd32f',
         discharge: '#3ca0ff',
         charge: '#6fd32f',
-        wallbox: '#22d3d0',
+        wallbox: '#a855f7',
         home: '#4d9fff'
     };
 
@@ -1033,7 +1035,13 @@ class Energiefluss extends IPSModuleStrict
             'wallbox-node'
         );
 
-        let inner = `<div class="val" style="color:${AC.wallbox}">${fmt(Math.max(wallbox.value || 0, 0))}</div>`;
+        let inner = '';
+
+        if (wallbox.soc !== null && wallbox.soc !== undefined) {
+            inner += `<div class="sub" style="font-size:11px;color:${AC.wallbox}">SOC ${Math.round(wallbox.soc)} %</div>`;
+        }
+
+        inner += `<div class="val" style="color:${AC.wallbox}">${fmt(Math.max(wallbox.value || 0, 0))}</div>`;
 
         if (wallbox.energy) {
             inner += `<div class="sub" style="font-size:10px;line-height:1.25;">${wallbox.energy}</div>`;
@@ -1489,7 +1497,14 @@ class Energiefluss extends IPSModuleStrict
                 wallboxMain.textContent = fmt(wallbox.value || 0);
             }
             if (wallboxSub) {
-                wallboxSub.textContent = wallbox.energy || '';
+                const details = [];
+                if (wallbox.soc !== null && wallbox.soc !== undefined) {
+                    details.push(`SOC ${Math.round(wallbox.soc)} %`);
+                }
+                if (wallbox.energy) {
+                    details.push(wallbox.energy);
+                }
+                wallboxSub.textContent = details.join(' · ');
             }
         }
 
@@ -1708,7 +1723,7 @@ class Energiefluss extends IPSModuleStrict
         const pvs = d.pvs || [];
         const batteries = d.batteries || [];
         const groups = d.groups || [];
-        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '' };
+        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', soc: null };
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -2068,6 +2083,35 @@ HTML;
         return '';
     }
 
+    private function ReadSoCAnyType(string $property): ?float
+    {
+        $id = $this->ReadPropertyInteger($property);
+        if ($id <= 0 || !IPS_VariableExists($id)) {
+            return null;
+        }
+
+        $value = GetValue($id);
+
+        if (is_bool($value)) {
+            return $value ? 100.0 : 0.0;
+        }
+
+        if (is_int($value) || is_float($value)) {
+            return max(0.0, min(100.0, (float) $value));
+        }
+
+        if (is_string($value)) {
+            $normalized = str_replace(',', '.', trim($value));
+
+            // Beispiele: "72", "72 %", "SOC: 72%", "72.5 Prozent".
+            if (preg_match('/[-+]?\d+(?:\.\d+)?/', $normalized, $match) === 1) {
+                return max(0.0, min(100.0, (float) $match[0]));
+            }
+        }
+
+        return null;
+    }
+
     private function CollectVariableIDs(): array
     {
         $ids = [];
@@ -2079,6 +2123,7 @@ HTML;
             'GridExportEnergy',
             'WallboxPower',
             'WallboxEnergy',
+            'WallboxSoC',
             'DayProduction',
             'WeekProduction',
             'DayGridImport',
@@ -2242,6 +2287,7 @@ HTML;
             'name'   => $this->ReadPropertyString('WallboxName'),
             'value'  => $this->ReadVar('WallboxPower'),
             'energy' => $this->ReadVarFormatted('WallboxEnergy'),
+            'soc'    => $this->ReadSoCAnyType('WallboxSoC'),
         ];
 
         // Verbrauchergruppen.
