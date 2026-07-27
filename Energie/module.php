@@ -65,7 +65,6 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyString('WallboxName', 'Wallbox');
         $this->RegisterPropertyInteger('WallboxPower', 0);
         $this->RegisterPropertyInteger('WallboxEnergy', 0);
-        $this->RegisterPropertyInteger('WallboxSoC', 0);
 
         // Weitere Darstellung.
         $this->RegisterPropertyInteger('SettingsCategory', 0);
@@ -219,7 +218,6 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'ValidationTextBox', 'name' => 'WallboxName', 'caption' => 'Name'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxPower', 'caption' => 'Ladeleistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxEnergy', 'caption' => 'Ladeenergie (optional)'],
-                        ['type' => 'SelectVariable', 'name' => 'WallboxSoC', 'caption' => 'Fahrzeug-SOC (optional)'],
                     ],
                 ],
                 [
@@ -554,8 +552,8 @@ class Energiefluss extends IPSModuleStrict
     /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
-        width: 100%;
-        height: 100%;
+        width: 900px;
+        height: 640px;
         display: __HOUSE_DISPLAY__;
         overflow: hidden;
         box-sizing: border-box;
@@ -566,9 +564,10 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-host {
         position: absolute;
-        inset: 0;
-        width: 100%;
-        height: 100%;
+        left: 0;
+        top: 0;
+        width: 900px;
+        height: 640px;
         overflow: hidden;
     }
 
@@ -922,8 +921,8 @@ class Energiefluss extends IPSModuleStrict
         return { x: sourceX(i), y: 548 };
     }
 
-    function gpos(i, columnOffset = 0) {
-        const col = Math.floor(i / 2) + columnOffset;
+    function gpos(i) {
+        const col = Math.floor(i / 2);
         const top = i % 2 === 0;
         return {
             x: COL0 + col * COLW,
@@ -933,10 +932,10 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function clearDynamicSources() {
-        document.querySelectorAll('.pv-node, .battery-node, .wallbox-node').forEach(e => e.remove());
+        document.querySelectorAll('.pv-node, .battery-node').forEach(e => e.remove());
 
         Object.keys(lineEl)
-            .filter(k => k.startsWith('pv') || k.startsWith('bat') || k === 'wallbox')
+            .filter(k => k.startsWith('pv') || k.startsWith('bat'))
             .forEach(k => {
                 lineEl[k].remove();
                 dotEl[k].forEach(d => d.remove());
@@ -1012,44 +1011,7 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
-    function buildWallbox(wallbox, hasWallbox) {
-        if (!hasWallbox) {
-            return;
-        }
-
-        const x = COL0;
-        const y = 350;
-
-        addNode(
-            'wallbox',
-            {
-                x: x,
-                y: y,
-                r: 40,
-                ic: 'car',
-                icc: AC.wallbox,
-                lab: wallbox.name || 'Wallbox',
-                lp: 'bot'
-            },
-            'wallbox-node'
-        );
-
-        const socLine = wallbox.hasSoc
-            ? `<div class="sub" style="font-size:11px">${Math.round(wallbox.soc || 0)}%</div>`
-            : '';
-        const energyLine = wallbox.energy
-            ? `<div class="sub" style="font-size:10px;line-height:1.25;">${wallbox.energy}</div>`
-            : '';
-
-        document.getElementById('body-wallbox').innerHTML =
-            socLine +
-            `<div class="val" style="color:${AC.wallbox}">${fmt(wallbox.value || 0)}</div>` +
-            energyLine;
-
-        addEdge('wallbox', `M412,350 L${x - 40},350`, AC.wallbox);
-    }
-
-    function buildGroups(list, columnOffset = 0) {
+    function buildGroups(list) {
         document.querySelectorAll('.grp-node').forEach(e => e.remove());
 
         Object.keys(lineEl)
@@ -1062,7 +1024,7 @@ class Energiefluss extends IPSModuleStrict
             });
 
         list.forEach((g, i) => {
-            const p = gpos(i, columnOffset);
+            const p = gpos(i);
 
             addNode(
                 'r' + i,
@@ -1493,14 +1455,7 @@ class Energiefluss extends IPSModuleStrict
                 wallboxMain.textContent = fmt(wallbox.value || 0);
             }
             if (wallboxSub) {
-                const parts = [];
-                if (wallbox.hasSoc) {
-                    parts.push('SOC ' + Math.round(wallbox.soc || 0) + ' %');
-                }
-                if (wallbox.energy) {
-                    parts.push(wallbox.energy);
-                }
-                wallboxSub.textContent = parts.join(' · ');
+                wallboxSub.textContent = wallbox.energy || '';
             }
         }
 
@@ -1672,13 +1627,23 @@ class Energiefluss extends IPSModuleStrict
 
     // ---------- Layout ----------
     let layoutWidth = 540;
-    let layoutMode = 'flow';
-    let layoutShowRightPanel = false;
 
-    function setBaseLayoutWidth(graphWidth, showRightPanel) {
+    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
         const fitEl = document.getElementById('fit');
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
+
+        let graphWidth = mode === 'house' ? 900 : 540;
+
+        if (mode !== 'house') {
+            const columns = Math.ceil(groupCount / 2);
+
+            if (columns > 0) {
+                graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
+            }
+
+            graphWidth = Math.min(graphWidth, 1080);
+        }
 
         const rightWidth = showRightPanel ? 264 : 0;
         layoutWidth = graphWidth + rightWidth;
@@ -1690,29 +1655,7 @@ class Energiefluss extends IPSModuleStrict
         rootEl.style.width = layoutWidth + 'px';
 
         wrapEl.style.gap = showRightPanel ? '14px' : '0px';
-    }
 
-    function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow') {
-        layoutMode = mode;
-        layoutShowRightPanel = showRightPanel;
-
-        if (mode === 'house') {
-            // Die tatsächliche Breite der Hausansicht wird in fit() aus der
-            // jeweils verfügbaren Fenstergröße berechnet. 900 px gibt es hier
-            // bewusst nicht mehr als feste Vorgabe.
-            fit();
-            return;
-        }
-
-        let graphWidth = 540;
-        const columns = Math.ceil(groupCount / 2);
-
-        if (columns > 0) {
-            graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
-        }
-
-        graphWidth = Math.min(graphWidth, 1080);
-        setBaseLayoutWidth(graphWidth, showRightPanel);
         fit();
     }
 
@@ -1724,7 +1667,7 @@ class Energiefluss extends IPSModuleStrict
         const pvs = d.pvs || [];
         const batteries = d.batteries || [];
         const groups = d.groups || [];
-        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', soc: 0, hasSoc: false };
+        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '' };
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -1736,8 +1679,7 @@ class Energiefluss extends IPSModuleStrict
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
-        buildWallbox(wallbox, !!d.hasWallbox);
-        buildGroups(groups, d.hasWallbox ? 1 : 0);
+        buildGroups(groups);
 
         const gridColor = grid >= 0 ? AC.import : AC.export;
         const gridNode = document.getElementById('n-netz');
@@ -1795,10 +1737,6 @@ class Energiefluss extends IPSModuleStrict
             };
         });
 
-        if (d.hasWallbox) {
-            edgeState['wallbox'] = { w: Math.max(wallbox.value || 0, 0), rev: false };
-        }
-
         groups.forEach((g, i) => {
             edgeState['grp' + i] = { w: g.value || 0, rev: false };
         });
@@ -1842,7 +1780,7 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('cfg').style.display = showRightPanel ? '' : 'none';
 
         updateLayout(
-            groups.length + (d.hasWallbox ? 2 : 0),
+            groups.length,
             pvs.length,
             batteries.length,
             showRightPanel,
@@ -1921,7 +1859,9 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
+        const baseWidth = layoutWidth;
         const baseHeight = 640;
+
         const availableWidth = host.clientWidth;
         const availableHeight = host.clientHeight;
 
@@ -1929,18 +1869,6 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        if (layoutMode === 'house') {
-            // Hausansicht dynamisch an das aktuelle Seitenverhältnis anpassen.
-            // Dadurch nutzt scale-root nach der proportionalen Skalierung
-            // die gesamte verfügbare Breite UND Höhe.
-            const rightWidth = layoutShowRightPanel ? 264 : 0;
-            const requiredLayoutWidth = baseHeight * (availableWidth / availableHeight);
-            const graphWidth = Math.max(1, requiredLayoutWidth - rightWidth);
-
-            setBaseLayoutWidth(graphWidth, layoutShowRightPanel);
-        }
-
-        const baseWidth = layoutWidth;
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
         const scale = Math.min(scaleX, scaleY);
@@ -2090,47 +2018,6 @@ HTML;
         return '';
     }
 
-    /**
-     * Liest einen SOC aus einer beliebigen Symcon-Variable.
-     *
-     * Unterstützt Boolean, Integer, Float und String. Bei Strings wird die
-     * erste Zahl erkannt, z. B. "72", "72 %", "SOC: 72%" oder "72,5 %".
-     * Boolean wird als 0 % / 100 % interpretiert. Ungültige Inhalte liefern null.
-     */
-    private function ReadSocValue(int $variableID): ?float
-    {
-        if ($variableID <= 0 || !IPS_VariableExists($variableID)) {
-            return null;
-        }
-
-        $value = GetValue($variableID);
-
-        if (is_bool($value)) {
-            return $value ? 100.0 : 0.0;
-        }
-
-        if (is_int($value) || is_float($value)) {
-            return max(0.0, min(100.0, (float) $value));
-        }
-
-        if (is_string($value)) {
-            $text = trim($value);
-            if ($text === '') {
-                return null;
-            }
-
-            // Deutsche Dezimaltrennzeichen ebenfalls akzeptieren.
-            if (preg_match('/[-+]?\d+(?:[.,]\d+)?/', $text, $matches) !== 1) {
-                return null;
-            }
-
-            $number = (float) str_replace(',', '.', $matches[0]);
-            return max(0.0, min(100.0, $number));
-        }
-
-        return null;
-    }
-
     private function CollectVariableIDs(): array
     {
         $ids = [];
@@ -2150,7 +2037,6 @@ HTML;
             'GridExportEnergy',
             'WallboxPower',
             'WallboxEnergy',
-            'WallboxSoC',
             'DayProduction',
             'WeekProduction',
             'DayGridImport',
@@ -2356,16 +2242,11 @@ HTML;
             }
         }
 
-        // Wallbox. Der Fahrzeug-SOC darf aus jedem Symcon-Variablentyp kommen.
-        $wallboxSoCID = $this->ReadPropertyInteger('WallboxSoC');
-        $wallboxSoC = $this->ReadSocValue($wallboxSoCID);
-
+        // Wallbox.
         $wallbox = [
             'name'   => $this->ReadPropertyString('WallboxName'),
             'value'  => $this->ReadVar('WallboxPower'),
             'energy' => $this->ReadVarFormatted('WallboxEnergy'),
-            'soc'    => $wallboxSoC ?? 0.0,
-            'hasSoc' => $wallboxSoC !== null,
         ];
 
         // Verbrauchergruppen.
