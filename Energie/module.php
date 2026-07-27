@@ -932,10 +932,10 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function clearDynamicSources() {
-        document.querySelectorAll('.pv-node, .battery-node').forEach(e => e.remove());
+        document.querySelectorAll('.pv-node, .battery-node, .wallbox-node').forEach(e => e.remove());
 
         Object.keys(lineEl)
-            .filter(k => k.startsWith('pv') || k.startsWith('bat'))
+            .filter(k => k.startsWith('pv') || k.startsWith('bat') || k === 'wallbox')
             .forEach(k => {
                 lineEl[k].remove();
                 dotEl[k].forEach(d => d.remove());
@@ -1009,6 +1009,48 @@ class Energiefluss extends IPSModuleStrict
                 batColor
             );
         });
+    }
+
+    function buildWallbox(wallbox, hasWallbox) {
+        if (!hasWallbox) {
+            return;
+        }
+
+        // Direkt rechts vom Haus. Die Leitung wird wie alle anderen
+        // klassischen Flüsse über edgeState / animateEdges animiert.
+        const p = { x: 500, y: 350, r: 34 };
+
+        addNode(
+            'wallbox',
+            {
+                x: p.x,
+                y: p.y,
+                r: p.r,
+                ic: 'charging-station',
+                icc: AC.wallbox,
+                lab: wallbox.name || 'Wallbox',
+                lp: 'bot'
+            },
+            'wallbox-node'
+        );
+
+        let inner = `<div class="val" style="color:${AC.wallbox}">${fmt(Math.max(wallbox.value || 0, 0))}</div>`;
+
+        if (wallbox.energy) {
+            inner += `<div class="sub" style="font-size:10px;line-height:1.25;">${wallbox.energy}</div>`;
+        }
+
+        const body = document.getElementById('body-wallbox');
+        if (body) {
+            body.innerHTML = inner;
+        }
+
+        // Haus -> Wallbox
+        addEdge(
+            'wallbox',
+            `M412,350 L${p.x - p.r},350`,
+            AC.wallbox
+        );
     }
 
     function buildGroups(list) {
@@ -1258,12 +1300,10 @@ class Energiefluss extends IPSModuleStrict
         const batteryContainer =
             pfcCard.shadowRoot.getElementById('svg-container-battery');
 
-        // Die Wallbox benutzt jetzt den früheren Grid-Import-Container "primary".
+        // Wallbox: den echten EV-Container verwenden.
+        // Nur dieser Container wird vom Upstream updateFlow() über
+        // entities.ev_charge_power / sensor.symcon_ev angesteuert.
         const wallboxContainer =
-            pfcCard.shadowRoot.getElementById('svg-container-primary');
-
-        // Der alte EV-Pfad wird nicht mehr verwendet.
-        const oldEvContainer =
             pfcCard.shadowRoot.getElementById('svg-container-ev');
 
         if (batteryContainer) {
@@ -1272,10 +1312,6 @@ class Energiefluss extends IPSModuleStrict
 
         if (wallboxContainer) {
             wallboxContainer.style.display = hasWallbox ? '' : 'none';
-        }
-
-        if (oldEvContainer) {
-            oldEvContainer.style.display = 'none';
         }
 
         // Die Descriptor-Gruppen befinden sich im SVG-Overlay.
@@ -1679,6 +1715,7 @@ class Energiefluss extends IPSModuleStrict
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
+        buildWallbox(wallbox, !!d.hasWallbox);
         buildGroups(groups);
 
         const gridColor = grid >= 0 ? AC.import : AC.export;
@@ -1736,6 +1773,13 @@ class Energiefluss extends IPSModuleStrict
                 rev: (bat.value || 0) < 0
             };
         });
+
+        if (d.hasWallbox) {
+            edgeState['wallbox'] = {
+                w: Math.max(wallbox.value || 0, 0),
+                rev: false
+            };
+        }
 
         groups.forEach((g, i) => {
             edgeState['grp' + i] = { w: g.value || 0, rev: false };
