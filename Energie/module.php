@@ -325,9 +325,17 @@ class Energiefluss extends IPSModuleStrict
             }
 
             if ($mode !== $this->ReadPropertyString('DisplayMode')) {
+                // Gleicher Ablauf wie beim Sankey-Modul:
+                // Property setzen und die Instanz neu anwenden.
                 IPS_SetProperty($this->InstanceID, 'DisplayMode', $mode);
                 IPS_ApplyChanges($this->InstanceID);
+
+                // Falls das Konfigurationsformular parallel geöffnet ist,
+                // muss es den geänderten Property-Wert neu einlesen.
+                $this->ReloadForm();
             } else {
+                // Auch ohne Property-Änderung den aktuellen Zustand erneut
+                // an die geöffnete Visualisierung schicken.
                 $this->PushState();
             }
 
@@ -2011,6 +2019,13 @@ class Energiefluss extends IPSModuleStrict
 
         setState(d);
     }
+
+    // Wie beim Sankey-Modul:
+    // UpdateVisualizationValue() wird vom Symcon-Frontend als message
+    // an das HTML-Fenster weitergereicht.
+    window.addEventListener('message', function(event) {
+        handleMessage(event.data);
+    });
 
     // ---------- Animation ----------
     let last = performance.now();
