@@ -269,13 +269,12 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Verbraucher', 'allowTransparent' => false],
                         [
-                            'type' => 'NumberSpinner',
+                            'type' => 'Slider',
                             'name' => 'FlowSpeedPercent',
                             'caption' => 'Animationsgeschwindigkeit',
                             'minimum' => 25,
                             'maximum' => 300,
-                            'digits' => 0,
-                            'suffix' => ' %',
+                            'stepSize' => 5,
                         ],
                     ],
                 ],
@@ -492,7 +491,7 @@ class Energiefluss extends IPSModuleStrict
         white-space: nowrap;
     }
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
-    .lbl.bot { top: 100%; margin-top: 8px; }
+    .lbl.bot { top: 100%; margin-top: 14px; }
 
     /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
@@ -983,13 +982,13 @@ class Energiefluss extends IPSModuleStrict
         }
 
         // Ohne weitere Verbraucher: direkt rechts neben dem Haus.
-        // Mit Verbrauchern: erste Verbraucherspalte komplett für die
-        // Wallbox reservieren und die Wallbox mittig platzieren.
-        const p = {
-            x: groupCount > 0 ? COL0 : 532,
-            y: 350,
-            r: 42
-        };
+        // Mit Verbrauchern: mittig in der ersten Verbraucherspalte,
+        // nach oben ausgerichtet wie ein oberer Verbraucher.
+        const withConsumers = groupCount > 0;
+
+        const p = withConsumers
+            ? { x: COL0, y: 205, r: 42, lp: 'top' }
+            : { x: 532, y: 350, r: 42, lp: 'bot' };
 
         addNode(
             'wallbox',
@@ -1000,7 +999,7 @@ class Energiefluss extends IPSModuleStrict
                 ic: 'charging-station',
                 icc: AC.room,
                 lab: wallbox.name || 'Wallbox',
-                lp: 'bot',
+                lp: p.lp,
                 ring: true
             },
             'wallbox-node'
@@ -1023,9 +1022,13 @@ class Energiefluss extends IPSModuleStrict
             body.innerHTML = inner;
         }
 
+        const endY = withConsumers ? (p.y + p.r) : p.y;
+
         addEdge(
             'wallbox',
-            `M412,350 L${p.x - p.r},350`,
+            withConsumers
+                ? `M412,350 L${p.x},350 L${p.x},${endY}`
+                : `M412,350 L${p.x - p.r},350`,
             AC.room
         );
     }
@@ -1156,13 +1159,15 @@ class Energiefluss extends IPSModuleStrict
         });
 
         if (hasWallbox) {
-            const wallboxX = groupCount > 0 ? COL0 : 532;
+            const withConsumers = groupCount > 0;
+            const wallboxX = withConsumers ? COL0 : 532;
+            const wallboxY = withConsumers ? 205 : 350;
             const soc = wallboxSocPercent(wallbox);
 
-            track(wallboxX, 350, 48);
+            track(wallboxX, wallboxY, 48);
 
             if (soc !== null) {
-                arc(wallboxX, 350, 48, AC.room, soc / 100, 0);
+                arc(wallboxX, wallboxY, 48, AC.room, soc / 100, 0);
             }
         }
     }
