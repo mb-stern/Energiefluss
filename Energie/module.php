@@ -573,12 +573,12 @@ class Energiefluss extends IPSModuleStrict
         --secondary-text-color: #9ca3af;
         --card-background-color: transparent;
         --ha-card-background: transparent;
-        --energy-solar-color: #EFA020;
-        --energy-grid-consumption-color: #ff4d43;
-        --energy-grid-return-color: #6fd32f;
-        --energy-battery-charge-color: #6fd32f;
-        --energy-battery-discharge-color: #3ca0ff;
-        --energy-car-color: #a855f7;
+        --energy-solar-color: #ffd54f;
+        --energy-grid-consumption-color: #4fc3f7;
+        --energy-grid-return-color: #66bb6a;
+        --energy-battery-charge-color: #64b5f6;
+        --energy-battery-discharge-color: #29b6f6;
+        --energy-car-color: #26c6da;
     }
 
     #pfc-loading,
@@ -667,7 +667,7 @@ class Energiefluss extends IPSModuleStrict
         left: 19%;
         top: 39%;
         bottom: auto;
-        border-color: rgba(168,85,247,.42);
+        border-color: rgba(38,198,218,.42);
     }
 
     /* Netz sitzt unten direkt bei den beiden Import-/Export-Leitungen. */
@@ -679,23 +679,23 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-grid-import {
-        color: #ff4d43;
+        color: #4fc3f7;
     }
 
     #pfc-grid-export {
-        color: #6fd32f;
+        color: #66bb6a;
     }
 
     #pfc-battery-main.discharge {
-        color: #3ca0ff;
+        color: #29b6f6;
     }
 
     #pfc-battery-main.charge {
-        color: #6fd32f;
+        color: #64b5f6;
     }
 
     #pfc-solar-main {
-        color: #EFA020;
+        color: #ffd54f;
     }
 
     #pfc-home-main {
@@ -703,7 +703,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-wallbox-main {
-        color: #a855f7;
+        color: #26c6da;
     }
 
 
@@ -815,16 +815,18 @@ class Energiefluss extends IPSModuleStrict
     window.addEventListener('load', detectTheme);
     setInterval(detectTheme, 2000);
 
+    // Zentrale Farbdefinition – entspricht der ursprünglichen
+    // power-flow-card YAML-Konfiguration.
     const AC = {
-        solar: '#EFA020',
-        grid: '#3B82C4',
+        solar: '#ffd54f',
+        grid: '#4fc3f7',
         room: '#2FA98F',
-        batt: '#4F9A5B',
-        import: '#ff4d43',
-        export: '#6fd32f',
-        discharge: '#3ca0ff',
-        charge: '#6fd32f',
-        wallbox: '#a855f7',
+        batt: '#64b5f6',
+        import: '#4fc3f7',
+        export: '#66bb6a',
+        discharge: '#29b6f6',
+        charge: '#64b5f6',
+        wallbox: '#26c6da',
         home: '#4d9fff'
     };
 
@@ -1234,9 +1236,12 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function createPfcConfig() {
+        // Vollständige Konfiguration der unveränderten Original-Card.
+        // Entspricht der früheren Home-Assistant-YAML, nur mit den
+        // virtuellen Symcon-Sensoren aus updatePowerFlowCard().
         return {
-            name: '',
-            threshold: 1,
+            name: 'Home Energy Flow',
+            threshold: 10,
 
             dynamic_speed_enabled: true,
             min_flow_speed: 5,
@@ -1261,23 +1266,23 @@ class Energiefluss extends IPSModuleStrict
             },
 
             solar_descriptor_enabled: false,
-            solar_descriptor_label: 'PV gesamt',
+            solar_descriptor_label: 'Solar',
             solar_descriptor_entity: 'sensor.symcon_solar',
 
             grid_descriptor_enabled: false,
-            grid_descriptor_label: 'Netz',
+            grid_descriptor_label: 'Grid',
             grid_descriptor_entity: 'sensor.symcon_grid',
 
             battery_descriptor_enabled: false,
-            battery_descriptor_label: 'Batterie',
+            battery_descriptor_label: 'Battery',
             battery_descriptor_entity: 'sensor.symcon_battery_soc',
 
             ev_descriptor_enabled: false,
-            ev_descriptor_label: 'Wallbox',
+            ev_descriptor_label: 'EV',
             ev_descriptor_entity: 'sensor.symcon_ev',
 
             home_descriptor_enabled: false,
-            home_descriptor_label: 'Haus',
+            home_descriptor_label: 'Home',
             home_descriptor_entity: 'sensor.symcon_home'
         };
     }

@@ -1,4 +1,4 @@
-import { LitElement, html, css, svg } from "./lit-core.min.js";
+import { LitElement, html, css, svg } from "https://unpkg.com/lit?module";
 
 class PowerFlowCard extends LitElement {
   static get properties() {
@@ -215,32 +215,14 @@ class PowerFlowCard extends LitElement {
           const chargeValue = chargeState ? parseFloat(chargeState.state) : 0;
           const dischargeValue = dischargeState ? parseFloat(dischargeState.state) : 0;
 
-          const batteryLines = container.querySelectorAll(".anim-line");
-
           if (chargeValue > 0) {
             value = chargeValue;
-            reverse = false; // Haus/Netz -> Batterie
-
-            batteryLines.forEach((line) => {
-              line.classList.remove("bat-discharge");
-              line.classList.add("bat-charge");
-            });
+            reverse = false; // normal direction
           } else if (dischargeValue > 0) {
             value = dischargeValue;
-            reverse = true; // Batterie -> Haus
-
-            batteryLines.forEach((line) => {
-              line.classList.remove("bat-charge");
-              line.classList.add("bat-discharge");
-            });
+            reverse = true; // reverse direction
           } else {
             value = 0;
-
-            // Ohne Leistung die letzte falsche Farbklasse nicht stehen lassen.
-            batteryLines.forEach((line) => {
-              line.classList.remove("bat-discharge");
-              line.classList.add("bat-charge");
-            });
           }
         } else {
 
