@@ -1449,6 +1449,12 @@ class Energiefluss extends IPSModuleStrict
             const mainBat = batteries[0];
             const discharge = batteryTotal >= 0;
 
+            if (batteryInfo) {
+                batteryInfo.style.borderColor = discharge
+                    ? AC.discharge
+                    : AC.charge;
+            }
+
             if (batteryTitle) {
                 batteryTitle.textContent = batteries.length === 1
                     ? (mainBat.name || 'Batterie')
@@ -1571,6 +1577,13 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_battery_soc': pfcState(mainSoc, '%'),
             'sensor.symcon_home': pfcState(haus)
         };
+
+        // Die power-flow-card liest die Leitungsfarben aus ihrer Config.
+        // Deshalb nach einer Farbänderung die Config mit den aktuellen
+        // AC-Farben erneut setzen, bevor die neuen Zustände übergeben werden.
+        if (typeof pfcCard.setConfig === 'function') {
+            pfcCard.setConfig(createPfcConfig());
+        }
 
         pfcCard.hass = { states };
 
