@@ -635,11 +635,11 @@ class Energiefluss extends IPSModuleStrict
         --card-background-color: transparent;
         --ha-card-background: transparent;
         --energy-solar-color: #ffd54f;
-        --energy-grid-consumption-color: #4fc3f7;
+        --energy-grid-consumption-color: #ef5350;
         --energy-grid-return-color: #66bb6a;
         --energy-battery-charge-color: #64b5f6;
         --energy-battery-discharge-color: #29b6f6;
-        --energy-car-color: #26c6da;
+        --energy-car-color: #ab47bc;
     }
 
     #pfc-loading,
@@ -745,7 +745,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-grid-import {
-        color: #4fc3f7;
+        color: #ef5350;
     }
 
     #pfc-grid-export {
@@ -769,7 +769,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-wallbox-main {
-        color: #26c6da;
+        color: #ab47bc;
     }
 
 
@@ -889,14 +889,14 @@ class Energiefluss extends IPSModuleStrict
     // power-flow-card YAML-Konfiguration.
     const AC = {
         solar: '#ffd54f',
-        grid: '#4fc3f7',
+        grid: '#ef5350',
         room: '#2FA98F',
         batt: '#64b5f6',
-        import: '#4fc3f7',
+        import: '#ef5350',
         export: '#66bb6a',
         discharge: '#29b6f6',
         charge: '#64b5f6',
-        wallbox: '#26c6da',
+        wallbox: '#ab47bc',
         home: '#4d9fff'
     };
 
