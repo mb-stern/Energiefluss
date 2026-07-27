@@ -322,8 +322,6 @@ class Energiefluss extends IPSModuleStrict
 
             IPS_SetProperty($this->InstanceID, 'DisplayMode', $newMode);
             IPS_ApplyChanges($this->InstanceID);
-
-            // Offenes Konfigurationsformular neu einlesen.
             $this->ReloadForm();
             return;
         }
@@ -369,17 +367,99 @@ class Energiefluss extends IPSModuleStrict
 
     public function GetVisualizationTile(): string
     {
-        try {
-            $payload = json_encode(
-                $this->BuildPayload(),
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-            );
+        $mode = $this->ReadPropertyString('DisplayMode');
+        $modeJson = json_encode(
+            $mode,
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+        );
 
-            return $this->GetVisualizationHtml($this->ReadPropertyString('DisplayMode'))
-                . '<script>handleMessage(' . $payload . ');</script>';
-        } catch (Throwable $e) {
-            return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
-        }
+        return <<<HTML
+<!DOCTYPE html>
+<html lang="de">
+<head>
+<meta charset="UTF-8">
+<style>
+    html, body {
+        width: 100%;
+        height: 100%;
+        margin: 0;
+        background: transparent;
+        font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    }
+
+    body {
+        display: flex;
+        align-items: center;
+        justify-content: center;
+    }
+
+    #box {
+        padding: 24px;
+        border: 2px solid #4d9fff;
+        border-radius: 12px;
+        text-align: center;
+        background: rgba(127,127,127,.12);
+    }
+
+    #testbutton {
+        border: 2px solid #4d9fff;
+        border-radius: 8px;
+        padding: 12px 18px;
+        font-size: 16px;
+        cursor: pointer;
+        background: white;
+        color: black;
+    }
+
+    #testbutton:hover {
+        background: #4d9fff;
+        color: white;
+        transform: scale(1.05);
+    }
+
+    #mouse {
+        margin-top: 12px;
+        font-size: 13px;
+    }
+
+    #status {
+        margin-top: 8px;
+        font-weight: 600;
+    }
+</style>
+</head>
+<body>
+<div id="box">
+    <button id="testbutton" type="button">TEST: Ansicht umschalten</button>
+    <div id="mouse">Mausbewegungen: <span id="count">0</span></div>
+    <div id="status"></div>
+</div>
+
+<script>
+    let mode = {$modeJson};
+    let mouseCount = 0;
+
+    const status = document.getElementById('status');
+    status.textContent = 'DisplayMode: ' + mode;
+
+    document.addEventListener('mousemove', function () {
+        mouseCount++;
+        document.getElementById('count').textContent = String(mouseCount);
+    }, true);
+
+    document.getElementById('testbutton').addEventListener('click', function () {
+        const newMode = mode === 'house' ? 'flow' : 'house';
+        status.textContent = 'Klick erkannt → ' + newMode;
+        requestAction('ToggleDisplayMode', newMode);
+    });
+
+    function handleMessage(message) {
+        // Für diesen Isolationstest absichtlich leer.
+    }
+</script>
+</body>
+</html>
+HTML;
     }
 
     private function GetVisualizationHtml(string $displayMode): string
@@ -422,71 +502,12 @@ class Energiefluss extends IPSModuleStrict
         padding: 10px;
         background: transparent;
         overflow: hidden;
-        display: flex;
-        flex-direction: column;
-        min-height: 0;
-    }
-
-    #display_mode_bar {
-        flex: 0 0 auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 8px;
-        padding: 2px 0 7px;
-
-        /* Die Bedienleiste muss immer über allen Grafik-Layern liegen. */
-        position: relative;
-        z-index: 2147483647;
-        pointer-events: auto !important;
-        isolation: isolate;
-    }
-
-    #btn_display_mode {
-        background: rgba(255,255,255,0.07);
-        border: 1px solid rgba(127,127,127,0.25);
-        border-radius: 6px;
-        padding: 5px 10px;
-        font-size: 12px;
-        font-family: inherit;
-        color: var(--w-text2);
-        cursor: pointer;
-        outline: none;
-
-        position: relative;
-        z-index: 2147483647;
-        pointer-events: auto !important;
-        touch-action: manipulation;
-        user-select: none;
-    }
-
-    #btn_display_mode:hover {
-        background: rgba(127,127,127,0.32) !important;
-        color: var(--w-text) !important;
-        outline: 2px solid rgba(77,159,255,.75);
-    }
-
-    #btn_display_mode:active {
-        transform: translateY(1px);
-        opacity: .65;
     }
     #scale-host {
         width: 100%;
-        flex: 1 1 auto;
-        min-height: 0;
-        height: auto;
+        height: 100%;
         overflow: hidden;
         position: relative;
-
-        /* Hausgrafik, SVG, Animationen und power-flow-card sind rein visuell.
-           Dadurch kann kein Grafik-Layer den Button abfangen. */
-        pointer-events: none !important;
-    }
-
-    #scale-host *,
-    #scale-host *::before,
-    #scale-host *::after {
-        pointer-events: none !important;
     }
     #scale-root {
         width: 540px;
@@ -791,10 +812,6 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="eflow">
-    <div id="display_mode_bar">
-        <button id="btn_display_mode" type="button">Ansicht wechseln</button>
-    </div>
-
     <div id="scale-host">
         <div id="scale-root">
             <div id="wrap">
@@ -1740,23 +1757,8 @@ class Energiefluss extends IPSModuleStrict
         updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
-    let displayMode = '__INITIAL_DISPLAY_MODE__';
-
-    function updateDisplayModeButton() {
-        const btn = document.getElementById('btn_display_mode');
-        if (!btn) {
-            return;
-        }
-
-        btn.textContent = displayMode === 'house'
-            ? 'Energiefluss anzeigen'
-            : 'Hausansicht anzeigen';
-    }
-
     function applyDisplayMode(mode) {
         const house = mode === 'house';
-        displayMode = house ? 'house' : 'flow';
-        updateDisplayModeButton();
         if (stage) stage.style.display = house ? 'none' : 'block';
         if (houseStage) houseStage.style.display = house ? 'block' : 'none';
 
@@ -1767,11 +1769,6 @@ class Energiefluss extends IPSModuleStrict
             eflow.style.background = 'transparent';
         }
     }
-
-    document.getElementById('btn_display_mode').addEventListener('click', function () {
-        const newMode = displayMode === 'house' ? 'flow' : 'house';
-        requestAction('ToggleDisplayMode', newMode);
-    });
 
     // ---------- Regelung / Statistik ----------
     const CFG = [
@@ -2157,8 +2154,8 @@ class Energiefluss extends IPSModuleStrict
 HTML;
 
         return str_replace(
-            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__', '__INITIAL_DISPLAY_MODE__'],
-            [$flowDisplay, $houseDisplay, $showHouse ? 'house' : 'flow'],
+            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__'],
+            [$flowDisplay, $houseDisplay],
             $html
         );
     }
