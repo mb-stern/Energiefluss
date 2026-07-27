@@ -409,7 +409,7 @@ class Energiefluss extends IPSModuleStrict
         box-sizing: border-box;
         border-radius: 12px;
         padding: 10px;
-        background: var(--w-bg);
+        background: transparent;
         overflow: hidden;
     }
     #scale-host {
@@ -1675,7 +1675,7 @@ class Energiefluss extends IPSModuleStrict
         // Dadurch scheint der von IP-Symcon vorgegebene Hintergrund durch.
         const eflow = document.getElementById('eflow');
         if (eflow) {
-            eflow.style.background = house ? 'transparent' : 'var(--w-bg)';
+            eflow.style.background = 'transparent';
         }
     }
 
