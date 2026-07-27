@@ -2012,12 +2012,10 @@ class Energiefluss extends IPSModuleStrict
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
 
-        let scale;
-        if (houseMode) {
-            scale = scaleX;
-        } else {
-            scale = Math.min(scaleX, scaleY);
-        }
+        // Immer proportional skalieren und BEIDE Grenzen beachten.
+        // Die Breite darf den Maßstab bestimmen, solange dadurch die
+        // verfügbare Höhe nicht überschritten wird.
+        const scale = Math.min(scaleX, scaleY);
 
         root.style.transform = `scale(${scale})`;
 
@@ -2027,14 +2025,9 @@ class Energiefluss extends IPSModuleStrict
         // Horizontal bleibt die Ansicht sauber zentriert.
         root.style.left = `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
 
-        // In der Hausansicht oben ausrichten. So wird bei einer sehr breiten
-        // Kachel nicht versehentlich oben/unten abgeschnitten, nur weil vorher
-        // vertikal zentriert wurde.
-        //
-        // In der klassischen Ansicht bleibt die bisherige Zentrierung bestehen.
-        root.style.top = houseMode
-            ? '0px'
-            : `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
+        // Auch vertikal zentrieren. So bleibt die komplette Darstellung
+        // in jedem Seitenverhältnis sichtbar.
+        root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
     }
 
     const scaleHost = document.getElementById('scale-host');
