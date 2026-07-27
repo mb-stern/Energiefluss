@@ -1287,6 +1287,51 @@ class Energiefluss extends IPSModuleStrict
     }
 
 
+    function applyPfcBatteryFlowColor(batteryTotal) {
+        if (!pfcCard || !pfcCard.shadowRoot) {
+            return;
+        }
+
+        const batteryContainer =
+            pfcCard.shadowRoot.getElementById('svg-container-battery');
+
+        if (!batteryContainer) {
+            return;
+        }
+
+        // Modulkonvention:
+        // positiv = Entladen Richtung Haus
+        // negativ = Laden Richtung Batterie
+        const isDischarge = batteryTotal > 0;
+        const isCharge = batteryTotal < 0;
+
+        const color = isDischarge
+            ? AC.discharge
+            : (isCharge ? AC.charge : AC.charge);
+
+        // Die Upstream-Card verwendet für den Batteriepfad intern nicht
+        // zuverlässig unterschiedliche Klassen. Deshalb setzen wir Klasse
+        // und Farbe passend zur tatsächlichen Flussrichtung explizit.
+        batteryContainer
+            .querySelectorAll('.anim-line')
+            .forEach(line => {
+                line.classList.toggle('bat-discharge', isDischarge);
+                line.classList.toggle('bat-charge', !isDischarge);
+
+                line.style.setProperty('stroke', color, 'important');
+                line.style.setProperty('color', color, 'important');
+            });
+
+        batteryContainer.style.setProperty(
+            '--pfc-battery-charge-color',
+            AC.charge
+        );
+        batteryContainer.style.setProperty(
+            '--pfc-battery-discharge-color',
+            AC.discharge
+        );
+    }
+
     function applyPfcOptionalLayers(d, batteries, wallbox) {
         if (!pfcCard || !pfcCard.shadowRoot) {
             return;
@@ -1587,6 +1632,7 @@ class Energiefluss extends IPSModuleStrict
 
         pfcCard.hass = { states };
 
+        applyPfcBatteryFlowColor(batteryTotal);
         updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox);
 
         installPfcShadowOverrides(pfcCard);
@@ -1598,6 +1644,7 @@ class Energiefluss extends IPSModuleStrict
         requestAnimationFrame(() => {
             if (pfcCard && pfcCard.isInitialized && typeof pfcCard.updateFlow === 'function') {
                 pfcCard.updateFlow();
+                applyPfcBatteryFlowColor(batteryTotal);
                 applyPfcOptionalLayers(d, batteries, wallbox);
                     }
         });
