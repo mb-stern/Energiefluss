@@ -66,11 +66,6 @@ class Energiefluss extends IPSModuleStrict
         // flow = klassische Energieflussansicht, house = Hausansicht.
         $this->RegisterPropertyString('DisplayMode', 'flow');
 
-        // Wichtig für requestAction() aus der HTML-Visualisierung.
-        // Genau wie ToggleMode im Sankey-Modul muss auch dieser Ident
-        // explizit als Action freigeschaltet werden.
-        $this->EnableAction('SetDisplayMode');
-
         $this->SetVisualizationType(1);
     }
 
@@ -322,28 +317,14 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        if ($Ident === 'SetDisplayMode') {
-            $mode = (string) $Value;
+        if ($Ident === 'ToggleDisplayMode') {
+            $newMode = ((string) $Value === 'house') ? 'house' : 'flow';
 
-            if (!in_array($mode, ['flow', 'house'], true)) {
-                return;
-            }
+            IPS_SetProperty($this->InstanceID, 'DisplayMode', $newMode);
+            IPS_ApplyChanges($this->InstanceID);
 
-            if ($mode !== $this->ReadPropertyString('DisplayMode')) {
-                // Gleicher Ablauf wie beim Sankey-Modul:
-                // Property setzen und die Instanz neu anwenden.
-                IPS_SetProperty($this->InstanceID, 'DisplayMode', $mode);
-                IPS_ApplyChanges($this->InstanceID);
-
-                // Falls das Konfigurationsformular parallel geöffnet ist,
-                // muss es den geänderten Property-Wert neu einlesen.
-                $this->ReloadForm();
-            } else {
-                // Auch ohne Property-Änderung den aktuellen Zustand erneut
-                // an die geöffnete Visualisierung schicken.
-                $this->PushState();
-            }
-
+            // Offenes Konfigurationsformular neu einlesen.
+            $this->ReloadForm();
             return;
         }
 
@@ -394,13 +375,8 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            $html = $this->GetVisualizationHtml($this->ReadPropertyString('DisplayMode'));
-
-            return str_replace(
-                '</body>',
-                '<script>handleMessage(' . $payload . ');</script></body>',
-                $html
-            );
+            return $this->GetVisualizationHtml($this->ReadPropertyString('DisplayMode'))
+                . '<script>handleMessage(' . $payload . ');</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
@@ -413,11 +389,6 @@ class Energiefluss extends IPSModuleStrict
         $houseDisplay = $showHouse ? 'block' : 'none';
 
         $html = <<<'HTML'
-<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
 <style>
     body {
         margin: 0;
@@ -448,68 +419,39 @@ class Energiefluss extends IPSModuleStrict
         height: 100vh;
         box-sizing: border-box;
         border-radius: 12px;
-        padding: 8px 10px 10px;
+        padding: 10px;
         background: transparent;
         overflow: hidden;
-
-        /* Bedienung und Grafik sind zwei getrennte Layoutbereiche.
-           Damit kann die Grafik den Umschalter nicht überdecken. */
         display: flex;
         flex-direction: column;
         min-height: 0;
     }
 
-    #view-switch-bar {
+    #display_mode_bar {
         flex: 0 0 auto;
         display: flex;
-        justify-content: center;
         align-items: center;
-        min-height: 30px;
-        margin-bottom: 4px;
-        position: relative;
-        z-index: 1000;
-        pointer-events: auto;
+        justify-content: center;
+        gap: 8px;
+        padding: 2px 0 7px;
     }
 
-    #view-switch {
-        display: inline-flex;
-        gap: 3px;
-        padding: 3px;
-        border: 0.5px solid var(--w-border);
-        border-radius: 9px;
-        background: var(--w-surface);
-        box-shadow: 0 2px 10px rgba(0,0,0,.14);
-        pointer-events: auto;
-    }
-    .view-switch-btn {
-        border: 0;
+    #btn_display_mode {
+        background: rgba(255,255,255,0.07);
+        border: 1px solid rgba(127,127,127,0.25);
         border-radius: 6px;
         padding: 5px 10px;
-        background: transparent;
+        font-size: 12px;
+        font-family: inherit;
         color: var(--w-text2);
-        font: inherit;
-        font-size: 11px;
-        font-weight: 600;
         cursor: pointer;
-        white-space: nowrap;
-        pointer-events: auto;
-        user-select: none;
+        outline: none;
     }
 
-    .view-switch-btn:hover {
-        background: var(--w-border);
+    #btn_display_mode:hover {
+        background: rgba(127,127,127,0.16);
         color: var(--w-text);
     }
-
-    .view-switch-btn:active {
-        transform: translateY(1px);
-        opacity: .72;
-    }
-    .view-switch-btn.active {
-        background: var(--w-text);
-        color: var(--w-surface);
-    }
-
     #scale-host {
         width: 100%;
         flex: 1 1 auto;
@@ -517,7 +459,6 @@ class Energiefluss extends IPSModuleStrict
         height: auto;
         overflow: hidden;
         position: relative;
-        z-index: 1;
     }
     #scale-root {
         width: 540px;
@@ -816,19 +757,14 @@ class Energiefluss extends IPSModuleStrict
 
 
 </style>
-</head>
-<body>
 <script src="/icons.js"></script>
 <script type="module"
         src="/user/Energiefluss/vendor/power-flow-card.js">
 </script>
 
 <div id="eflow">
-    <div id="view-switch-bar">
-        <div id="view-switch" role="group" aria-label="Darstellung">
-            <button id="view-flow" class="view-switch-btn" type="button">Energiefluss</button>
-            <button id="view-house" class="view-switch-btn" type="button">Hausansicht</button>
-        </div>
+    <div id="display_mode_bar">
+        <button id="btn_display_mode" type="button">Ansicht wechseln</button>
     </div>
 
     <div id="scale-host">
@@ -1776,49 +1712,38 @@ class Energiefluss extends IPSModuleStrict
         updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
-    function setDisplayModeFromHtml(mode) {
-        if (mode !== 'flow' && mode !== 'house') {
+    let displayMode = '__INITIAL_DISPLAY_MODE__';
+
+    function updateDisplayModeButton() {
+        const btn = document.getElementById('btn_display_mode');
+        if (!btn) {
             return;
         }
 
-        // Gleicher Zustand wie im Konfigurationsformular:
-        // RequestAction setzt die echte Modul-Property DisplayMode und
-        // führt anschließend IPS_ApplyChanges() aus.
-        requestAction('SetDisplayMode', mode);
-    }
-
-    // Wie beim Sankey-Modul: normale DOM-Click-Listener statt Inline-onclick.
-    const viewFlowButton = document.getElementById('view-flow');
-    const viewHouseButton = document.getElementById('view-house');
-
-    if (viewFlowButton) {
-        viewFlowButton.addEventListener('click', function () {
-            setDisplayModeFromHtml('flow');
-        });
-    }
-
-    if (viewHouseButton) {
-        viewHouseButton.addEventListener('click', function () {
-            setDisplayModeFromHtml('house');
-        });
+        btn.textContent = displayMode === 'house'
+            ? 'Energiefluss anzeigen'
+            : 'Hausansicht anzeigen';
     }
 
     function applyDisplayMode(mode) {
         const house = mode === 'house';
+        displayMode = house ? 'house' : 'flow';
+        updateDisplayModeButton();
         if (stage) stage.style.display = house ? 'none' : 'block';
         if (houseStage) houseStage.style.display = house ? 'block' : 'none';
 
-        const flowButton = document.getElementById('view-flow');
-        const houseButton = document.getElementById('view-house');
-        if (flowButton) flowButton.classList.toggle('active', !house);
-        if (houseButton) houseButton.classList.toggle('active', house);
-
-        // Beide Ansichten nutzen den Symcon-Hintergrund.
+        // In der Hausansicht keinen eigenen Kachelhintergrund zeichnen.
+        // Dadurch scheint der von IP-Symcon vorgegebene Hintergrund durch.
         const eflow = document.getElementById('eflow');
         if (eflow) {
             eflow.style.background = 'transparent';
         }
     }
+
+    document.getElementById('btn_display_mode').addEventListener('click', function () {
+        const newMode = displayMode === 'house' ? 'flow' : 'house';
+        requestAction('ToggleDisplayMode', newMode);
+    });
 
     // ---------- Regelung / Statistik ----------
     const CFG = [
@@ -2084,13 +2009,6 @@ class Energiefluss extends IPSModuleStrict
         setState(d);
     }
 
-    // Wie beim Sankey-Modul:
-    // UpdateVisualizationValue() wird vom Symcon-Frontend als message
-    // an das HTML-Fenster weitergereicht.
-    window.addEventListener('message', function(event) {
-        handleMessage(event.data);
-    });
-
     // ---------- Animation ----------
     let last = performance.now();
 
@@ -2208,13 +2126,11 @@ class Energiefluss extends IPSModuleStrict
     fit();
     requestAnimationFrame(frame);
 </script>
-</body>
-</html>
 HTML;
 
         return str_replace(
-            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__'],
-            [$flowDisplay, $houseDisplay],
+            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__', '__INITIAL_DISPLAY_MODE__'],
+            [$flowDisplay, $houseDisplay, $showHouse ? 'house' : 'flow'],
             $html
         );
     }
