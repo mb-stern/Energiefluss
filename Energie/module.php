@@ -269,7 +269,7 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Verbraucher', 'allowTransparent' => false],
                         [
-                            'type' => 'Slider',
+                            'type' => 'HorizontalSlider',
                             'name' => 'FlowSpeedPercent',
                             'caption' => 'Animationsgeschwindigkeit',
                             'minimum' => 25,
