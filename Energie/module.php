@@ -434,6 +434,12 @@ class Energiefluss extends IPSModuleStrict
         justify-content: center;
         gap: 8px;
         padding: 2px 0 7px;
+
+        /* Die Bedienleiste muss immer über allen Grafik-Layern liegen. */
+        position: relative;
+        z-index: 2147483647;
+        pointer-events: auto !important;
+        isolation: isolate;
     }
 
     #btn_display_mode {
@@ -446,11 +452,23 @@ class Energiefluss extends IPSModuleStrict
         color: var(--w-text2);
         cursor: pointer;
         outline: none;
+
+        position: relative;
+        z-index: 2147483647;
+        pointer-events: auto !important;
+        touch-action: manipulation;
+        user-select: none;
     }
 
     #btn_display_mode:hover {
-        background: rgba(127,127,127,0.16);
-        color: var(--w-text);
+        background: rgba(127,127,127,0.32) !important;
+        color: var(--w-text) !important;
+        outline: 2px solid rgba(77,159,255,.75);
+    }
+
+    #btn_display_mode:active {
+        transform: translateY(1px);
+        opacity: .65;
     }
     #scale-host {
         width: 100%;
@@ -459,6 +477,16 @@ class Energiefluss extends IPSModuleStrict
         height: auto;
         overflow: hidden;
         position: relative;
+
+        /* Hausgrafik, SVG, Animationen und power-flow-card sind rein visuell.
+           Dadurch kann kein Grafik-Layer den Button abfangen. */
+        pointer-events: none !important;
+    }
+
+    #scale-host *,
+    #scale-host *::before,
+    #scale-host *::after {
+        pointer-events: none !important;
     }
     #scale-root {
         width: 540px;
