@@ -317,8 +317,20 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        if ($Ident === 'DiagClick') {
-            $this->LogMessage('Diagnose-Button geklickt', KL_MESSAGE);
+        if ($Ident === 'ToggleDisplayMode') {
+            $newMode = ((string) $Value === 'house') ? 'house' : 'flow';
+
+            if ($newMode !== $this->ReadPropertyString('DisplayMode')) {
+                IPS_SetProperty($this->InstanceID, 'DisplayMode', $newMode);
+                IPS_ApplyChanges($this->InstanceID);
+
+                // Ein eventuell geöffnetes Konfigurationsformular
+                // liest damit ebenfalls den neuen DisplayMode ein.
+                $this->ReloadForm();
+            } else {
+                $this->PushState();
+            }
+
             return;
         }
 
@@ -416,39 +428,14 @@ class Energiefluss extends IPSModuleStrict
         padding: 10px;
         background: transparent;
         overflow: hidden;
+
+        /* Grafik und Bedienung bewusst trennen:
+           oben nur die Visualisierung, unten der klickbare Umschalter. */
         display: flex;
         flex-direction: column;
         min-height: 0;
     }
 
-    #diag-bar {
-        flex: 0 0 auto;
-        display: flex;
-        align-items: center;
-        justify-content: center;
-        gap: 12px;
-        padding-bottom: 6px;
-    }
-
-    #diag-button {
-        border: 2px solid #4d9fff;
-        border-radius: 7px;
-        padding: 6px 12px;
-        cursor: pointer;
-        background: var(--w-surface);
-        color: var(--w-text);
-    }
-
-    #diag-button:hover {
-        background: #4d9fff;
-        color: white;
-        transform: scale(1.04);
-    }
-
-    #diag-count {
-        color: var(--w-text2);
-        font-size: 12px;
-    }
     #scale-host {
         width: 100%;
         flex: 1 1 auto;
@@ -456,6 +443,39 @@ class Energiefluss extends IPSModuleStrict
         height: auto;
         overflow: hidden;
         position: relative;
+    }
+
+    #display-mode-bar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 8px;
+        padding: 6px 4px 0;
+        min-height: 32px;
+    }
+
+    #display-mode-button {
+        appearance: none;
+        border: 1px solid var(--w-border);
+        border-radius: 7px;
+        padding: 5px 12px;
+        background: var(--w-surface);
+        color: var(--w-text2);
+        font: inherit;
+        font-size: 12px;
+        font-weight: 500;
+        cursor: pointer;
+        outline: none;
+    }
+
+    #display-mode-button:hover {
+        color: var(--w-text);
+        border-color: var(--w-text2);
+    }
+
+    #display-mode-button:active {
+        transform: translateY(1px);
     }
     #scale-root {
         width: 540px;
@@ -755,12 +775,11 @@ class Energiefluss extends IPSModuleStrict
 
 </style>
 <script src="/icons.js"></script>
+<script type="module"
+        src="/user/Energiefluss/vendor/power-flow-card.js">
+</script>
 
 <div id="eflow">
-    <div id="diag-bar">
-        <button id="diag-button" type="button">TEST Maus / Klick</button>
-        <span id="diag-count">Maus: 0</span>
-    </div>
     <div id="scale-host">
         <div id="scale-root">
             <div id="wrap">
@@ -831,6 +850,10 @@ class Energiefluss extends IPSModuleStrict
                 </div>
             </div>
         </div>
+    </div>
+
+    <div id="display-mode-bar">
+        <button id="display-mode-button" type="button">Ansicht wechseln</button>
     </div>
 </div>
 
@@ -1703,21 +1726,48 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
-        // Diagnose: Hausansicht / externe power-flow-card vollständig deaktiviert.
+        updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
+    }
+
+    let currentDisplayMode = '__INITIAL_DISPLAY_MODE__';
+
+    function updateDisplayModeButton() {
+        const button = document.getElementById('display-mode-button');
+        if (!button) {
+            return;
+        }
+
+        button.textContent = currentDisplayMode === 'house'
+            ? 'Energiefluss anzeigen'
+            : 'Hausansicht anzeigen';
     }
 
     function applyDisplayMode(mode) {
-        const house = false;
-        if (stage) stage.style.display = 'block';
-        if (houseStage) houseStage.style.display = 'none';
+        const house = mode === 'house';
+        currentDisplayMode = house ? 'house' : 'flow';
 
-        // In der Hausansicht keinen eigenen Kachelhintergrund zeichnen.
-        // Dadurch scheint der von IP-Symcon vorgegebene Hintergrund durch.
+        if (stage) stage.style.display = house ? 'none' : 'block';
+        if (houseStage) houseStage.style.display = house ? 'block' : 'none';
+
+        updateDisplayModeButton();
+
+        // Beide Ansichten bleiben auf dem von IP-Symcon
+        // vorgegebenen Hintergrund.
         const eflow = document.getElementById('eflow');
         if (eflow) {
             eflow.style.background = 'transparent';
         }
     }
+
+    const displayModeButton = document.getElementById('display-mode-button');
+    if (displayModeButton) {
+        displayModeButton.addEventListener('click', function () {
+            const newMode = currentDisplayMode === 'house' ? 'flow' : 'house';
+            requestAction('ToggleDisplayMode', newMode);
+        });
+    }
+
+    updateDisplayModeButton();
 
     // ---------- Regelung / Statistik ----------
     const CFG = [
@@ -1983,24 +2033,6 @@ class Energiefluss extends IPSModuleStrict
         setState(d);
     }
 
-    let diagMouseCount = 0;
-
-    document.addEventListener('mousemove', function () {
-        diagMouseCount++;
-        const el = document.getElementById('diag-count');
-        if (el) {
-            el.textContent = 'Maus: ' + diagMouseCount;
-        }
-    }, true);
-
-    const diagButton = document.getElementById('diag-button');
-    if (diagButton) {
-        diagButton.addEventListener('click', function () {
-            this.textContent = 'Klick erkannt';
-            requestAction('DiagClick', 1);
-        });
-    }
-
     // ---------- Animation ----------
     let last = performance.now();
 
@@ -2121,8 +2153,8 @@ class Energiefluss extends IPSModuleStrict
 HTML;
 
         return str_replace(
-            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__'],
-            [$flowDisplay, $houseDisplay],
+            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__', '__INITIAL_DISPLAY_MODE__'],
+            [$flowDisplay, $houseDisplay, $showHouse ? 'house' : 'flow'],
             $html
         );
     }
