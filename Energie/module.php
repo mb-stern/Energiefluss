@@ -2092,11 +2092,23 @@ HTML;
 
         $value = GetValue($id);
 
+        // Boolean kann keinen realen Ladezustand zwischen 0 und 100 abbilden.
+        // Deshalb true NICHT mehr als 100 % interpretieren.
         if (is_bool($value)) {
-            return $value ? 100.0 : 0.0;
+            return null;
         }
 
+        // Bei numerischen Variablen zuerst prüfen, ob das Profil bereits
+        // einen Prozentwert formatiert. Dann diesen Wert verwenden.
         if (is_int($value) || is_float($value)) {
+            $formatted = GetValueFormatted($id);
+            if (is_string($formatted) && str_contains($formatted, '%')) {
+                $normalized = str_replace(',', '.', trim($formatted));
+                if (preg_match('/[-+]?\d+(?:\.\d+)?/', $normalized, $match) === 1) {
+                    return max(0.0, min(100.0, (float) $match[0]));
+                }
+            }
+
             return max(0.0, min(100.0, (float) $value));
         }
 
