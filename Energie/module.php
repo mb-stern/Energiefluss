@@ -172,9 +172,16 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Energie (optional)',
-                                    'name'    => 'EnergyVariableID',
-                                    'width'   => '260px',
+                                    'caption' => 'Ladeenergie (kWh)',
+                                    'name'    => 'ChargeEnergyVariableID',
+                                    'width'   => '250px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Entladeenergie (kWh)',
+                                    'name'    => 'DischargeEnergyVariableID',
+                                    'width'   => '250px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
@@ -685,6 +692,7 @@ class Energiefluss extends IPSModuleStrict
                             <div id="pfc-info-home" class="pfc-info">
                                 <div class="title">Hausverbrauch</div>
                                 <div id="pfc-home-main" class="main">0 W</div>
+                                <div id="pfc-home-energy" class="sub"></div>
                             </div>
 
                             <div id="pfc-info-battery" class="pfc-info">
@@ -787,6 +795,18 @@ class Energiefluss extends IPSModuleStrict
 
     function fmt(w) {
         return Math.round(w || 0).toLocaleString('de-DE') + ' W';
+    }
+
+    function fmtKwh(value) {
+        const n = Number(value);
+        if (!Number.isFinite(n)) {
+            return '';
+        }
+
+        return n.toLocaleString('de-DE', {
+            minimumFractionDigits: 2,
+            maximumFractionDigits: 2
+        }) + ' kWh';
     }
 
     function addNode(id, n, cls) {
@@ -922,11 +942,19 @@ class Energiefluss extends IPSModuleStrict
                 'battery-node'
             );
 
+            const batteryEnergyLines = [];
+            if (bat.chargeEnergyText) {
+                batteryEnergyLines.push(`Laden ${bat.chargeEnergyText}`);
+            }
+            if (bat.dischargeEnergyText) {
+                batteryEnergyLines.push(`Entladen ${bat.dischargeEnergyText}`);
+            }
+
             document.getElementById('body-bat' + i).innerHTML =
                 `<div class="sub" style="font-size:11px">${Math.round(bat.soc || 0)}%</div>` +
                 `<div class="val" style="color:${batColor}">${fmt(Math.abs(bat.value || 0))}</div>` +
-                (bat.energy
-                    ? `<div class="sub" style="font-size:10px;line-height:1.25;">${bat.energy}</div>`
+                (batteryEnergyLines.length
+                    ? `<div class="sub" style="font-size:9px;line-height:1.25;">${batteryEnergyLines.join('<br>')}</div>`
                     : '');
 
             addEdge(
@@ -1476,8 +1504,16 @@ class Energiefluss extends IPSModuleStrict
 
         // Haus
         const homeMain = document.getElementById('pfc-home-main');
+        const homeEnergy = document.getElementById('pfc-home-energy');
+
         if (homeMain) {
             homeMain.textContent = fmt(haus);
+        }
+
+        if (homeEnergy) {
+            homeEnergy.textContent = d.houseEnergyAvailable
+                ? fmtKwh(d.houseEnergy)
+                : '';
         }
 
         // Batterie: blau = Entladung Richtung Haus, grün = Laden Richtung Batterie.
@@ -1521,7 +1557,19 @@ class Energiefluss extends IPSModuleStrict
                 batterySub.innerHTML = batteries.map((bat, i) => {
                     const name = bat.name || ('Batterie ' + (i + 1));
                     const mode = (bat.value || 0) >= 0 ? 'Entladen' : 'Laden';
-                    const energy = bat.energy ? ` · ${bat.energy}` : '';
+                    const energyParts = [];
+
+                    if (bat.chargeEnergyText) {
+                        energyParts.push(`Laden ${bat.chargeEnergyText}`);
+                    }
+                    if (bat.dischargeEnergyText) {
+                        energyParts.push(`Entladen ${bat.dischargeEnergyText}`);
+                    }
+
+                    const energy = energyParts.length
+                        ? `<br>${energyParts.join(' · ')}`
+                        : '';
+
                     return `${name}: ${Math.round(bat.soc || 0)} % · ${mode}${energy}`;
                 }).join('<br>');
             }
@@ -1817,7 +1865,10 @@ class Energiefluss extends IPSModuleStrict
                 : '');
 
         document.getElementById('body-haus').innerHTML =
-            `<div class="val" style="font-size:17px">${fmt(haus)}</div>`;
+            `<div class="val" style="font-size:17px">${fmt(haus)}</div>` +
+            (d.houseEnergyAvailable
+                ? `<div class="sub" style="font-size:10px;line-height:1.25;">${fmtKwh(d.houseEnergy)}</div>`
+                : '');
 
         updateRings(
             [
@@ -2239,7 +2290,13 @@ HTML;
         $batteries = json_decode($this->ReadPropertyString('Batteries'), true);
         if (is_array($batteries)) {
             foreach ($batteries as $battery) {
-                foreach (['VariableID', 'EnergyVariableID', 'SoCVariableID'] as $key) {
+                foreach ([
+                    'VariableID',
+                    'EnergyVariableID',
+                    'ChargeEnergyVariableID',
+                    'DischargeEnergyVariableID',
+                    'SoCVariableID'
+                ] as $key) {
                     $variableID = (int) ($battery[$key] ?? 0);
                     if ($variableID > 0) {
                         $ids[] = $variableID;
@@ -2304,14 +2361,16 @@ HTML;
 
                 $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
 
+                $hasEnergy = $energyVariableID > 0 && IPS_VariableExists($energyVariableID);
+
                 $pvs[] = [
-                    'name'   => trim((string) ($source['Name'] ?? '')) !== ''
+                    'name'        => trim((string) ($source['Name'] ?? '')) !== ''
                         ? (string) $source['Name']
                         : 'PV ' . (count($pvs) + 1),
-                    'value'  => (float) GetValue($variableID),
-                    'energy' => ($energyVariableID > 0 && IPS_VariableExists($energyVariableID))
-                        ? GetValueFormatted($energyVariableID)
-                        : '',
+                    'value'       => (float) GetValue($variableID),
+                    'energy'      => $hasEnergy ? GetValueFormatted($energyVariableID) : '',
+                    'energyValue' => $hasEnergy ? (float) GetValue($energyVariableID) : 0.0,
+                    'hasEnergy'   => $hasEnergy,
                 ];
             }
         }
@@ -2325,7 +2384,8 @@ HTML;
                     continue;
                 }
 
-                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
+                $chargeEnergyVariableID = (int) ($source['ChargeEnergyVariableID'] ?? 0);
+                $dischargeEnergyVariableID = (int) ($source['DischargeEnergyVariableID'] ?? 0);
                 $socVariableID = (int) ($source['SoCVariableID'] ?? 0);
 
                 $value = (float) GetValue($variableID);
@@ -2333,17 +2393,36 @@ HTML;
                     $value *= -1;
                 }
 
+                $hasChargeEnergy =
+                    $chargeEnergyVariableID > 0 &&
+                    IPS_VariableExists($chargeEnergyVariableID);
+
+                $hasDischargeEnergy =
+                    $dischargeEnergyVariableID > 0 &&
+                    IPS_VariableExists($dischargeEnergyVariableID);
+
                 $batteries[] = [
-                    'name'   => trim((string) ($source['Name'] ?? '')) !== ''
+                    'name'                 => trim((string) ($source['Name'] ?? '')) !== ''
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
-                    'value'  => $value,
-                    'energy' => ($energyVariableID > 0 && IPS_VariableExists($energyVariableID))
-                        ? GetValueFormatted($energyVariableID)
-                        : '',
-                    'soc'    => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
+                    'value'                => $value,
+                    'soc'                  => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
                         ? (float) GetValue($socVariableID)
                         : 0.0,
+                    'chargeEnergy'         => $hasChargeEnergy
+                        ? (float) GetValue($chargeEnergyVariableID)
+                        : 0.0,
+                    'chargeEnergyText'     => $hasChargeEnergy
+                        ? GetValueFormatted($chargeEnergyVariableID)
+                        : '',
+                    'hasChargeEnergy'      => $hasChargeEnergy,
+                    'dischargeEnergy'      => $hasDischargeEnergy
+                        ? (float) GetValue($dischargeEnergyVariableID)
+                        : 0.0,
+                    'dischargeEnergyText'  => $hasDischargeEnergy
+                        ? GetValueFormatted($dischargeEnergyVariableID)
+                        : '',
+                    'hasDischargeEnergy'   => $hasDischargeEnergy,
                 ];
             }
         }
@@ -2384,6 +2463,67 @@ HTML;
         }
 
 
+        // Energiebilanz des Hauses in kWh:
+        // PV + Netzbezug - Einspeisung + Batterieentladung - Batterieladung.
+        $gridImportEnergyID = $this->ReadPropertyInteger('GridImportEnergy');
+        $gridExportEnergyID = $this->ReadPropertyInteger('GridExportEnergy');
+
+        $hasGridImportEnergy =
+            $gridImportEnergyID > 0 &&
+            IPS_VariableExists($gridImportEnergyID);
+
+        $hasGridExportEnergy =
+            $gridExportEnergyID > 0 &&
+            IPS_VariableExists($gridExportEnergyID);
+
+        $pvEnergyTotal = 0.0;
+        $hasPvEnergy = count($pvs) > 0;
+        foreach ($pvs as $pv) {
+            if (!($pv['hasEnergy'] ?? false)) {
+                $hasPvEnergy = false;
+                break;
+            }
+            $pvEnergyTotal += (float) ($pv['energyValue'] ?? 0.0);
+        }
+
+        $batteryChargeEnergyTotal = 0.0;
+        $batteryDischargeEnergyTotal = 0.0;
+        $hasBatteryEnergy = true;
+
+        foreach ($batteries as $battery) {
+            if (
+                !($battery['hasChargeEnergy'] ?? false) ||
+                !($battery['hasDischargeEnergy'] ?? false)
+            ) {
+                $hasBatteryEnergy = false;
+                break;
+            }
+
+            $batteryChargeEnergyTotal += (float) ($battery['chargeEnergy'] ?? 0.0);
+            $batteryDischargeEnergyTotal += (float) ($battery['dischargeEnergy'] ?? 0.0);
+        }
+
+        // Ohne Batterie ist dieser Teil der Bilanz automatisch vollständig.
+        if (count($batteries) === 0) {
+            $hasBatteryEnergy = true;
+        }
+
+        $houseEnergyAvailable =
+            $hasPvEnergy &&
+            $hasGridImportEnergy &&
+            $hasGridExportEnergy &&
+            $hasBatteryEnergy;
+
+        $houseEnergy = 0.0;
+        if ($houseEnergyAvailable) {
+            $houseEnergy =
+                $pvEnergyTotal +
+                (float) GetValue($gridImportEnergyID) -
+                (float) GetValue($gridExportEnergyID) +
+                $batteryDischargeEnergyTotal -
+                $batteryChargeEnergyTotal;
+        }
+
         return [
             'displayMode'      => $this->ReadPropertyString('DisplayMode'),
             'pvs'              => $pvs,
@@ -2391,6 +2531,8 @@ HTML;
             'grid'             => $grid,
             'gridImportEnergy' => $this->ReadVarFormatted('GridImportEnergy'),
             'gridExportEnergy' => $this->ReadVarFormatted('GridExportEnergy'),
+            'houseEnergy'       => $houseEnergy,
+            'houseEnergyAvailable' => $houseEnergyAvailable,
             'wallbox'          => $wallbox,
             'hasWallbox'       => (
                 $this->ReadPropertyInteger('WallboxPower') > 0
