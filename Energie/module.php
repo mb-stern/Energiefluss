@@ -2084,6 +2084,79 @@ HTML;
     }
 
 
+    private function ReadWallboxSoC(): array
+    {
+        $id = $this->ReadPropertyInteger('WallboxSoC');
+
+        if ($id <= 0 || !IPS_VariableExists($id)) {
+            return [
+                'hasSoc' => false,
+                'soc'    => 0.0,
+            ];
+        }
+
+        $value = GetValue($id);
+        $soc = null;
+
+        if (is_int($value) || is_float($value)) {
+            $soc = (float) $value;
+
+            // Werte zwischen 0 und 1 werden als 0..1-Skala interpretiert,
+            // z.B. 0.72 = 72 %.
+            if ($soc > 0.0 && $soc < 1.0) {
+                $soc *= 100.0;
+            }
+        } elseif (is_string($value)) {
+            $raw = trim($value);
+
+            if ($raw !== '') {
+                $normalized = str_replace(',', '.', $raw);
+
+                // Unterstützt u.a.:
+                // "72", "72 %", "SOC: 72%", "72,5", "0.72", "0,72"
+                if (preg_match('/[-+]?\d+(?:\.\d+)?/', $normalized, $match) === 1) {
+                    $soc = (float) $match[0];
+
+                    // Dezimalwerte zwischen 0 und 1 ohne Prozentzeichen
+                    // als normierte 0..1-Skala interpretieren.
+                    if (
+                        $soc > 0.0
+                        && $soc < 1.0
+                        && !str_contains($normalized, '%')
+                    ) {
+                        $soc *= 100.0;
+                    }
+                } else {
+                    $lower = strtolower($raw);
+
+                    // Boolean-artige Strings werden akzeptiert,
+                    // aber nicht als 100 % missverstanden.
+                    if (in_array($lower, ['false', 'off', 'no', 'nein'], true)) {
+                        $soc = 0.0;
+                    } elseif (in_array($lower, ['true', 'on', 'yes', 'ja'], true)) {
+                        $soc = null;
+                    }
+                }
+            }
+        } elseif (is_bool($value)) {
+            // Ein Boolean enthält keinen echten Ladezustand.
+            // false kann sinnvoll 0 % bedeuten; true wird nicht als 100 % geraten.
+            $soc = $value ? null : 0.0;
+        }
+
+        if ($soc === null || !is_finite($soc)) {
+            return [
+                'hasSoc' => false,
+                'soc'    => 0.0,
+            ];
+        }
+
+        return [
+            'hasSoc' => true,
+            'soc'    => max(0.0, min(100.0, $soc)),
+        ];
+    }
+
     private function CollectVariableIDs(): array
     {
         $ids = [];
@@ -2255,18 +2328,14 @@ HTML;
         }
 
         // Wallbox.
-        // SOC-Auslese wie in der früheren funktionierenden Version:
-        // Variable direkt lesen und nur anhand der vorhandenen Variable entscheiden,
-        // ob ein SOC angezeigt wird.
-        $wallboxSoCID = $this->ReadPropertyInteger('WallboxSoC');
-        $wallboxHasSoC = $wallboxSoCID > 0 && IPS_VariableExists($wallboxSoCID);
+        $wallboxSoC = $this->ReadWallboxSoC();
 
         $wallbox = [
             'name'   => $this->ReadPropertyString('WallboxName'),
             'value'  => $this->ReadVar('WallboxPower'),
             'energy' => $this->ReadVarFormatted('WallboxEnergy'),
-            'soc'    => $wallboxHasSoC ? (float) GetValue($wallboxSoCID) : 0.0,
-            'hasSoc' => $wallboxHasSoC,
+            'soc'    => $wallboxSoC['soc'],
+            'hasSoc' => $wallboxSoC['hasSoc'],
         ];
 
         // Verbrauchergruppen.
