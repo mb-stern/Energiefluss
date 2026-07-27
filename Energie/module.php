@@ -53,6 +53,19 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('ColorBatteryDischarge', 2733814);
         $this->RegisterPropertyInteger('ColorConsumers', 3123599);
 
+        // Farben der Haus-Visualisierung.
+        // Vorgaben entsprechen den Originalfarben der eingebetteten home.svg.
+        $this->RegisterPropertyInteger('HouseColorFacade', 2107187);       // #202733
+        $this->RegisterPropertyInteger('HouseColorRoof', 1646636);         // #19202c
+        $this->RegisterPropertyInteger('HouseColorRoofSecondary', 1712685);// #1a222d
+        $this->RegisterPropertyInteger('HouseColorWindows', 16772536);     // #ffedb8
+        $this->RegisterPropertyInteger('HouseColorSolarPanels', 10393218); // #9e9682
+        $this->RegisterPropertyInteger('HouseColorInverter', 857372);      // #0d151c
+        $this->RegisterPropertyInteger('HouseColorCar', 790808);           // #0c1118
+        $this->RegisterPropertyInteger('HouseColorCarDetails', 1448741);   // #161b25
+        $this->RegisterPropertyInteger('HouseColorBattery', 858148);       // #0d1824
+        $this->RegisterPropertyInteger('HouseColorBatteryAccent', 6868216);// #68ccf8
+
         // Animationsgeschwindigkeit: 100 % entspricht dem bisherigen Verhalten.
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
@@ -284,6 +297,27 @@ class Energiefluss extends IPSModuleStrict
                         ],
                     ],
                 ],
+                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => 'Hausansicht – Farben',
+                    'items'   => [
+                        ['type' => 'SelectColor', 'name' => 'HouseColorFacade', 'caption' => 'Haus / Fassade', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'HouseColorRoof', 'caption' => 'Dach Hauptfläche', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'HouseColorRoofSecondary', 'caption' => 'Dach Nebenfläche', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'HouseColorWindows', 'caption' => 'Fenster / Licht', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'HouseColorSolarPanels', 'caption' => 'PV-Module auf dem Haus', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'HouseColorInverter', 'caption' => 'Wechselrichter', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'HouseColorCar', 'caption' => 'Fahrzeug Karosserie', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'HouseColorCarDetails', 'caption' => 'Fahrzeug Details', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'HouseColorBattery', 'caption' => 'Batterie Gehäuse', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'HouseColorBatteryAccent', 'caption' => 'Batterie Akzent', 'allowTransparent' => false],
+                        [
+                            'type'    => 'Button',
+                            'caption' => 'Standardfarben wiederherstellen',
+                            'onClick' => 'ENERGIE_ResetHouseColors($id);',
+                        ],
+                    ],
+                ],
             ],
             'actions' => [
                 [
@@ -327,6 +361,30 @@ class Energiefluss extends IPSModuleStrict
 
             return;
         }
+    }
+
+    public function ResetHouseColors(): void
+    {
+        // Originalfarben der eingebetteten Haus-SVG wiederherstellen.
+        $defaults = [
+            'HouseColorFacade'        => 2107187,  // #202733
+            'HouseColorRoof'          => 1646636,  // #19202c
+            'HouseColorRoofSecondary' => 1712685,  // #1a222d
+            'HouseColorWindows'       => 16772536, // #ffedb8
+            'HouseColorSolarPanels'   => 10393218, // #9e9682
+            'HouseColorInverter'      => 857372,   // #0d151c
+            'HouseColorCar'           => 790808,   // #0c1118
+            'HouseColorCarDetails'    => 1448741,  // #161b25
+            'HouseColorBattery'       => 858148,   // #0d1824
+            'HouseColorBatteryAccent' => 6868216,  // #68ccf8
+        ];
+
+        foreach ($defaults as $property => $value) {
+            IPS_SetProperty($this->InstanceID, $property, $value);
+        }
+
+        IPS_ApplyChanges($this->InstanceID);
+        $this->ReloadForm();
     }
 
     public function ReloadHtml(): void
@@ -1405,6 +1463,66 @@ class Energiefluss extends IPSModuleStrict
         );
     }
 
+    function applyPfcBackgroundColors(d) {
+        if (!pfcCard || !pfcCard.shadowRoot || !d || !d.houseColors) {
+            return;
+        }
+
+        const container = pfcCard.shadowRoot.getElementById('svg-container-bg');
+        const bgSvg = container ? container.querySelector('svg') : null;
+
+        if (!bgSvg) {
+            return;
+        }
+
+        const c = d.houseColors;
+
+        const setFill = (selector, color) => {
+            if (!color) return;
+            bgSvg.querySelectorAll(selector).forEach(el => {
+                el.style.setProperty('fill', color, 'important');
+            });
+        };
+
+        // Haus/Fassade
+        setFill('#house path', c.facade);
+
+        // Das Original-SVG besitzt zwei unterschiedlich gefärbte Dachpfade.
+        const roofPaths = bgSvg.querySelectorAll('#roof path');
+        if (roofPaths[0] && c.roof) {
+            roofPaths[0].style.setProperty('fill', c.roof, 'important');
+        }
+        if (roofPaths[1] && c.roofSecondary) {
+            roofPaths[1].style.setProperty('fill', c.roofSecondary, 'important');
+        }
+
+        // Fenster, PV-Module und Wechselrichter
+        setFill('#windows path', c.windows);
+        setFill('#solar path', c.solarPanels);
+        setFill('#inverter path', c.inverter);
+
+        // Fahrzeug: erster Pfad = Grundkörper, restliche Pfade = Details.
+        const carPaths = bgSvg.querySelectorAll('#car path');
+        if (carPaths[0] && c.car) {
+            carPaths[0].style.setProperty('fill', c.car, 'important');
+        }
+        carPaths.forEach((el, index) => {
+            if (index > 0 && c.carDetails) {
+                el.style.setProperty('fill', c.carDetails, 'important');
+            }
+        });
+
+        // Batteriespeicher: Gehäuse + farbiger Akzent.
+        const batteryPaths = bgSvg.querySelectorAll('#battery path');
+        if (batteryPaths[0] && c.battery) {
+            batteryPaths[0].style.setProperty('fill', c.battery, 'important');
+        }
+        if (batteryPaths[1] && c.batteryAccent) {
+            batteryPaths[1].style.setProperty('fill', c.batteryAccent, 'important');
+        }
+    }
+
+
     function applyPfcOptionalLayers(d, batteries, wallbox) {
         if (!pfcCard || !pfcCard.shadowRoot) {
             return;
@@ -1490,6 +1608,12 @@ class Energiefluss extends IPSModuleStrict
                 ));
 
                 installPfcShadowOverrides(card);
+
+                // Die Hintergrund-SVG wird vom Upstream-Code asynchron geladen.
+                // Falls bereits Daten vorhanden sind, Farben sofort anwenden.
+                if (pfcPendingData && pfcPendingData[0]) {
+                    applyPfcBackgroundColors(pfcPendingData[0]);
+                }
 
                 if (pfcLoading) {
                     pfcLoading.style.display = 'none';
@@ -1729,6 +1853,7 @@ class Energiefluss extends IPSModuleStrict
         updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox);
 
         installPfcShadowOverrides(pfcCard);
+        applyPfcBackgroundColors(d);
         applyPfcOptionalLayers(d, batteries, wallbox);
 
         // Upstream updateFlow() wird bereits vom hass-Setter ausgelöst.
@@ -1738,6 +1863,7 @@ class Energiefluss extends IPSModuleStrict
             if (pfcCard && pfcCard.isInitialized && typeof pfcCard.updateFlow === 'function') {
                 pfcCard.updateFlow();
                 applyPfcBatteryFlowColor(batteryTotal);
+                applyPfcBackgroundColors(d);
                 applyPfcOptionalLayers(d, batteries, wallbox);
                     }
         });
@@ -2590,6 +2716,18 @@ HTML;
             ),
             'groups'           => $groups,
             'flowSpeedPercent' => $this->ReadPropertyInteger('FlowSpeedPercent'),
+            'houseColors'      => [
+                'facade'           => $this->ColorToHex($this->ReadPropertyInteger('HouseColorFacade')),
+                'roof'             => $this->ColorToHex($this->ReadPropertyInteger('HouseColorRoof')),
+                'roofSecondary'    => $this->ColorToHex($this->ReadPropertyInteger('HouseColorRoofSecondary')),
+                'windows'          => $this->ColorToHex($this->ReadPropertyInteger('HouseColorWindows')),
+                'solarPanels'      => $this->ColorToHex($this->ReadPropertyInteger('HouseColorSolarPanels')),
+                'inverter'         => $this->ColorToHex($this->ReadPropertyInteger('HouseColorInverter')),
+                'car'              => $this->ColorToHex($this->ReadPropertyInteger('HouseColorCar')),
+                'carDetails'       => $this->ColorToHex($this->ReadPropertyInteger('HouseColorCarDetails')),
+                'battery'          => $this->ColorToHex($this->ReadPropertyInteger('HouseColorBattery')),
+                'batteryAccent'    => $this->ColorToHex($this->ReadPropertyInteger('HouseColorBatteryAccent')),
+            ],
             'colors'           => [
                 'solar'     => $this->ColorToHex($this->ReadPropertyInteger('ColorSolar')),
                 'import'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridImport')),
