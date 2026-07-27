@@ -551,9 +551,11 @@ class Energiefluss extends IPSModuleStrict
         display: __HOUSE_DISPLAY__;
         overflow: hidden;
         box-sizing: border-box;
-        border-radius: 18px;
-        border: 1px solid #263443;
-        background: #111827;
+
+        /* Hausansicht freigestellt: der Hintergrund kommt von Symcon. */
+        border: none;
+        border-radius: 0;
+        background: transparent;
     }
 
     #pfc-host {
@@ -616,16 +618,21 @@ class Energiefluss extends IPSModuleStrict
         padding: 7px 9px;
         box-sizing: border-box;
         border-radius: 9px;
-        background: rgba(10, 16, 24, .88);
-        border: 1px solid rgba(255,255,255,.12);
-        box-shadow: 0 5px 18px rgba(0,0,0,.24);
-        color: #f3f4f6;
+
+        /* Nur die Infobox selbst bleibt leicht abgesetzt. Die Fläche rund
+           um Haus und Leitungen bleibt vollständig transparent. */
+        background: var(--w-surface);
+        background: color-mix(in srgb, var(--w-surface) 88%, transparent);
+        border: 1px solid var(--w-border);
+        box-shadow: 0 5px 18px rgba(0,0,0,.16);
+        color: var(--w-text);
         line-height: 1.25;
-        backdrop-filter: blur(2px);
+        backdrop-filter: blur(3px);
+        -webkit-backdrop-filter: blur(3px);
     }
 
     .pfc-info .title {
-        color: #aeb8c3;
+        color: var(--w-text2);
         font-size: 10px;
         font-weight: 650;
         margin-bottom: 2px;
@@ -638,7 +645,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     .pfc-info .sub {
-        color: #98a5b3;
+        color: var(--w-text2);
         font-size: 9px;
         margin-top: 2px;
         line-height: 1.3;
@@ -1309,6 +1316,11 @@ class Energiefluss extends IPSModuleStrict
                     overflow: hidden !important;
                 }
 
+                #svg-overlay,
+                #svg-container-bg {
+                    background: transparent !important;
+                }
+
                 ha-card .card-header {
                     display: none !important;
                 }
@@ -1658,6 +1670,13 @@ class Energiefluss extends IPSModuleStrict
         const house = mode === 'house';
         if (stage) stage.style.display = house ? 'none' : 'block';
         if (houseStage) houseStage.style.display = house ? 'block' : 'none';
+
+        // In der Hausansicht keinen eigenen Kachelhintergrund zeichnen.
+        // Dadurch scheint der von IP-Symcon vorgegebene Hintergrund durch.
+        const eflow = document.getElementById('eflow');
+        if (eflow) {
+            eflow.style.background = house ? 'transparent' : 'var(--w-bg)';
+        }
     }
 
     // ---------- Regelung / Statistik ----------
