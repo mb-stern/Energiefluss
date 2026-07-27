@@ -407,11 +407,54 @@ class Energiefluss extends IPSModuleStrict
         width: 100%;
         height: 100vh;
         box-sizing: border-box;
+        position: relative;
         border-radius: 12px;
         padding: 10px;
         background: transparent;
         overflow: hidden;
     }
+    #view-switch {
+        position: absolute;
+        top: 8px;
+        left: 50%;
+        transform: translateX(-50%);
+        z-index: 50;
+        display: inline-flex;
+        gap: 3px;
+        padding: 3px;
+        border: 0.5px solid var(--w-border);
+        border-radius: 9px;
+        background: color-mix(in srgb, var(--w-surface) 88%, transparent);
+        box-shadow: 0 3px 12px rgba(0,0,0,.12);
+        backdrop-filter: blur(5px);
+    }
+
+    .view-switch-btn {
+        appearance: none;
+        border: 0;
+        border-radius: 6px;
+        padding: 5px 11px;
+        background: transparent;
+        color: var(--w-text2);
+        font: inherit;
+        font-size: 11px;
+        font-weight: 600;
+        line-height: 1.2;
+        cursor: pointer;
+        white-space: nowrap;
+    }
+
+    .view-switch-btn.active {
+        background: var(--w-surface);
+        color: var(--w-text);
+        box-shadow: 0 1px 4px rgba(0,0,0,.14);
+    }
+
+    .view-switch-btn:focus-visible {
+        outline: 2px solid #4d9fff;
+        outline-offset: 1px;
+    }
+
     #scale-host {
         width: 100%;
         height: 100%;
@@ -721,6 +764,13 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="eflow">
+    <div id="view-switch" role="group" aria-label="Visualisierung">
+        <button id="view-switch-flow" class="view-switch-btn" type="button"
+                onclick="selectDisplayMode('flow')">Energiefluss</button>
+        <button id="view-switch-house" class="view-switch-btn" type="button"
+                onclick="selectDisplayMode('house')">Hausansicht</button>
+    </div>
+
     <div id="scale-host">
         <div id="scale-root">
             <div id="wrap">
@@ -1666,17 +1716,84 @@ class Energiefluss extends IPSModuleStrict
         updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
+    let currentDisplayMode = null;
+    let lastStateData = null;
+
+    function storedDisplayMode() {
+        try {
+            const mode = localStorage.getItem('energiefluss-display-mode');
+            return mode === 'house' || mode === 'flow' ? mode : null;
+        } catch (e) {
+            return null;
+        }
+    }
+
+    function updateDisplayModeButtons(mode) {
+        const flowButton = document.getElementById('view-switch-flow');
+        const houseButton = document.getElementById('view-switch-house');
+
+        if (flowButton) {
+            flowButton.classList.toggle('active', mode === 'flow');
+            flowButton.setAttribute('aria-pressed', mode === 'flow' ? 'true' : 'false');
+        }
+
+        if (houseButton) {
+            houseButton.classList.toggle('active', mode === 'house');
+            houseButton.setAttribute('aria-pressed', mode === 'house' ? 'true' : 'false');
+        }
+    }
+
     function applyDisplayMode(mode) {
-        const house = mode === 'house';
+        const normalizedMode = mode === 'house' ? 'house' : 'flow';
+        const house = normalizedMode === 'house';
+
+        currentDisplayMode = normalizedMode;
+
         if (stage) stage.style.display = house ? 'none' : 'block';
         if (houseStage) houseStage.style.display = house ? 'block' : 'none';
 
-        // In der Hausansicht keinen eigenen Kachelhintergrund zeichnen.
-        // Dadurch scheint der von IP-Symcon vorgegebene Hintergrund durch.
+        // Beide Ansichten verwenden den von IP-Symcon vorgegebenen Hintergrund.
         const eflow = document.getElementById('eflow');
         if (eflow) {
             eflow.style.background = 'transparent';
         }
+
+        updateDisplayModeButtons(normalizedMode);
+    }
+
+    function selectDisplayMode(mode) {
+        const normalizedMode = mode === 'house' ? 'house' : 'flow';
+
+        try {
+            localStorage.setItem('energiefluss-display-mode', normalizedMode);
+        } catch (e) {
+            // localStorage ist nur Komfort; die Umschaltung funktioniert auch ohne.
+        }
+
+        applyDisplayMode(normalizedMode);
+
+        // Beim Wechsel muss auch die virtuelle Zeichenfläche neu berechnet werden.
+        if (lastStateData) {
+            const d = lastStateData;
+            const groups = d.groups || [];
+            const stats = d.stats || [];
+            const hasCfg = !!(d.hasConfig && d.config);
+            const showRightPanel = !!(stats.length || hasCfg);
+
+            updateLayout(
+                groups.length,
+                (d.pvs || []).length,
+                (d.batteries || []).length,
+                showRightPanel,
+                normalizedMode,
+                !!d.hasWallbox
+            );
+        } else {
+            fit();
+        }
+
+        // Nach dem Umschalten nochmals im nächsten Frame einpassen.
+        requestAnimationFrame(fit);
     }
 
     // ---------- Regelung / Statistik ----------
@@ -1793,6 +1910,8 @@ class Energiefluss extends IPSModuleStrict
 
     // ---------- Zustand ----------
     function setState(d) {
+        lastStateData = d;
+
         const grid = d.grid || 0;
         const imp = Math.max(grid, 0);
 
@@ -1893,7 +2012,17 @@ class Energiefluss extends IPSModuleStrict
 
         // Hausansicht V2.
         buildHouseView(d, grid, haus, pvs, batteries, wallbox);
-        applyDisplayMode(d.displayMode || 'flow');
+
+        // Die Auswahl im HTML-Fenster hat Vorrang vor der Modul-Voreinstellung.
+        // Beim ersten Aufruf wird eine zuvor gewählte Ansicht aus localStorage
+        // verwendet; ansonsten dient DisplayMode aus der Modulkonfiguration
+        // als Startwert.
+        const selectedMode =
+            currentDisplayMode ||
+            storedDisplayMode() ||
+            (d.displayMode === 'house' ? 'house' : 'flow');
+
+        applyDisplayMode(selectedMode);
 
         // Statistik.
         const stats = d.stats || [];
@@ -1927,7 +2056,7 @@ class Energiefluss extends IPSModuleStrict
             pvs.length,
             batteries.length,
             showRightPanel,
-            (d.displayMode || 'flow') === 'house' ? 'house' : 'flow',
+            currentDisplayMode || (d.displayMode === 'house' ? 'house' : 'flow'),
             !!d.hasWallbox
         );
     }
