@@ -51,8 +51,10 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('ColorGridExport', 6732650);
         $this->RegisterPropertyInteger('ColorBatteryCharge', 6600182);
         $this->RegisterPropertyInteger('ColorBatteryDischarge', 2733814);
-        $this->RegisterPropertyInteger('ColorWallbox', 11225020);
         $this->RegisterPropertyInteger('ColorConsumers', 3123599);
+
+        // Animationsgeschwindigkeit: 100 % entspricht dem bisherigen Verhalten.
+        $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
         // flow = klassische Energieflussansicht, house = Hausansicht.
         $this->RegisterPropertyString('DisplayMode', 'flow');
@@ -172,15 +174,15 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Ladeenergie (kWh)',
-                                    'name'    => 'ChargeEnergyVariableID',
+                                    'caption' => 'Entladeenergie (kWh)',
+                                    'name'    => 'DischargeEnergyVariableID',
                                     'width'   => '220px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Entladeenergie (kWh)',
-                                    'name'    => 'DischargeEnergyVariableID',
+                                    'caption' => 'Ladeenergie (kWh)',
+                                    'name'    => 'ChargeEnergyVariableID',
                                     'width'   => '220px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
@@ -265,8 +267,16 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorGridExport', 'caption' => 'Netzeinspeisung', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryCharge', 'caption' => 'Batterie laden', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
-                        ['type' => 'SelectColor', 'name' => 'ColorWallbox', 'caption' => 'Wallbox', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Verbraucher', 'allowTransparent' => false],
+                        [
+                            'type' => 'NumberSpinner',
+                            'name' => 'FlowSpeedPercent',
+                            'caption' => 'Animationsgeschwindigkeit',
+                            'minimum' => 25,
+                            'maximum' => 300,
+                            'digits' => 0,
+                            'suffix' => ' %',
+                        ],
                     ],
                 ],
             ],
@@ -521,7 +531,7 @@ class Energiefluss extends IPSModuleStrict
         --energy-grid-return-color: var(--ef-grid-export, #66bb6a);
         --energy-battery-charge-color: var(--ef-battery-charge, #64b5f6);
         --energy-battery-discharge-color: var(--ef-battery-discharge, #29b6f6);
-        --energy-car-color: var(--ef-wallbox, #ab47bc);
+        --energy-car-color: var(--ef-consumer, #2fa98f);
     }
 
     #pfc-loading,
@@ -615,7 +625,7 @@ class Energiefluss extends IPSModuleStrict
         left: 19%;
         top: 39%;
         bottom: auto;
-        border-color: var(--ef-wallbox, #ab47bc);
+        border-color: var(--ef-consumer, #2fa98f);
     }
 
     /* Netz sitzt unten direkt bei den beiden Import-/Export-Leitungen. */
@@ -651,7 +661,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-wallbox-main {
-        color: var(--ef-wallbox, #ab47bc);
+        color: var(--ef-consumer, #2fa98f);
     }
 
 
@@ -764,9 +774,11 @@ class Energiefluss extends IPSModuleStrict
         export: '#66bb6a',
         discharge: '#29b6f6',
         charge: '#64b5f6',
-        wallbox: '#ab47bc',
+        wallbox: '#2FA98F',
         home: '#4d9fff'
     };
+
+    let flowSpeedFactor = 1.0;
 
     const NSc = 'http://www.w3.org/2000/svg';
     const RR = 34;
@@ -943,11 +955,11 @@ class Energiefluss extends IPSModuleStrict
             );
 
             const batteryEnergyLines = [];
-            if (bat.chargeEnergyText) {
-                batteryEnergyLines.push(`Laden ${bat.chargeEnergyText}`);
-            }
             if (bat.dischargeEnergyText) {
                 batteryEnergyLines.push(`Entladen ${bat.dischargeEnergyText}`);
+            }
+            if (bat.chargeEnergyText) {
+                batteryEnergyLines.push(`Laden ${bat.chargeEnergyText}`);
             }
 
             document.getElementById('body-bat' + i).innerHTML =
@@ -970,17 +982,11 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        // Wallbox immer ans Ende der Verbraucherlinie setzen.
-        // Ohne Verbraucher direkt rechts vom Haus; mit Verbrauchern
-        // wird die Linie bis hinter die letzte Verbraucherspalte verlängert.
-        const columns = Math.ceil(groupCount / 2);
-        const lastConsumerX = columns > 0
-            ? (COL0 + ((columns - 1) * COLW))
-            : 412;
-
-        const lineStartX = 412;
+        // Ohne weitere Verbraucher: direkt rechts neben dem Haus.
+        // Mit Verbrauchern: erste Verbraucherspalte komplett für die
+        // Wallbox reservieren und die Wallbox mittig platzieren.
         const p = {
-            x: (columns > 0 ? lastConsumerX : 412) + 120,
+            x: groupCount > 0 ? COL0 : 532,
             y: 350,
             r: 42
         };
@@ -992,7 +998,7 @@ class Energiefluss extends IPSModuleStrict
                 y: p.y,
                 r: p.r,
                 ic: 'charging-station',
-                icc: AC.wallbox,
+                icc: AC.room,
                 lab: wallbox.name || 'Wallbox',
                 lp: 'bot',
                 ring: true
@@ -1003,10 +1009,10 @@ class Energiefluss extends IPSModuleStrict
         let inner = '';
 
         if (wallbox.hasSoc) {
-            inner += `<div class="sub" style="font-size:11px;color:${AC.wallbox}">${wallbox.socText}</div>`;
+            inner += `<div class="sub" style="font-size:11px;color:${AC.room}">${wallbox.socText}</div>`;
         }
 
-        inner += `<div class="val" style="color:${AC.wallbox}">${fmt(Math.max(wallbox.value || 0, 0))}</div>`;
+        inner += `<div class="val" style="color:${AC.room}">${fmt(Math.max(wallbox.value || 0, 0))}</div>`;
 
         if (wallbox.energy) {
             inner += `<div class="sub" style="font-size:10px;line-height:1.25;">${wallbox.energy}</div>`;
@@ -1019,12 +1025,12 @@ class Energiefluss extends IPSModuleStrict
 
         addEdge(
             'wallbox',
-            `M${lineStartX},350 L${p.x - p.r},350`,
-            AC.wallbox
+            `M412,350 L${p.x - p.r},350`,
+            AC.room
         );
     }
 
-    function buildGroups(list) {
+    function buildGroups(list, hasWallbox = false) {
         document.querySelectorAll('.grp-node').forEach(e => e.remove());
 
         Object.keys(lineEl)
@@ -1036,8 +1042,13 @@ class Energiefluss extends IPSModuleStrict
                 delete dotEl[k];
             });
 
+        // Wenn Wallbox + weitere Verbraucher vorhanden sind, reserviert
+        // die Wallbox die komplette erste Verbraucherspalte (oben/unten)
+        // und sitzt dort mittig. Die Verbraucher starten ab Spalte 2.
+        const offset = hasWallbox && list.length > 0 ? 2 : 0;
+
         list.forEach((g, i) => {
-            const p = gpos(i);
+            const p = gpos(i + offset);
 
             addNode(
                 'r' + i,
@@ -1145,18 +1156,13 @@ class Energiefluss extends IPSModuleStrict
         });
 
         if (hasWallbox) {
-            const columns = Math.ceil(groupCount / 2);
-            const lastConsumerX = columns > 0
-                ? (COL0 + ((columns - 1) * COLW))
-                : 412;
-
-            const wallboxX = lastConsumerX + 120;
+            const wallboxX = groupCount > 0 ? COL0 : 532;
             const soc = wallboxSocPercent(wallbox);
 
             track(wallboxX, 350, 48);
 
             if (soc !== null) {
-                arc(wallboxX, 350, 48, AC.wallbox, soc / 100, 0);
+                arc(wallboxX, 350, 48, AC.room, soc / 100, 0);
             }
         }
     }
@@ -1202,8 +1208,8 @@ class Energiefluss extends IPSModuleStrict
             threshold: 10,
 
             dynamic_speed_enabled: true,
-            min_flow_speed: 5,
-            max_flow_speed: 1,
+            min_flow_speed: 5 / flowSpeedFactor,
+            max_flow_speed: 1 / flowSpeedFactor,
             min_power_threshold: 100,
             max_power_threshold: 10000,
 
@@ -1212,7 +1218,7 @@ class Energiefluss extends IPSModuleStrict
             grid_export_line_color: AC.export,
             battery_charge_line_color: AC.charge,
             battery_discharge_line_color: AC.discharge,
-            ev_line_color: AC.wallbox,
+            ev_line_color: AC.room,
 
             entities: {
                 solar_power: 'sensor.symcon_solar',
@@ -1559,11 +1565,11 @@ class Energiefluss extends IPSModuleStrict
                     const mode = (bat.value || 0) >= 0 ? 'Entladen' : 'Laden';
                     const energyParts = [];
 
-                    if (bat.chargeEnergyText) {
-                        energyParts.push(`Laden ${bat.chargeEnergyText}`);
-                    }
                     if (bat.dischargeEnergyText) {
                         energyParts.push(`Entladen ${bat.dischargeEnergyText}`);
+                    }
+                    if (bat.chargeEnergyText) {
+                        energyParts.push(`Laden ${bat.chargeEnergyText}`);
                     }
 
                     const energy = energyParts.length
@@ -1753,16 +1759,16 @@ class Energiefluss extends IPSModuleStrict
         let graphWidth = mode === 'house' ? 900 : 540;
 
         if (mode !== 'house') {
-            const columns = Math.ceil(groupCount / 2);
+            const consumerOffset = hasWallbox && groupCount > 0 ? 2 : 0;
+            const effectiveCount = groupCount + consumerOffset;
+            const columns = Math.ceil(effectiveCount / 2);
 
             if (columns > 0) {
                 graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
             }
 
             if (hasWallbox) {
-                const wallboxX = columns > 0
-                    ? (COL0 + ((columns - 1) * COLW) + 120)
-                    : 532;
+                const wallboxX = groupCount > 0 ? COL0 : 532;
                 graphWidth = Math.max(graphWidth, wallboxX + 60);
             }
 
@@ -1788,14 +1794,20 @@ class Energiefluss extends IPSModuleStrict
             Object.assign(AC, d.colors);
             AC.grid = AC.import;
             AC.batt = AC.charge;
+            AC.room = AC.room;
         }
+
+        const speedPercent = Number(d && d.flowSpeedPercent);
+        flowSpeedFactor = Number.isFinite(speedPercent)
+            ? Math.max(0.25, Math.min(3.0, speedPercent / 100))
+            : 1.0;
 
         document.documentElement.style.setProperty('--ef-solar', AC.solar);
         document.documentElement.style.setProperty('--ef-grid-import', AC.import);
         document.documentElement.style.setProperty('--ef-grid-export', AC.export);
         document.documentElement.style.setProperty('--ef-battery-charge', AC.charge);
         document.documentElement.style.setProperty('--ef-battery-discharge', AC.discharge);
-        document.documentElement.style.setProperty('--ef-wallbox', AC.wallbox);
+        document.documentElement.style.setProperty('--ef-wallbox', AC.room);
         document.documentElement.style.setProperty('--ef-consumer', AC.room);
 
         const solarMain = document.getElementById('pfc-solar-main');
@@ -1811,8 +1823,8 @@ class Energiefluss extends IPSModuleStrict
         if (gridImport) gridImport.style.color = AC.import;
         if (gridExport) gridExport.style.color = AC.export;
         if (gridInfo) gridInfo.style.borderColor = AC.import;
-        if (wallboxMain) wallboxMain.style.color = AC.wallbox;
-        if (wallboxInfo) wallboxInfo.style.borderColor = AC.wallbox;
+        if (wallboxMain) wallboxMain.style.color = AC.room;
+        if (wallboxInfo) wallboxInfo.style.borderColor = AC.room;
     }
 
     function setState(d) {
@@ -1835,7 +1847,7 @@ class Energiefluss extends IPSModuleStrict
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
-        buildGroups(groups);
+        buildGroups(groups, !!d.hasWallbox);
         buildWallbox(wallbox, !!d.hasWallbox, groups.length);
 
         const gridColor = grid >= 0 ? AC.import : AC.export;
@@ -1952,8 +1964,8 @@ class Energiefluss extends IPSModuleStrict
             return 0;
         }
 
-        const speed = 0.040 + (Math.sqrt(power) * 0.00285);
-        return Math.min(speed, 0.32);
+        const speed = (0.040 + (Math.sqrt(power) * 0.00285)) * flowSpeedFactor;
+        return Math.min(speed, 0.96);
     }
 
     function animateEdges(dt, stateMap, lineMap, dotMap, phaseMap) {
@@ -2539,13 +2551,13 @@ HTML;
                 && IPS_VariableExists($this->ReadPropertyInteger('WallboxPower'))
             ),
             'groups'           => $groups,
+            'flowSpeedPercent' => $this->ReadPropertyInteger('FlowSpeedPercent'),
             'colors'           => [
                 'solar'     => $this->ColorToHex($this->ReadPropertyInteger('ColorSolar')),
                 'import'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridImport')),
                 'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
                 'charge'    => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryCharge')),
                 'discharge' => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryDischarge')),
-                'wallbox'   => $this->ColorToHex($this->ReadPropertyInteger('ColorWallbox')),
                 'room'      => $this->ColorToHex($this->ReadPropertyInteger('ColorConsumers')),
             ],
         ];
