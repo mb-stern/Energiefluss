@@ -317,12 +317,8 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        if ($Ident === 'ToggleDisplayMode') {
-            $newMode = ((string) $Value === 'house') ? 'house' : 'flow';
-
-            IPS_SetProperty($this->InstanceID, 'DisplayMode', $newMode);
-            IPS_ApplyChanges($this->InstanceID);
-            $this->ReloadForm();
+        if ($Ident === 'DiagClick') {
+            $this->LogMessage('Diagnose-Button geklickt', KL_MESSAGE);
             return;
         }
 
@@ -367,99 +363,17 @@ class Energiefluss extends IPSModuleStrict
 
     public function GetVisualizationTile(): string
     {
-        $mode = $this->ReadPropertyString('DisplayMode');
-        $modeJson = json_encode(
-            $mode,
-            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-        );
+        try {
+            $payload = json_encode(
+                $this->BuildPayload(),
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
 
-        return <<<HTML
-<!DOCTYPE html>
-<html lang="de">
-<head>
-<meta charset="UTF-8">
-<style>
-    html, body {
-        width: 100%;
-        height: 100%;
-        margin: 0;
-        background: transparent;
-        font-family: -apple-system, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
-    }
-
-    body {
-        display: flex;
-        align-items: center;
-        justify-content: center;
-    }
-
-    #box {
-        padding: 24px;
-        border: 2px solid #4d9fff;
-        border-radius: 12px;
-        text-align: center;
-        background: rgba(127,127,127,.12);
-    }
-
-    #testbutton {
-        border: 2px solid #4d9fff;
-        border-radius: 8px;
-        padding: 12px 18px;
-        font-size: 16px;
-        cursor: pointer;
-        background: white;
-        color: black;
-    }
-
-    #testbutton:hover {
-        background: #4d9fff;
-        color: white;
-        transform: scale(1.05);
-    }
-
-    #mouse {
-        margin-top: 12px;
-        font-size: 13px;
-    }
-
-    #status {
-        margin-top: 8px;
-        font-weight: 600;
-    }
-</style>
-</head>
-<body>
-<div id="box">
-    <button id="testbutton" type="button">TEST: Ansicht umschalten</button>
-    <div id="mouse">Mausbewegungen: <span id="count">0</span></div>
-    <div id="status"></div>
-</div>
-
-<script>
-    let mode = {$modeJson};
-    let mouseCount = 0;
-
-    const status = document.getElementById('status');
-    status.textContent = 'DisplayMode: ' + mode;
-
-    document.addEventListener('mousemove', function () {
-        mouseCount++;
-        document.getElementById('count').textContent = String(mouseCount);
-    }, true);
-
-    document.getElementById('testbutton').addEventListener('click', function () {
-        const newMode = mode === 'house' ? 'flow' : 'house';
-        status.textContent = 'Klick erkannt → ' + newMode;
-        requestAction('ToggleDisplayMode', newMode);
-    });
-
-    function handleMessage(message) {
-        // Für diesen Isolationstest absichtlich leer.
-    }
-</script>
-</body>
-</html>
-HTML;
+            return $this->GetVisualizationHtml($this->ReadPropertyString('DisplayMode'))
+                . '<script>handleMessage(' . $payload . ');</script>';
+        } catch (Throwable $e) {
+            return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
+        }
     }
 
     private function GetVisualizationHtml(string $displayMode): string
@@ -502,10 +416,44 @@ HTML;
         padding: 10px;
         background: transparent;
         overflow: hidden;
+        display: flex;
+        flex-direction: column;
+        min-height: 0;
+    }
+
+    #diag-bar {
+        flex: 0 0 auto;
+        display: flex;
+        align-items: center;
+        justify-content: center;
+        gap: 12px;
+        padding-bottom: 6px;
+    }
+
+    #diag-button {
+        border: 2px solid #4d9fff;
+        border-radius: 7px;
+        padding: 6px 12px;
+        cursor: pointer;
+        background: var(--w-surface);
+        color: var(--w-text);
+    }
+
+    #diag-button:hover {
+        background: #4d9fff;
+        color: white;
+        transform: scale(1.04);
+    }
+
+    #diag-count {
+        color: var(--w-text2);
+        font-size: 12px;
     }
     #scale-host {
         width: 100%;
-        height: 100%;
+        flex: 1 1 auto;
+        min-height: 0;
+        height: auto;
         overflow: hidden;
         position: relative;
     }
@@ -807,11 +755,12 @@ HTML;
 
 </style>
 <script src="/icons.js"></script>
-<script type="module"
-        src="/user/Energiefluss/vendor/power-flow-card.js">
-</script>
 
 <div id="eflow">
+    <div id="diag-bar">
+        <button id="diag-button" type="button">TEST Maus / Klick</button>
+        <span id="diag-count">Maus: 0</span>
+    </div>
     <div id="scale-host">
         <div id="scale-root">
             <div id="wrap">
@@ -1754,13 +1703,13 @@ HTML;
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
-        updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
+        // Diagnose: Hausansicht / externe power-flow-card vollständig deaktiviert.
     }
 
     function applyDisplayMode(mode) {
-        const house = mode === 'house';
-        if (stage) stage.style.display = house ? 'none' : 'block';
-        if (houseStage) houseStage.style.display = house ? 'block' : 'none';
+        const house = false;
+        if (stage) stage.style.display = 'block';
+        if (houseStage) houseStage.style.display = 'none';
 
         // In der Hausansicht keinen eigenen Kachelhintergrund zeichnen.
         // Dadurch scheint der von IP-Symcon vorgegebene Hintergrund durch.
@@ -2032,6 +1981,24 @@ HTML;
         }
 
         setState(d);
+    }
+
+    let diagMouseCount = 0;
+
+    document.addEventListener('mousemove', function () {
+        diagMouseCount++;
+        const el = document.getElementById('diag-count');
+        if (el) {
+            el.textContent = 'Maus: ' + diagMouseCount;
+        }
+    }, true);
+
+    const diagButton = document.getElementById('diag-button');
+    if (diagButton) {
+        diagButton.addEventListener('click', function () {
+            this.textContent = 'Klick erkannt';
+            requestAction('DiagClick', 1);
+        });
     }
 
     // ---------- Animation ----------
