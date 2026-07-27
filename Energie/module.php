@@ -1037,7 +1037,7 @@ class Energiefluss extends IPSModuleStrict
 
         let inner = '';
 
-        if (wallbox.soc !== null && wallbox.soc !== undefined) {
+        if (wallbox.hasSoc) {
             inner += `<div class="sub" style="font-size:11px;color:${AC.wallbox}">SOC ${Math.round(wallbox.soc)} %</div>`;
         }
 
@@ -1498,7 +1498,7 @@ class Energiefluss extends IPSModuleStrict
             }
             if (wallboxSub) {
                 const details = [];
-                if (wallbox.soc !== null && wallbox.soc !== undefined) {
+                if (wallbox.hasSoc) {
                     details.push(`SOC ${Math.round(wallbox.soc)} %`);
                 }
                 if (wallbox.energy) {
@@ -1723,7 +1723,7 @@ class Energiefluss extends IPSModuleStrict
         const pvs = d.pvs || [];
         const batteries = d.batteries || [];
         const groups = d.groups || [];
-        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', soc: null };
+        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', soc: 0, hasSoc: false };
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -2083,47 +2083,6 @@ HTML;
         return '';
     }
 
-    private function ReadSoCAnyType(string $property): ?float
-    {
-        $id = $this->ReadPropertyInteger($property);
-        if ($id <= 0 || !IPS_VariableExists($id)) {
-            return null;
-        }
-
-        $value = GetValue($id);
-
-        // Boolean ist kein sinnvoller SOC-Wert.
-        if (is_bool($value)) {
-            return null;
-        }
-
-        // Bei Integer/Float ausschließlich den echten Rohwert verwenden.
-        // GetValueFormatted() wird hier bewusst NICHT verwendet, weil
-        // Variablenprofile/Assoziationen einen anderen Text wie "100 %"
-        // liefern können und dadurch ein falscher SOC entstehen würde.
-        if (is_int($value) || is_float($value)) {
-            $soc = (float) $value;
-
-            if (!is_finite($soc)) {
-                return null;
-            }
-
-            return max(0.0, min(100.0, $soc));
-        }
-
-        // Nur bei einer echten String-Variable Text auswerten.
-        if (is_string($value)) {
-            $normalized = str_replace(',', '.', trim($value));
-
-            // Beispiele: "72", "72 %", "SOC: 72%", "72.5 Prozent".
-            if (preg_match('/[-+]?\d+(?:\.\d+)?/', $normalized, $match) === 1) {
-                $soc = (float) $match[0];
-                return max(0.0, min(100.0, $soc));
-            }
-        }
-
-        return null;
-    }
 
     private function CollectVariableIDs(): array
     {
@@ -2296,11 +2255,18 @@ HTML;
         }
 
         // Wallbox.
+        // SOC-Auslese wie in der früheren funktionierenden Version:
+        // Variable direkt lesen und nur anhand der vorhandenen Variable entscheiden,
+        // ob ein SOC angezeigt wird.
+        $wallboxSoCID = $this->ReadPropertyInteger('WallboxSoC');
+        $wallboxHasSoC = $wallboxSoCID > 0 && IPS_VariableExists($wallboxSoCID);
+
         $wallbox = [
             'name'   => $this->ReadPropertyString('WallboxName'),
             'value'  => $this->ReadVar('WallboxPower'),
             'energy' => $this->ReadVarFormatted('WallboxEnergy'),
-            'soc'    => $this->ReadSoCAnyType('WallboxSoC'),
+            'soc'    => $wallboxHasSoC ? (float) GetValue($wallboxSoCID) : 0.0,
+            'hasSoc' => $wallboxHasSoC,
         ];
 
         // Verbrauchergruppen.
