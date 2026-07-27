@@ -66,6 +66,11 @@ class Energiefluss extends IPSModuleStrict
         // flow = klassische Energieflussansicht, house = Hausansicht.
         $this->RegisterPropertyString('DisplayMode', 'flow');
 
+        // Wichtig für requestAction() aus der HTML-Visualisierung.
+        // Genau wie ToggleMode im Sankey-Modul muss auch dieser Ident
+        // explizit als Action freigeschaltet werden.
+        $this->EnableAction('SetDisplayMode');
+
         $this->SetVisualizationType(1);
     }
 
