@@ -208,10 +208,9 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'WallboxPower', 'caption' => 'Ladeleistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxEnergy', 'caption' => 'Ladeenergie (optional)'],
                         [
-                            'type'               => 'SelectVariable',
-                            'name'               => 'WallboxSoC',
-                            'caption'            => 'Fahrzeug-SOC (optional, beliebiger Variablentyp)',
-                            'validVariableTypes' => [0, 1, 2, 3],
+                            'type'    => 'SelectObject',
+                            'name'    => 'WallboxSoC',
+                            'caption' => 'Fahrzeug-SOC (Variable oder Link)',
                         ],
                     ],
                 ],
@@ -1043,7 +1042,7 @@ class Energiefluss extends IPSModuleStrict
         let inner = '';
 
         if (wallbox.hasSoc) {
-            inner += `<div class="sub" style="font-size:11px;color:${AC.wallbox}">SOC ${Math.round(wallbox.soc)} %</div>`;
+            inner += `<div class="sub" style="font-size:11px;color:${AC.wallbox}">${wallbox.socText}</div>`;
         }
 
         inner += `<div class="val" style="color:${AC.wallbox}">${fmt(Math.max(wallbox.value || 0, 0))}</div>`;
@@ -1504,7 +1503,7 @@ class Energiefluss extends IPSModuleStrict
             if (wallboxSub) {
                 const details = [];
                 if (wallbox.hasSoc) {
-                    details.push(`SOC ${Math.round(wallbox.soc)} %`);
+                    details.push(wallbox.socText);
                 }
                 if (wallbox.energy) {
                     details.push(wallbox.energy);
@@ -1728,7 +1727,7 @@ class Energiefluss extends IPSModuleStrict
         const pvs = d.pvs || [];
         const batteries = d.batteries || [];
         const groups = d.groups || [];
-        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', soc: 0, hasSoc: false };
+        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', socText: '', hasSoc: false };
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -2089,76 +2088,66 @@ HTML;
     }
 
 
+    private function ResolveVariableID(int $objectID): int
+    {
+        if ($objectID <= 0 || !IPS_ObjectExists($objectID)) {
+            return 0;
+        }
+
+        // Direkte Variable.
+        if (IPS_VariableExists($objectID)) {
+            return $objectID;
+        }
+
+        // Links auflösen. Mehrere Link-Ebenen werden ebenfalls unterstützt.
+        $visited = [];
+        $currentID = $objectID;
+
+        for ($i = 0; $i < 10; $i++) {
+            if ($currentID <= 0 || isset($visited[$currentID]) || !IPS_ObjectExists($currentID)) {
+                return 0;
+            }
+
+            $visited[$currentID] = true;
+
+            if (IPS_VariableExists($currentID)) {
+                return $currentID;
+            }
+
+            if (!IPS_LinkExists($currentID)) {
+                return 0;
+            }
+
+            $link = IPS_GetLink($currentID);
+            $currentID = (int) ($link['TargetID'] ?? 0);
+        }
+
+        return 0;
+    }
+
     private function ReadWallboxSoC(): array
     {
-        $id = $this->ReadPropertyInteger('WallboxSoC');
+        $selectedID = $this->ReadPropertyInteger('WallboxSoC');
+        $id = $this->ResolveVariableID($selectedID);
 
         if ($id <= 0 || !IPS_VariableExists($id)) {
             return [
                 'hasSoc' => false,
-                'soc'    => 0.0,
+                'socText' => '',
             ];
         }
 
         $value = GetValue($id);
-        $soc = null;
 
-        if (is_int($value) || is_float($value)) {
-            $soc = (float) $value;
-
-            // Werte zwischen 0 und 1 werden als 0..1-Skala interpretiert,
-            // z.B. 0.72 = 72 %.
-            if ($soc > 0.0 && $soc < 1.0) {
-                $soc *= 100.0;
-            }
-        } elseif (is_string($value)) {
-            $raw = trim($value);
-
-            if ($raw !== '') {
-                $normalized = str_replace(',', '.', $raw);
-
-                // Unterstützt u.a.:
-                // "72", "72 %", "SOC: 72%", "72,5", "0.72", "0,72"
-                if (preg_match('/[-+]?\d+(?:\.\d+)?/', $normalized, $match) === 1) {
-                    $soc = (float) $match[0];
-
-                    // Dezimalwerte zwischen 0 und 1 ohne Prozentzeichen
-                    // als normierte 0..1-Skala interpretieren.
-                    if (
-                        $soc > 0.0
-                        && $soc < 1.0
-                        && !str_contains($normalized, '%')
-                    ) {
-                        $soc *= 100.0;
-                    }
-                } else {
-                    $lower = strtolower($raw);
-
-                    // Boolean-artige Strings werden akzeptiert,
-                    // aber nicht als 100 % missverstanden.
-                    if (in_array($lower, ['false', 'off', 'no', 'nein'], true)) {
-                        $soc = 0.0;
-                    } elseif (in_array($lower, ['true', 'on', 'yes', 'ja'], true)) {
-                        $soc = null;
-                    }
-                }
-            }
-        } elseif (is_bool($value)) {
-            // Ein Boolean enthält keinen echten Ladezustand.
-            // false kann sinnvoll 0 % bedeuten; true wird nicht als 100 % geraten.
-            $soc = $value ? null : 0.0;
-        }
-
-        if ($soc === null || !is_finite($soc)) {
-            return [
-                'hasSoc' => false,
-                'soc'    => 0.0,
-            ];
+        if (is_bool($value)) {
+            $text = $value ? 'true' : 'false';
+        } else {
+            $text = (string) $value;
         }
 
         return [
             'hasSoc' => true,
-            'soc'    => max(0.0, min(100.0, $soc)),
+            'socText' => $text,
         ];
     }
 
@@ -2173,7 +2162,6 @@ HTML;
             'GridExportEnergy',
             'WallboxPower',
             'WallboxEnergy',
-            'WallboxSoC',
             'DayProduction',
             'WeekProduction',
             'DayGridImport',
@@ -2183,6 +2171,14 @@ HTML;
             if ($id > 0) {
                 $ids[] = $id;
             }
+
+        $wallboxSoCVariableID = $this->ResolveVariableID(
+            $this->ReadPropertyInteger('WallboxSoC')
+        );
+        if ($wallboxSoCVariableID > 0) {
+            $ids[] = $wallboxSoCVariableID;
+        }
+
         }
 
         $producers = json_decode($this->ReadPropertyString('Producers'), true);
@@ -2336,11 +2332,11 @@ HTML;
         $wallboxSoC = $this->ReadWallboxSoC();
 
         $wallbox = [
-            'name'   => $this->ReadPropertyString('WallboxName'),
-            'value'  => $this->ReadVar('WallboxPower'),
-            'energy' => $this->ReadVarFormatted('WallboxEnergy'),
-            'soc'    => $wallboxSoC['soc'],
-            'hasSoc' => $wallboxSoC['hasSoc'],
+            'name'    => $this->ReadPropertyString('WallboxName'),
+            'value'   => $this->ReadVar('WallboxPower'),
+            'energy'  => $this->ReadVarFormatted('WallboxEnergy'),
+            'socText' => $wallboxSoC['socText'],
+            'hasSoc'  => $wallboxSoC['hasSoc'],
         ];
 
         // Verbrauchergruppen.
