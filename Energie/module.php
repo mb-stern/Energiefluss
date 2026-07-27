@@ -20,19 +20,6 @@ declare(strict_types=1);
 
 class Energiefluss extends IPSModuleStrict
 {
-    private const CONFIG_MAP = [
-        'Kp'               => 'SF_Kp',
-        'Ki'               => 'SF_Ki',
-        'Kd'               => 'SF_Kd',
-        'TargetImport'     => 'SF_TargetImport',
-        'ReserveHours'     => 'SF_ReserveHours',
-        'FreeSoc'          => 'SF_FreeSocThreshold',
-        'LowSocOut'        => 'SF_LowSocOutput',
-        'LowSocThreshold'  => 'SF_LowSocThreshold',
-        'MinSocShutdown'   => 'SF_MinSocShutdown',
-        'MorningStart'     => 'SF_MorningStart',
-        'MorningEnd'       => 'SF_MorningEnd',
-    ];
 
     public function Create(): void
     {
@@ -56,12 +43,16 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('WallboxSoC', 0);
 
         // Weitere Darstellung.
-        $this->RegisterPropertyInteger('SettingsCategory', 0);
         $this->RegisterPropertyString('Groups', '[]');
-        $this->RegisterPropertyInteger('DayProduction', 0);
-        $this->RegisterPropertyInteger('WeekProduction', 0);
-        $this->RegisterPropertyInteger('DayGridImport', 0);
-        $this->RegisterPropertyInteger('WeekGridImport', 0);
+
+        // Farben der Visualisierung.
+        $this->RegisterPropertyInteger('ColorSolar', 16766287);
+        $this->RegisterPropertyInteger('ColorGridImport', 15684432);
+        $this->RegisterPropertyInteger('ColorGridExport', 6732650);
+        $this->RegisterPropertyInteger('ColorBatteryCharge', 6600182);
+        $this->RegisterPropertyInteger('ColorBatteryDischarge', 2733814);
+        $this->RegisterPropertyInteger('ColorWallbox', 11225020);
+        $this->RegisterPropertyInteger('ColorConsumers', 3123599);
 
         // flow = klassische Energieflussansicht, house = Hausansicht.
         $this->RegisterPropertyString('DisplayMode', 'flow');
@@ -260,31 +251,15 @@ class Energiefluss extends IPSModuleStrict
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'Statistik (optional)',
+                    'caption' => 'Farben',
                     'items'   => [
-                        [
-                            'type'    => 'Label',
-                            'caption' => 'Zählervariablen für die Statistik-Anzeige rechts. Die Einheit kommt aus dem Variablenprofil.',
-                        ],
-                        ['type' => 'SelectVariable', 'name' => 'DayProduction', 'caption' => 'Tagesproduktion gesamt'],
-                        ['type' => 'SelectVariable', 'name' => 'WeekProduction', 'caption' => 'Wochenproduktion gesamt'],
-                        ['type' => 'SelectVariable', 'name' => 'DayGridImport', 'caption' => 'Tagesverbrauch Netzbezug'],
-                        ['type' => 'SelectVariable', 'name' => 'WeekGridImport', 'caption' => 'Wochenverbrauch Netzbezug gesamt'],
-                    ],
-                ],
-                [
-                    'type'    => 'ExpansionPanel',
-                    'caption' => 'SolarFlow-Regelung (optional)',
-                    'items'   => [
-                        [
-                            'type'    => 'Label',
-                            'caption' => 'Kategorie \'SolarFlow Einstellungen\' auswählen, die das PID-Skript anlegt.',
-                        ],
-                        [
-                            'type'    => 'SelectCategory',
-                            'name'    => 'SettingsCategory',
-                            'caption' => 'Kategorie \'SolarFlow Einstellungen\'',
-                        ],
+                        ['type' => 'SelectColor', 'name' => 'ColorSolar', 'caption' => 'PV', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorGridImport', 'caption' => 'Netzbezug', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorGridExport', 'caption' => 'Netzeinspeisung', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorBatteryCharge', 'caption' => 'Batterie laden', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorWallbox', 'caption' => 'Wallbox', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Verbraucher', 'allowTransparent' => false],
                     ],
                 ],
             ],
@@ -323,43 +298,12 @@ class Energiefluss extends IPSModuleStrict
             if ($newMode !== $this->ReadPropertyString('DisplayMode')) {
                 IPS_SetProperty($this->InstanceID, 'DisplayMode', $newMode);
                 IPS_ApplyChanges($this->InstanceID);
-
-                // Ein eventuell geöffnetes Konfigurationsformular
-                // liest damit ebenfalls den neuen DisplayMode ein.
                 $this->ReloadForm();
             } else {
                 $this->PushState();
             }
 
             return;
-        }
-
-        if (str_starts_with($Ident, 'Cfg')) {
-            $field = substr($Ident, 3);
-            if (!array_key_exists($field, self::CONFIG_MAP)) {
-                return;
-            }
-
-            $catID = $this->ReadPropertyInteger('SettingsCategory');
-            if ($catID <= 0 || !IPS_ObjectExists($catID)) {
-                return;
-            }
-
-            $varID = @IPS_GetObjectIDByIdent(self::CONFIG_MAP[$field], $catID);
-            if ($varID === false || !IPS_VariableExists($varID)) {
-                return;
-            }
-
-            $type = IPS_GetVariable($varID)['VariableType'];
-            if ($type === VARIABLETYPE_STRING) {
-                SetValue($varID, (string) $Value);
-            } elseif ($type === VARIABLETYPE_INTEGER) {
-                SetValue($varID, (int) round((float) $Value));
-            } else {
-                SetValue($varID, (float) $Value);
-            }
-
-            $this->PushState();
         }
     }
 
@@ -533,75 +477,6 @@ class Energiefluss extends IPSModuleStrict
     .lbl.top { bottom: 100%; margin-bottom: 8px; }
     .lbl.bot { top: 100%; margin-top: 8px; }
 
-    /* Rechte Statistik/Regelung */
-    #cfg {
-        flex: 0 0 250px;
-        width: 250px;
-        border-left: 0.5px solid var(--w-border);
-        padding-left: 14px;
-        box-sizing: border-box;
-    }
-    #cfgsec { margin-top: 12px; }
-    #statsec + #cfgsec[style=""] {
-        border-top: 0.5px solid var(--w-border);
-        padding-top: 10px;
-    }
-    .cfg-h {
-        font-size: 14px;
-        font-weight: 500;
-        color: var(--w-text);
-        margin-bottom: 10px;
-    }
-    .cfg-live {
-        display: flex;
-        flex-direction: column;
-        gap: 6px;
-        margin-bottom: 6px;
-    }
-    .lv {
-        background: var(--w-surface);
-        border: 0.5px solid var(--w-border);
-        border-radius: 8px;
-        padding: 7px 10px;
-        display: flex;
-        justify-content: space-between;
-        font-size: 13px;
-    }
-    .lv span { color: var(--w-text2); }
-    .lv b { color: var(--w-text); font-weight: 500; }
-    .cfg-sub {
-        font-size: 12px;
-        font-weight: 500;
-        color: var(--w-text2);
-        margin: 10px 0 2px;
-    }
-    .cfg-grid {
-        display: grid;
-        grid-template-columns: 1fr;
-        gap: 2px;
-    }
-    .fld {
-        display: flex;
-        justify-content: space-between;
-        align-items: center;
-        gap: 8px;
-        font-size: 13px;
-        padding: 3px 0;
-    }
-    .fld > span { color: var(--w-text2); }
-    .ed {
-        color: var(--w-text);
-        font-weight: 500;
-        border: 0.5px solid var(--w-border);
-        background: var(--w-surface);
-        border-radius: 6px;
-        padding: 4px 8px;
-        width: 92px;
-        text-align: right;
-        font-size: 13px;
-        font-family: inherit;
-    }
-
     /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
@@ -634,12 +509,12 @@ class Energiefluss extends IPSModuleStrict
         --secondary-text-color: #9ca3af;
         --card-background-color: transparent;
         --ha-card-background: transparent;
-        --energy-solar-color: #ffd54f;
-        --energy-grid-consumption-color: #ef5350;
-        --energy-grid-return-color: #66bb6a;
-        --energy-battery-charge-color: #64b5f6;
-        --energy-battery-discharge-color: #29b6f6;
-        --energy-car-color: #ab47bc;
+        --energy-solar-color: var(--ef-solar, #ffd54f);
+        --energy-grid-consumption-color: var(--ef-grid-import, #ef5350);
+        --energy-grid-return-color: var(--ef-grid-export, #66bb6a);
+        --energy-battery-charge-color: var(--ef-battery-charge, #64b5f6);
+        --energy-battery-discharge-color: var(--ef-battery-discharge, #29b6f6);
+        --energy-car-color: var(--ef-wallbox, #ab47bc);
     }
 
     #pfc-loading,
@@ -733,7 +608,7 @@ class Energiefluss extends IPSModuleStrict
         left: 19%;
         top: 39%;
         bottom: auto;
-        border-color: rgba(38,198,218,.42);
+        border-color: var(--ef-wallbox, #ab47bc);
     }
 
     /* Netz sitzt unten direkt bei den beiden Import-/Export-Leitungen. */
@@ -745,23 +620,23 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-grid-import {
-        color: #ef5350;
+        color: var(--ef-grid-import, #ef5350);
     }
 
     #pfc-grid-export {
-        color: #66bb6a;
+        color: var(--ef-grid-export, #66bb6a);
     }
 
     #pfc-battery-main.discharge {
-        color: #29b6f6;
+        color: var(--ef-battery-discharge, #29b6f6);
     }
 
     #pfc-battery-main.charge {
-        color: #64b5f6;
+        color: var(--ef-battery-charge, #64b5f6);
     }
 
     #pfc-solar-main {
-        color: #ffd54f;
+        color: var(--ef-solar, #ffd54f);
     }
 
     #pfc-home-main {
@@ -769,7 +644,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-wallbox-main {
-        color: #ab47bc;
+        color: var(--ef-wallbox, #ab47bc);
     }
 
 
@@ -831,21 +706,6 @@ class Energiefluss extends IPSModuleStrict
                                 <div id="pfc-grid-sub" class="sub"></div>
                             </div>
                         </div>
-                    </div>
-                </div>
-
-                <div id="cfg" style="display:none">
-                    <div id="statsec" style="display:none">
-                        <div class="cfg-h"><i class="fa-solid fa-chart-simple" style="margin-right:6px"></i>Statistik</div>
-                        <div class="cfg-live" id="stats-body"></div>
-                    </div>
-                    <div id="cfgsec" style="display:none">
-                        <div class="cfg-h"><i class="fa-solid fa-sliders" style="margin-right:6px"></i>SolarFlow-Regelung</div>
-                        <div class="cfg-live">
-                            <div class="lv"><span>Aktueller Ausgang</span><b id="cfg-out">&ndash;</b></div>
-                            <div class="lv"><span>Regelziel</span><b>Nulleinspeisung</b></div>
-                        </div>
-                        <div id="cfg-body"></div>
                     </div>
                 </div>
             </div>
@@ -1599,6 +1459,11 @@ class Energiefluss extends IPSModuleStrict
                 batteryMain.textContent = fmt(Math.abs(batteryTotal));
                 batteryMain.classList.toggle('discharge', discharge);
                 batteryMain.classList.toggle('charge', !discharge);
+                batteryMain.style.color = discharge ? AC.discharge : AC.charge;
+            }
+
+            if (batteryInfo) {
+                batteryInfo.style.borderColor = discharge ? AC.discharge : AC.charge;
             }
 
             if (batterySub) {
@@ -1769,77 +1634,6 @@ class Energiefluss extends IPSModuleStrict
 
     updateDisplayModeButton();
 
-    // ---------- Regelung / Statistik ----------
-    const CFG = [
-        {
-            sub: 'Sollwerte',
-            fields: [
-                { id: 'TargetImport', label: 'Ziel-Netzbezug', step: 1 },
-                { id: 'ReserveHours', label: 'Reserve', step: 0.5 }
-            ]
-        },
-        {
-            sub: 'SOC-Schwellen',
-            fields: [
-                { id: 'FreeSoc', label: 'Free-SOC-Schwelle', step: 1 },
-                { id: 'LowSocThreshold', label: 'Low-SOC-Schwelle', step: 1 },
-                { id: 'LowSocOut', label: 'Low-SOC Fixausgabe', step: 1 },
-                { id: 'MinSocShutdown', label: 'Min-SOC Abschaltung', step: 1 }
-            ]
-        },
-        {
-            sub: 'Morgenlogik',
-            fields: [
-                { id: 'MorningStart', label: 'Morgen Start', type: 'time' },
-                { id: 'MorningEnd', label: 'Morgen Ende', type: 'time' }
-            ]
-        },
-        {
-            sub: 'PID-Regler',
-            top: true,
-            fields: [
-                { id: 'Kp', label: 'Reaktionsstärke (Kp)', step: 0.01 },
-                { id: 'Ki', label: 'Langzeit-Ausgleich (Ki)', step: 0.01 },
-                { id: 'Kd', label: 'Dämpfung (Kd)', step: 0.01 }
-            ]
-        }
-    ];
-
-    function buildCfg() {
-        let h = '';
-
-        CFG.forEach(s => {
-            h += `<div class="cfg-sub"${s.top ? ' style="margin-top:16px;border-top:0.5px solid var(--w-border);padding-top:12px"' : ''}>${s.sub}</div><div class="cfg-grid">`;
-
-            s.fields.forEach(f => {
-                h +=
-                    `<div class="fld"><span>${f.label}</span><input class="ed" id="cfg-${f.id}" type="${f.type || 'number'}"${f.step ? ` step="${f.step}"` : ''} onchange="onCfg('${f.id}')"></div>`;
-            });
-
-            h += '</div>';
-        });
-
-        document.getElementById('cfg-body').innerHTML = h;
-    }
-
-    function onCfg(id) {
-        const el = document.getElementById('cfg-' + id);
-
-        if (el.type === 'time') {
-            requestAction('Cfg' + id, el.value);
-            return;
-        }
-
-        const v = parseFloat(el.value);
-        if (isNaN(v)) {
-            return;
-        }
-
-        requestAction('Cfg' + id, v);
-    }
-
-    buildCfg();
-
     // ---------- Layout ----------
     let layoutWidth = 540;
 
@@ -1867,8 +1661,7 @@ class Energiefluss extends IPSModuleStrict
             graphWidth = Math.min(graphWidth, 1080);
         }
 
-        const rightWidth = showRightPanel ? 264 : 0;
-        layoutWidth = graphWidth + rightWidth;
+        layoutWidth = graphWidth;
 
         fitEl.style.width = graphWidth + 'px';
         fitEl.style.flexBasis = graphWidth + 'px';
@@ -1876,13 +1669,46 @@ class Energiefluss extends IPSModuleStrict
         wrapEl.style.width = layoutWidth + 'px';
         rootEl.style.width = layoutWidth + 'px';
 
-        wrapEl.style.gap = showRightPanel ? '14px' : '0px';
+        wrapEl.style.gap = '0px';
 
         fit();
     }
 
     // ---------- Zustand ----------
+    function applyConfiguredColors(d) {
+        if (d && d.colors) {
+            Object.assign(AC, d.colors);
+            AC.grid = AC.import;
+            AC.batt = AC.charge;
+        }
+
+        document.documentElement.style.setProperty('--ef-solar', AC.solar);
+        document.documentElement.style.setProperty('--ef-grid-import', AC.import);
+        document.documentElement.style.setProperty('--ef-grid-export', AC.export);
+        document.documentElement.style.setProperty('--ef-battery-charge', AC.charge);
+        document.documentElement.style.setProperty('--ef-battery-discharge', AC.discharge);
+        document.documentElement.style.setProperty('--ef-wallbox', AC.wallbox);
+        document.documentElement.style.setProperty('--ef-consumer', AC.room);
+
+        const solarMain = document.getElementById('pfc-solar-main');
+        const solarInfo = document.getElementById('pfc-info-solar');
+        const gridImport = document.getElementById('pfc-grid-import');
+        const gridExport = document.getElementById('pfc-grid-export');
+        const gridInfo = document.getElementById('pfc-info-grid');
+        const wallboxMain = document.getElementById('pfc-wallbox-main');
+        const wallboxInfo = document.getElementById('pfc-info-wallbox');
+
+        if (solarMain) solarMain.style.color = AC.solar;
+        if (solarInfo) solarInfo.style.borderColor = AC.solar;
+        if (gridImport) gridImport.style.color = AC.import;
+        if (gridExport) gridExport.style.color = AC.export;
+        if (gridInfo) gridInfo.style.borderColor = AC.import;
+        if (wallboxMain) wallboxMain.style.color = AC.wallbox;
+        if (wallboxInfo) wallboxInfo.style.borderColor = AC.wallbox;
+    }
+
     function setState(d) {
+        applyConfiguredColors(d);
         const grid = d.grid || 0;
         const imp = Math.max(grid, 0);
 
@@ -1985,38 +1811,11 @@ class Energiefluss extends IPSModuleStrict
         buildHouseView(d, grid, haus, pvs, batteries, wallbox);
         applyDisplayMode(d.displayMode || 'flow');
 
-        // Statistik.
-        const stats = d.stats || [];
-        document.getElementById('stats-body').innerHTML = stats.map(s =>
-            '<div class="lv"><span>' + s.label + '</span><b>' + s.value + '</b></div>'
-        ).join('');
-        document.getElementById('statsec').style.display = stats.length ? '' : 'none';
-
-        // Regelung.
-        const hasCfg = !!(d.hasConfig && d.config);
-        document.getElementById('cfgsec').style.display = hasCfg ? '' : 'none';
-
-        if (hasCfg) {
-            CFG.forEach(s => s.fields.forEach(f => {
-                const el = document.getElementById('cfg-' + f.id);
-                const cv = d.config[f.id];
-
-                if (el && document.activeElement !== el && cv !== undefined && cv !== null) {
-                    el.value = cv;
-                }
-            }));
-
-            document.getElementById('cfg-out').textContent = fmt(batteryTotal);
-        }
-
-        const showRightPanel = !!(stats.length || hasCfg);
-        document.getElementById('cfg').style.display = showRightPanel ? '' : 'none';
-
         updateLayout(
             groups.length,
             pvs.length,
             batteries.length,
-            showRightPanel,
+            false,
             (d.displayMode || 'flow') === 'house' ? 'house' : 'flow',
             !!d.hasWallbox
         );
@@ -2350,10 +2149,6 @@ HTML;
             'GridExportEnergy',
             'WallboxPower',
             'WallboxEnergy',
-            'DayProduction',
-            'WeekProduction',
-            'DayGridImport',
-            'WeekGridImport',
         ] as $property) {
             $id = $this->ReadPropertyInteger($property);
             if ($id > 0) {
@@ -2408,35 +2203,12 @@ HTML;
             }
         }
 
-        $catID = $this->ReadPropertyInteger('SettingsCategory');
-        if ($catID > 0 && IPS_ObjectExists($catID)) {
-            foreach (self::CONFIG_MAP as $ident) {
-                $variableID = @IPS_GetObjectIDByIdent($ident, $catID);
-                if ($variableID !== false) {
-                    $ids[] = $variableID;
-                }
-            }
-        }
-
         return array_values(array_unique($ids));
     }
 
-    private function BuildConfig(): ?array
+    private function ColorToHex(int $color): string
     {
-        $catID = $this->ReadPropertyInteger('SettingsCategory');
-        if ($catID <= 0 || !IPS_ObjectExists($catID)) {
-            return null;
-        }
-
-        $out = [];
-        foreach (self::CONFIG_MAP as $field => $ident) {
-            $variableID = @IPS_GetObjectIDByIdent($ident, $catID);
-            if ($variableID !== false && IPS_VariableExists($variableID)) {
-                $out[$field] = GetValue($variableID);
-            }
-        }
-
-        return count($out) > 0 ? $out : null;
+        return sprintf('#%06x', $color & 0xFFFFFF);
     }
 
     private function BuildPayload(): array
@@ -2551,26 +2323,6 @@ HTML;
             }
         }
 
-        $config = $this->BuildConfig();
-
-        // Statistik.
-        $stats = [];
-        $statDefs = [
-            ['DayProduction', 'Tagesproduktion'],
-            ['WeekProduction', 'Wochenproduktion'],
-            ['DayGridImport', 'Netzbezug heute'],
-            ['WeekGridImport', 'Netzbezug Woche'],
-        ];
-
-        foreach ($statDefs as [$property, $label]) {
-            $variableID = $this->ReadPropertyInteger($property);
-            if ($variableID > 0 && IPS_VariableExists($variableID)) {
-                $stats[] = [
-                    'label' => $label,
-                    'value' => GetValueFormatted($variableID),
-                ];
-            }
-        }
 
         return [
             'displayMode'      => $this->ReadPropertyString('DisplayMode'),
@@ -2585,9 +2337,15 @@ HTML;
                 && IPS_VariableExists($this->ReadPropertyInteger('WallboxPower'))
             ),
             'groups'           => $groups,
-            'stats'            => $stats,
-            'hasConfig'        => $config !== null,
-            'config'           => $config ?? (object) [],
+            'colors'           => [
+                'solar'     => $this->ColorToHex($this->ReadPropertyInteger('ColorSolar')),
+                'import'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridImport')),
+                'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
+                'charge'    => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryCharge')),
+                'discharge' => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryDischarge')),
+                'wallbox'   => $this->ColorToHex($this->ReadPropertyInteger('ColorWallbox')),
+                'room'      => $this->ColorToHex($this->ReadPropertyInteger('ColorConsumers')),
+            ],
         ];
     }
 }
