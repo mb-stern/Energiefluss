@@ -1994,17 +1994,47 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
+        // Hausansicht:
+        // Die komplette 900x640-Zeichenfläche inklusive Infoboxen wird
+        // proportional anhand der verfügbaren BREITE skaliert.
+        //
+        // Dadurch:
+        // - nutzt das Haus die gesamte HTML-Breite,
+        // - das Seitenverhältnis bleibt unverändert,
+        // - die Grafik wird nicht verzerrt,
+        // - alle Infoboxen bleiben an exakt derselben relativen Position,
+        //   weil sie innerhalb desselben house-stage mitskaliert werden.
+        //
+        // Klassische Ansicht:
+        // Weiterhin wie bisher vollständig in Breite UND Höhe einpassen.
+        const houseMode = houseStage && houseStage.style.display !== 'none';
+
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
-        const scale = Math.min(scaleX, scaleY);
+
+        let scale;
+        if (houseMode) {
+            scale = scaleX;
+        } else {
+            scale = Math.min(scaleX, scaleY);
+        }
 
         root.style.transform = `scale(${scale})`;
 
         const scaledWidth = baseWidth * scale;
         const scaledHeight = baseHeight * scale;
 
+        // Horizontal bleibt die Ansicht sauber zentriert.
         root.style.left = `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
-        root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
+
+        // In der Hausansicht oben ausrichten. So wird bei einer sehr breiten
+        // Kachel nicht versehentlich oben/unten abgeschnitten, nur weil vorher
+        // vertikal zentriert wurde.
+        //
+        // In der klassischen Ansicht bleibt die bisherige Zentrierung bestehen.
+        root.style.top = houseMode
+            ? '0px'
+            : `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
     }
 
     const scaleHost = document.getElementById('scale-host');
