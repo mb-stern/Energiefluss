@@ -111,7 +111,7 @@ class Energiefluss extends IPSModuleStrict
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'PV, Netz, Batterie & Wallbox',
+                    'caption' => 'PV & Batterie',
                     'items'   => [
                         [
                             'type'     => 'List',
@@ -196,6 +196,12 @@ class Energiefluss extends IPSModuleStrict
                                 ],
                             ],
                         ],
+                    ],
+                ],
+                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => 'Netz & Wallbox',
+                    'items'   => [
                         ['type' => 'Label', 'caption' => 'Netz'],
                         ['type' => 'SelectVariable', 'name' => 'L1', 'caption' => 'Netzleistung (W)'],
                         ['type' => 'CheckBox', 'name' => 'InvertGridPower', 'caption' => 'Vorzeichen der Netzleistung umkehren'],
@@ -216,12 +222,12 @@ class Energiefluss extends IPSModuleStrict
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'Verbrauchergruppen (optional, paarweise)',
+                    'caption' => 'Verbraucher (excl. Wallbox)',
                     'items'   => [
                         [
                             'type'     => 'List',
                             'name'     => 'Groups',
-                            'caption'  => 'Verbrauchergruppen',
+                            'caption'  => 'Verbraucher (excl. Wallbox)',
                             'rowCount' => 10,
                             'add'      => true,
                             'delete'   => true,
@@ -999,23 +1005,20 @@ class Energiefluss extends IPSModuleStrict
 
         const withConsumers = groupCount > 0;
 
-        // Mit weiteren Verbrauchern ersetzt die Wallbox eine komplette
-        // Verbraucherspalte: sie sitzt mittig zwischen der sonst oberen
-        // und unteren Verbraucherposition. Dadurch gibt es keinen
-        // "leeren unteren Platz" innerhalb dieser Spalte.
-        const p = {
-            x: withConsumers ? COL0 : 532,
-            y: 350,
-            r: 42,
-            lp: 'bot'
-        };
+        // Mit Verbrauchern ist die Wallbox einfach Verbraucher Nr. 1:
+        // erste normale Position oben. Nur alleine sitzt sie mittig.
+        const p = withConsumers
+            ? gpos(0)
+            : { x: 532, y: 350, lp: 'bot' };
+
+        const radius = withConsumers ? RR : 42;
 
         addNode(
             'wallbox',
             {
                 x: p.x,
                 y: p.y,
-                r: p.r,
+                r: radius,
                 ic: 'charging-station',
                 icc: AC.room,
                 lab: wallbox.name || 'Wallbox',
@@ -1042,11 +1045,20 @@ class Energiefluss extends IPSModuleStrict
             body.innerHTML = inner;
         }
 
-        addEdge(
-            'wallbox',
-            `M412,350 L${p.x - p.r},350`,
-            AC.room
-        );
+        if (withConsumers) {
+            const endY = p.lp === 'top' ? p.y + radius : p.y - radius;
+            addEdge(
+                'wallbox',
+                `M412,350 L${p.x},350 L${p.x},${endY}`,
+                AC.room
+            );
+        } else {
+            addEdge(
+                'wallbox',
+                `M412,350 L${p.x - radius},350`,
+                AC.room
+            );
+        }
     }
 
     function buildGroups(list, hasWallbox = false) {
@@ -1061,10 +1073,9 @@ class Energiefluss extends IPSModuleStrict
                 delete dotEl[k];
             });
 
-        // Wenn Wallbox + weitere Verbraucher vorhanden sind, reserviert
-        // die Wallbox die komplette erste Verbraucherspalte (oben/unten)
-        // und sitzt dort mittig. Die Verbraucher starten ab Spalte 2.
-        const offset = hasWallbox && list.length > 0 ? 2 : 0;
+        // Wallbox ist Verbraucher Nr. 1. Der erste konfigurierte
+        // Verbraucher kommt dadurch direkt auf Position 2 (unten).
+        const offset = hasWallbox && list.length > 0 ? 1 : 0;
 
         list.forEach((g, i) => {
             const p = gpos(i + offset);
@@ -1175,14 +1186,15 @@ class Energiefluss extends IPSModuleStrict
         });
 
         if (hasWallbox) {
-            const wallboxX = groupCount > 0 ? COL0 : 532;
-            const wallboxY = 350;
+            const withConsumers = groupCount > 0;
+            const p = withConsumers ? gpos(0) : { x: 532, y: 350 };
+            const ringRadius = withConsumers ? (RR + 6) : 48;
             const soc = wallboxSocPercent(wallbox);
 
-            track(wallboxX, wallboxY, 48);
+            track(p.x, p.y, ringRadius);
 
             if (soc !== null) {
-                arc(wallboxX, wallboxY, 48, AC.room, soc / 100, 0);
+                arc(p.x, p.y, ringRadius, AC.room, soc / 100, 0);
             }
         }
     }
@@ -1779,17 +1791,16 @@ class Energiefluss extends IPSModuleStrict
         let graphWidth = mode === 'house' ? 900 : 540;
 
         if (mode !== 'house') {
-            const consumerOffset = hasWallbox && groupCount > 0 ? 2 : 0;
-            const effectiveCount = groupCount + consumerOffset;
+            const effectiveCount =
+                groupCount + ((hasWallbox && groupCount > 0) ? 1 : 0);
             const columns = Math.ceil(effectiveCount / 2);
 
             if (columns > 0) {
                 graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
             }
 
-            if (hasWallbox) {
-                const wallboxX = groupCount > 0 ? COL0 : 532;
-                graphWidth = Math.max(graphWidth, wallboxX + 60);
+            if (hasWallbox && groupCount === 0) {
+                graphWidth = Math.max(graphWidth, 592);
             }
 
             graphWidth = Math.min(graphWidth, 1080);
