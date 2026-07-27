@@ -38,24 +38,12 @@ class Energiefluss extends IPSModuleStrict
     {
         parent::Create();
 
-        // Legacy-Eigenschaften für bestehende Instanzen.
-        $this->RegisterPropertyInteger('SolarFlowPV', 0);
-        $this->RegisterPropertyString('PV1Name', 'PV1');
-        $this->RegisterPropertyInteger('PV1Energy', 0);
-        $this->RegisterPropertyInteger('HoymilesPV', 0);
-        $this->RegisterPropertyString('PV2Name', 'PV2');
-        $this->RegisterPropertyInteger('PV2Energy', 0);
-        $this->RegisterPropertyInteger('BatteryOut', 0);
-        $this->RegisterPropertyInteger('BatterySoC', 0);
-
         // Dynamische Anlagen.
         $this->RegisterPropertyString('Producers', '[]');
         $this->RegisterPropertyString('Batteries', '[]');
 
         // Netz.
         $this->RegisterPropertyInteger('L1', 0);
-        $this->RegisterPropertyInteger('L2', 0); // Legacy
-        $this->RegisterPropertyInteger('L3', 0); // Legacy
         $this->RegisterPropertyInteger('GridExportPower', 0);
         $this->RegisterPropertyBoolean('InvertGridPower', false);
         $this->RegisterPropertyInteger('GridImportEnergy', 0);
@@ -2067,15 +2055,7 @@ HTML;
         $ids = [];
 
         foreach ([
-            'SolarFlowPV',
-            'PV1Energy',
-            'HoymilesPV',
-            'PV2Energy',
-            'BatteryOut',
-            'BatterySoC',
             'L1',
-            'L2',
-            'L3',
             'GridExportPower',
             'GridImportEnergy',
             'GridExportEnergy',
@@ -2207,36 +2187,6 @@ HTML;
             }
         }
 
-        // Legacy-PV als Fallback.
-        if (count($pvs) === 0) {
-            $legacyPV = [
-                [
-                    'name'     => $this->ReadPropertyString('PV1Name'),
-                    'powerID'  => $this->ReadPropertyInteger('SolarFlowPV'),
-                    'energyID' => $this->ReadPropertyInteger('PV1Energy'),
-                ],
-                [
-                    'name'     => $this->ReadPropertyString('PV2Name'),
-                    'powerID'  => $this->ReadPropertyInteger('HoymilesPV'),
-                    'energyID' => $this->ReadPropertyInteger('PV2Energy'),
-                ],
-            ];
-
-            foreach ($legacyPV as $entry) {
-                if ($entry['powerID'] <= 0 || !IPS_VariableExists($entry['powerID'])) {
-                    continue;
-                }
-
-                $pvs[] = [
-                    'name'   => $entry['name'],
-                    'value'  => (float) GetValue($entry['powerID']),
-                    'energy' => ($entry['energyID'] > 0 && IPS_VariableExists($entry['energyID']))
-                        ? GetValueFormatted($entry['energyID'])
-                        : '',
-                ];
-            }
-        }
-
         // Batterien.
         $decodedBatteries = json_decode($this->ReadPropertyString('Batteries'), true);
         if (is_array($decodedBatteries)) {
@@ -2264,23 +2214,6 @@ HTML;
                         : '',
                     'soc'    => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
                         ? (float) GetValue($socVariableID)
-                        : 0.0,
-                ];
-            }
-        }
-
-        // Legacy-Batterie als Fallback.
-        if (count($batteries) === 0) {
-            $legacyBatteryID = $this->ReadPropertyInteger('BatteryOut');
-            if ($legacyBatteryID > 0 && IPS_VariableExists($legacyBatteryID)) {
-                $legacySoCID = $this->ReadPropertyInteger('BatterySoC');
-
-                $batteries[] = [
-                    'name'   => 'Batterie',
-                    'value'  => (float) GetValue($legacyBatteryID),
-                    'energy' => '',
-                    'soc'    => ($legacySoCID > 0 && IPS_VariableExists($legacySoCID))
-                        ? (float) GetValue($legacySoCID)
                         : 0.0,
                 ];
             }
