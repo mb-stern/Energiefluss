@@ -279,7 +279,7 @@ class Energiefluss extends IPSModuleStrict
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'Farben',
+                    'caption' => 'Energiefluss - Farben',
                     'items'   => [
                         ['type' => 'SelectColor', 'name' => 'ColorSolar', 'caption' => 'PV', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorGridImport', 'caption' => 'Netzbezug', 'allowTransparent' => false],
