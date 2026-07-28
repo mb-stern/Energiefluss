@@ -708,7 +708,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-battery {
         left: 55%;
-        bottom: 17.5%;
+        bottom: 19%;
         transform: translateX(-50%);
         border-color: var(--ef-battery-discharge, #29b6f6);
     }
@@ -2427,7 +2427,13 @@ class Energiefluss extends IPSModuleStrict
         // Immer proportional skalieren und BEIDE Grenzen beachten.
         // Die Breite darf den Maßstab bestimmen, solange dadurch die
         // verfügbare Höhe nicht überschritten wird.
-        const scale = Math.min(scaleX, scaleY);
+        let scale = Math.min(scaleX, scaleY);
+
+        // Energiefluss als Ganzes gleichmäßig vergrößern.
+        // Dadurch wachsen Kreise, Schrift, Icons und Linien im selben Verhältnis.
+        if (currentDisplayMode === 'flow') {
+            scale *= 1.12;
+        }
 
         root.style.transform = `scale(${scale})`;
 
