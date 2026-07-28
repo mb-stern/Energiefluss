@@ -807,7 +807,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         #pfc-info-grid {
-            right: 0.5%;
+            right: 2.5%;
             bottom: 0.5%;
         }
 
@@ -2366,9 +2366,16 @@ class Energiefluss extends IPSModuleStrict
         // Horizontal bleibt die Ansicht sauber zentriert.
         root.style.left = `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
 
-        // Auch vertikal zentrieren. So bleibt die komplette Darstellung
-        // in jedem Seitenverhältnis sichtbar.
-        root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
+        // Auf schmalen Handyansichten die proportional skalierte Grafik
+        // nach unten ausrichten. Dadurch landet der untere Rand der internen
+        // 640px-Zeichenfläche tatsächlich am unteren Rand des verfügbaren
+        // Grafikbereichs, statt durch vertikale Zentrierung Leerraum darunter
+        // zu erzeugen. Ab 601px bleibt die bisherige Zentrierung erhalten.
+        if (window.matchMedia('(max-width: 600px)').matches) {
+            root.style.top = `${Math.max(0, availableHeight - scaledHeight)}px`;
+        } else {
+            root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
+        }
     }
 
     const scaleHost = document.getElementById('scale-host');
