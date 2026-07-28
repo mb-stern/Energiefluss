@@ -689,8 +689,8 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-info-solar {
-        left: 60%;
-        top: 4%;
+        left: 55%;
+        top: 1%;
         border-color: rgba(239,160,32,.36);
     }
 
@@ -702,7 +702,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-battery {
         left: 55%;
-        bottom: 20.5%;
+        bottom: 17%;
         transform: translateX(-50%);
         border-color: var(--ef-battery-discharge, #29b6f6);
     }
@@ -752,7 +752,7 @@ class Energiefluss extends IPSModuleStrict
 
     /* Handyansicht:
        - Kachelpositionen bleiben identisch zur Desktopansicht
-       - Schrift innerhalb der Infokacheln wird um 50 % vergrößert */
+       - Schrift innerhalb der Infokacheln wird auf 200 % der Desktopgröße gesetzt */
     @media (max-width: 600px) {
         #eflow {
             padding: 2px 1px;
@@ -770,17 +770,17 @@ class Energiefluss extends IPSModuleStrict
         }
 
         /* Position und Abmessungen der Kacheln bleiben unverändert.
-           Nur die Schrift wird gegenüber Desktop um 50 % vergrößert. */
+           Nur die Schrift wird gegenüber Desktop verdoppelt. */
         .pfc-info .title {
-            font-size: 15px;
+            font-size: 20px;
         }
 
         .pfc-info .main {
-            font-size: 25.5px;
+            font-size: 34px;
         }
 
         .pfc-info .sub {
-            font-size: 13.5px;
+            font-size: 18px;
         }
     }
 
