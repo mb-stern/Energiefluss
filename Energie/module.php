@@ -1005,9 +1005,9 @@ class Energiefluss extends IPSModuleStrict
             `left:${n.x}px;top:${n.y}px;width:${n.r * 2}px;height:${n.r * 2}px;border:3px solid ${border};`;
 
         el.innerHTML =
-            `<div class="lbl ${n.lp}" style="font-size:${n.r < 44 ? 13 : 16}px">${n.lab}</div>` +
+            `<div class="lbl ${n.lp}" style="font-size:${n.r < 44 ? 18 : 23}px">${n.lab}</div>` +
             `<i class="fa-solid fa-${n.ic}" style="font-size:${isz}px;color:${n.icc}"></i>` +
-            `<div class="body" id="body-${id}" style="font-size:${n.r < 44 ? 13 : 17}px"></div>`;
+            `<div class="body" id="body-${id}" style="font-size:${n.r < 44 ? 18 : 23}px"></div>`;
 
         stage.appendChild(el);
     }
