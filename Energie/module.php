@@ -808,7 +808,7 @@ class Energiefluss extends IPSModuleStrict
 
         #pfc-info-grid {
             right: 2.5%;
-            bottom: 0.5%;
+            bottom: 0%;
         }
 
         #display-mode-button {
