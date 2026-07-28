@@ -807,7 +807,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         #pfc-info-grid {
-            right: 4%;
+            right: 0.5%;
             bottom: 0.5%;
         }
 
@@ -1752,7 +1752,8 @@ class Energiefluss extends IPSModuleStrict
         const top =
             solarInfo.offsetTop +
             solarInfo.offsetHeight -
-            homeInfo.offsetHeight;
+            homeInfo.offsetHeight +
+            14;
 
         homeInfo.style.top = Math.max(0, top) + 'px';
     }
