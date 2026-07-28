@@ -755,18 +755,19 @@ class Energiefluss extends IPSModuleStrict
        proportional skaliert. Nur die Schrift der Infokacheln wird je nach
        verfügbarer Breite größer dargestellt. */
 
-    /* Nächstgrößere Ansicht / Tablet / schmale Kachel */
+    /* Nächstgrößere Ansicht / Tablet / schmale Kachel:
+       gleiche Schriftgröße wie auf dem Handy. */
     @media (min-width: 601px) and (max-width: 900px) {
         .pfc-info .title {
-            font-size: 15px;
+            font-size: 20px;
         }
 
         .pfc-info .main {
-            font-size: 25.5px;
+            font-size: 34px;
         }
 
         .pfc-info .sub {
-            font-size: 13.5px;
+            font-size: 18px;
         }
     }
 
@@ -1761,11 +1762,32 @@ class Energiefluss extends IPSModuleStrict
             pvMain.textContent = fmt(pvTotal);
         }
         if (pvSub) {
-            pvSub.innerHTML = pvs.map((pv, i) => {
-                const name = pv.name || ('PV ' + (i + 1));
-                const energy = pv.energy ? ` · ${pv.energy}` : '';
-                return `${name}: ${fmt(pv.value || 0)}${energy}`;
-            }).join('<br>');
+            if (window.matchMedia('(max-width: 600px)').matches) {
+                const totalEnergy = pvs.reduce((sum, pv) => {
+                    if (!pv.energy) {
+                        return sum;
+                    }
+
+                    const parsed = Number(
+                        String(pv.energy)
+                            .replace(/\./g, '')
+                            .replace(',', '.')
+                            .replace(/[^0-9.-]/g, '')
+                    );
+
+                    return sum + (Number.isFinite(parsed) ? parsed : 0);
+                }, 0);
+
+                pvSub.textContent = totalEnergy > 0
+                    ? `Produktion ${fmtKwh(totalEnergy)}`
+                    : '';
+            } else {
+                pvSub.innerHTML = pvs.map((pv, i) => {
+                    const name = pv.name || ('PV ' + (i + 1));
+                    const energy = pv.energy ? ` · ${pv.energy}` : '';
+                    return `${name}: ${fmt(pv.value || 0)}${energy}`;
+                }).join('<br>');
+            }
         }
 
         // Haus
@@ -1820,24 +1842,30 @@ class Energiefluss extends IPSModuleStrict
             }
 
             if (batterySub) {
-                batterySub.innerHTML = batteries.map((bat, i) => {
-                    const name = bat.name || ('Batterie ' + (i + 1));
-                    const mode = (bat.value || 0) >= 0 ? 'Entladen' : 'Laden';
-                    const energyParts = [];
+                if (window.matchMedia('(max-width: 600px)').matches) {
+                    const mainSoc = Number(mainBat.soc || 0);
+                    batterySub.textContent =
+                        `${Math.round(Number.isFinite(mainSoc) ? mainSoc : 0)} % SOC`;
+                } else {
+                    batterySub.innerHTML = batteries.map((bat, i) => {
+                        const name = bat.name || ('Batterie ' + (i + 1));
+                        const mode = (bat.value || 0) >= 0 ? 'Entladen' : 'Laden';
+                        const energyParts = [];
 
-                    if (bat.dischargeEnergyText) {
-                        energyParts.push(`Entladen ${bat.dischargeEnergyText}`);
-                    }
-                    if (bat.chargeEnergyText) {
-                        energyParts.push(`Laden ${bat.chargeEnergyText}`);
-                    }
+                        if (bat.dischargeEnergyText) {
+                            energyParts.push(`Entladen ${bat.dischargeEnergyText}`);
+                        }
+                        if (bat.chargeEnergyText) {
+                            energyParts.push(`Laden ${bat.chargeEnergyText}`);
+                        }
 
-                    const energy = energyParts.length
-                        ? `<br>${energyParts.join(' · ')}`
-                        : '';
+                        const energy = energyParts.length
+                            ? `<br>${energyParts.join(' · ')}`
+                            : '';
 
-                    return `${name}: ${Math.round(bat.soc || 0)} % · ${mode}${energy}`;
-                }).join('<br>');
+                        return `${name}: ${Math.round(bat.soc || 0)} % · ${mode}${energy}`;
+                    }).join('<br>');
+                }
             }
         }
 
@@ -1859,14 +1887,20 @@ class Energiefluss extends IPSModuleStrict
                 wallboxMain.textContent = fmt(wallbox.value || 0);
             }
             if (wallboxSub) {
-                const details = [];
-                if (wallbox.hasSoc) {
-                    details.push(wallbox.socText);
+                if (window.matchMedia('(max-width: 600px)').matches) {
+                    wallboxSub.textContent = wallbox.hasSoc
+                        ? wallbox.socText
+                        : '';
+                } else {
+                    const details = [];
+                    if (wallbox.hasSoc) {
+                        details.push(wallbox.socText);
+                    }
+                    if (wallbox.energy) {
+                        details.push(wallbox.energy);
+                    }
+                    wallboxSub.textContent = details.join(' · ');
                 }
-                if (wallbox.energy) {
-                    details.push(wallbox.energy);
-                }
-                wallboxSub.textContent = details.join(' · ');
             }
         }
 
