@@ -755,24 +755,8 @@ class Energiefluss extends IPSModuleStrict
        proportional skaliert. Nur die Schrift der Infokacheln wird je nach
        verfügbarer Breite größer dargestellt. */
 
-    /* Nächstgrößere Ansicht / Tablet / schmale Kachel:
-       gleiche Schriftgröße wie auf dem Handy. */
-    @media (min-width: 601px) and (max-width: 900px) {
-        .pfc-info .title {
-            font-size: 20px;
-        }
-
-        .pfc-info .main {
-            font-size: 34px;
-        }
-
-        .pfc-info .sub {
-            font-size: 18px;
-        }
-    }
-
-    /* Handyansicht */
-    @media (max-width: 600px) {
+    /* Kompakte Ansicht für Handy und schmale/ mittlere Kacheln */
+    @media (max-width: 900px) {
         #eflow {
             padding: 2px 1px;
             border-radius: 0;
@@ -797,7 +781,7 @@ class Energiefluss extends IPSModuleStrict
 
         #pfc-info-battery {
             left: 55%;
-            bottom: 0%;
+            bottom: 12%;
         }
 
         #pfc-info-grid {
@@ -808,6 +792,11 @@ class Energiefluss extends IPSModuleStrict
         #display-mode-button {
             padding: 4px 10px;
             font-size: 12px;
+        }
+
+        .pfc-info {
+            width: max-content;
+            max-width: 230px;
         }
 
         .pfc-info .title {
@@ -1726,7 +1715,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         // Die Sonderposition gilt ausschließlich für die Handyansicht.
-        if (!window.matchMedia('(max-width: 600px)').matches) {
+        if (!window.matchMedia('(max-width: 900px)').matches) {
             homeInfo.style.top = '';
             return;
         }
@@ -1762,23 +1751,15 @@ class Energiefluss extends IPSModuleStrict
             pvMain.textContent = fmt(pvTotal);
         }
         if (pvSub) {
-            if (window.matchMedia('(max-width: 600px)').matches) {
+            if (window.matchMedia('(max-width: 900px)').matches) {
                 const totalEnergy = pvs.reduce((sum, pv) => {
-                    if (!pv.energy) {
-                        return sum;
-                    }
-
-                    const parsed = Number(
-                        String(pv.energy)
-                            .replace(/\./g, '')
-                            .replace(',', '.')
-                            .replace(/[^0-9.-]/g, '')
-                    );
-
-                    return sum + (Number.isFinite(parsed) ? parsed : 0);
+                    const value = Number(pv.energyValue);
+                    return sum + (Number.isFinite(value) ? value : 0);
                 }, 0);
 
-                pvSub.textContent = totalEnergy > 0
+                const hasAnyEnergy = pvs.some(pv => !!pv.hasEnergy);
+
+                pvSub.textContent = hasAnyEnergy
                     ? `Produktion ${fmtKwh(totalEnergy)}`
                     : '';
             } else {
@@ -1842,7 +1823,7 @@ class Energiefluss extends IPSModuleStrict
             }
 
             if (batterySub) {
-                if (window.matchMedia('(max-width: 600px)').matches) {
+                if (window.matchMedia('(max-width: 900px)').matches) {
                     const mainSoc = Number(mainBat.soc || 0);
                     batterySub.textContent =
                         `${Math.round(Number.isFinite(mainSoc) ? mainSoc : 0)} % SOC`;
@@ -1887,7 +1868,7 @@ class Energiefluss extends IPSModuleStrict
                 wallboxMain.textContent = fmt(wallbox.value || 0);
             }
             if (wallboxSub) {
-                if (window.matchMedia('(max-width: 600px)').matches) {
+                if (window.matchMedia('(max-width: 900px)').matches) {
                     wallboxSub.textContent = wallbox.hasSoc
                         ? wallbox.socText
                         : '';
