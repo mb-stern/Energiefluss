@@ -586,6 +586,11 @@ class Energiefluss extends IPSModuleStrict
         padding-top: 16px;
     }
 
+    #n-haus .val {
+        font-size: 25px !important;
+        line-height: 1.05;
+    }
+
     /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
