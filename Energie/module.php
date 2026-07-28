@@ -1,3 +1,264 @@
+ChatGPT Plus
+
+
+
+
+heute 6:29
+
+Eingefügter Text(88).txt
+Dokument
+Die Kachel mit dem Hausverbrauch müsste noch ein wenig weiter nach obendie ist jetzt im Fentster des hauses. Ausserdem wäre eine Handyansicht noch ganz toll, das würde bedeuten dass ganz an den äusseren Radn geganen werdn muss und die Kachel dann grösser weren im Verhältnis
+
+
+Eingefügter Text(89).txt
+Dokument
+Jetzt ist was scheifgelaufen totol verzerrt vorher war es so 
+
+
+Analysiert
+from pathlib import Path
+import subprocess
+
+src = Path("/mnt/data/module_hausansicht_responsive_v18.php")
+dst = Path("/mnt/data/module_hausansicht_responsive_v19.php")
+
+text = src.read_text(encoding="utf-8")
+
+# Speicher-Kachel ab 601 px testweise auf bottom: 19%.
+text = text.replace(
+"""    #pfc-info-battery {
+        left: 55%;
+        bottom: 17.5%;""",
+"""    #pfc-info-battery {
+        left: 55%;
+        bottom: 19%;"""
+)
+
+dst.write_text(text, encoding="utf-8")
+
+result = subprocess.run(["php", "-l", str(dst)], capture_output=True, text=True, timeout=20)
+
+print(f"Erstellt: {dst}")
+print("Speicher ab 601px bottom 19%:", "bottom: 19%;" in text)
+print(result.stdout.strip() or result.stderr.strip())
+STDOUT/STDERR
+Erstellt: /mnt/data/module_hausansicht_responsive_v19.php
+Speicher ab 601px bottom 19%: True
+No syntax errors detected in /mnt/data/module_hausansicht_responsive_v19.php
+Ja, probieren wir 19 %.
+
+Speicher-Kachel ab 601 px:
+bottom: 17.5% → 19%
+
+Die 600er Ansicht bleibt unverändert.
+
+module_hausansicht_responsive_v19.php 
+
+
+Bitte den Energiefluuss alle grösser machen, die KReis, die Schrift, alles gleichmässig
+
+
+Analysiert
+from pathlib import Path
+import re, subprocess
+
+src = Path("/mnt/data/module_hausansicht_responsive_v19.php")
+dst = Path("/mnt/data/module_hausansicht_responsive_v20.php")
+
+text = src.read_text(encoding="utf-8")
+
+# Scale only the Energy Flow view as a whole, uniformly around its center.
+# This enlarges circles, icons, text, lines and all other elements together.
+# House view remains untouched.
+old = """    #pfc-root {
+        position: relative;
+        width: 900px;
+        height: 640px;
+        transform-origin: top left;
+        will-change: transform;
+    }"""
+
+new = """    #pfc-root {
+        position: relative;
+        width: 900px;
+        height: 640px;
+        transform-origin: center center;
+        will-change: transform;
+    }
+
+    /* Energiefluss insgesamt etwas größer:
+       Kreise, Icons, Schrift, Linien und Abstände werden gleichmäßig skaliert. */
+    #pfc-root.pfc-energy-flow {
+        transform: scale(1.12);
+    }"""
+
+# Don't blindly modify pfc-root because fit() writes inline transform.
+# Instead add an inner CSS variable based zoom to fit() when energy-flow mode active.
+if old in text:
+    text = text.replace(old, new, 1)
+
+# Since inline transform from fit overrides stylesheet transform, adjust fit scale uniformly
+# only when the energy-flow display is active.
+old_scale = """        const scale = Math.min(scaleX, scaleY);
+
+        root.style.transform = `scale(${scale})`;"""
+new_scale = """        let scale = Math.min(scaleX, scaleY);
+
+        // Energiefluss als Ganzes gleichmäßig vergrößern.
+        // Dadurch wachsen Kreise, Schrift, Icons und Linien im selben Verhältnis.
+        if (currentDisplayMode === 'flow') {
+            scale *= 1.12;
+        }
+
+        root.style.transform = `scale(${scale})`;"""
+if old_scale not in text:
+    raise RuntimeError("fit()-Skalierungsblock nicht gefunden.")
+text = text.replace(old_scale, new_scale, 1)
+
+# Remove the unused class rule transform to avoid confusion, while retain origin center?
+text = text.replace("""
+    /* Energiefluss insgesamt etwas größer:
+       Kreise, Icons, Schrift, Linien und Abstände werden gleichmäßig skaliert. */
+    #pfc-root.pfc-energy-flow {
+        transform: scale(1.12);
+    }""", "")
+
+# To avoid clipping after 12% enlargement, scaled dimensions must reflect final scale.
+# Existing calculations already use `scale` after modification, so they follow enlarged size.
+
+dst.write_text(text, encoding="utf-8")
+
+result = subprocess.run(["php", "-l", str(dst)], capture_output=True, text=True, timeout=20)
+print(f"Erstellt: {dst}")
+print("Energiefluss Zoom 12%:", "scale *= 1.12;" in text)
+print(result.stdout.strip() or result.stderr.strip())
+STDOUT/STDERR
+Erstellt: /mnt/data/module_hausansicht_responsive_v20.php
+Energiefluss Zoom 12%: True
+No syntax errors detected in /mnt/data/module_hausansicht_responsive_v20.php
+Ja. Ich habe jetzt den kompletten Energiefluss gleichmäßig um 12 % vergrößert.
+
+Damit werden gemeinsam größer:
+
+Kreise
+
+Symbole
+
+Schrift
+
+Leistungswerte
+
+Verbindungslinien
+
+Abstände innerhalb der Darstellung
+
+Also nicht einzelne Elemente separat, sondern die gesamte Energiefluss-Visualisierung proportional. Die Hausansicht wird davon nicht beeinflusst.
+
+module_hausansicht_responsive_v20.php 
+
+
+Aber skalierne musst du weiterhin und die ganze maximale Breite verwenden
+
+17s nachgedacht
+
+Analysiert
+from pathlib import Path
+import subprocess
+
+src = Path("/mnt/data/module_hausansicht_responsive_v20.php")
+dst = Path("/mnt/data/module_hausansicht_responsive_v21.php")
+
+text = src.read_text(encoding="utf-8")
+
+old = """        // Immer proportional skalieren und BEIDE Grenzen beachten.
+        // Die Breite darf den Maßstab bestimmen, solange dadurch die
+        // verfügbare Höhe nicht überschritten wird.
+        let scale = Math.min(scaleX, scaleY);
+
+        // Energiefluss als Ganzes gleichmäßig vergrößern.
+        // Dadurch wachsen Kreise, Schrift, Icons und Linien im selben Verhältnis.
+        if (currentDisplayMode === 'flow') {
+            scale *= 1.12;
+        }
+"""
+
+new = """        // Proportional skalieren.
+        //
+        // Energiefluss:
+        // Die gesamte verfügbare BREITE wird verwendet. Dadurch werden
+        // Kreise, Schrift, Icons, Linien und Abstände immer gemeinsam
+        // und gleichmäßig skaliert. Es gibt keinen zusätzlichen Zoomfaktor,
+        // der später zu Abschneiden oder ungenutzter Breite führen kann.
+        //
+        // Hausansicht:
+        // Weiterhin vollständig in Breite und Höhe einpassen.
+        let scale = currentDisplayMode === 'flow'
+            ? scaleX
+            : Math.min(scaleX, scaleY);
+"""
+
+if old not in text:
+    raise RuntimeError("Skalierungsblock aus v20 nicht gefunden.")
+
+text = text.replace(old, new, 1)
+
+# Beim Energiefluss exakt an der maximalen Breite ausrichten.
+old_left = """        // Horizontal bleibt die Ansicht sauber zentriert.
+        root.style.left = `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
+"""
+
+new_left = """        // Energiefluss nutzt die maximale Breite exakt aus.
+        // Hausansicht bleibt bei eventuell vorhandener Restbreite zentriert.
+        root.style.left = currentDisplayMode === 'flow'
+            ? '0px'
+            : `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
+"""
+
+if old_left not in text:
+    raise RuntimeError("Horizontale Ausrichtung nicht gefunden.")
+
+text = text.replace(old_left, new_left, 1)
+
+dst.write_text(text, encoding="utf-8")
+
+result = subprocess.run(
+    ["php", "-l", str(dst)],
+    capture_output=True,
+    text=True,
+    timeout=20
+)
+
+print(f"Erstellt: {dst}")
+print("Energiefluss skaliert nach voller Breite:", "? scaleX" in text)
+print("Kein 1.12-Zoom mehr:", "scale *= 1.12" not in text)
+print(result.stdout.strip() or result.stderr.strip())
+STDOUT/STDERR
+Erstellt: /mnt/data/module_hausansicht_responsive_v21.php
+Energiefluss skaliert nach voller Breite: True
+Kein 1.12-Zoom mehr: True
+No syntax errors detected in /mnt/data/module_hausansicht_responsive_v21.php
+Genau. Ich habe den zusätzlichen 12-%-Zoom wieder rausgenommen und die Skalierung sauber gemacht:
+
+Energiefluss skaliert weiterhin proportional
+
+nutzt jetzt immer die komplette verfügbare Breite
+
+Kreise, Schrift, Icons, Linien und Abstände wachsen weiterhin gemeinsam
+
+keine künstliche 12-%-Vergrößerung mehr
+
+dadurch sollte nichts mehr unnötig abgeschnitten werden
+
+Hausansicht bleibt davon getrennt
+
+PHP-Syntax fehlerfrei
+
+module_hausansicht_responsive_v21.php 
+
+
+module_hausansicht_responsive_v21.php
+
+
 <?php
 
 /*
@@ -2424,24 +2685,30 @@ class Energiefluss extends IPSModuleStrict
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
 
-        // Immer proportional skalieren und BEIDE Grenzen beachten.
-        // Die Breite darf den Maßstab bestimmen, solange dadurch die
-        // verfügbare Höhe nicht überschritten wird.
-        let scale = Math.min(scaleX, scaleY);
-
-        // Energiefluss als Ganzes gleichmäßig vergrößern.
-        // Dadurch wachsen Kreise, Schrift, Icons und Linien im selben Verhältnis.
-        if (currentDisplayMode === 'flow') {
-            scale *= 1.12;
-        }
+        // Proportional skalieren.
+        //
+        // Energiefluss:
+        // Die gesamte verfügbare BREITE wird verwendet. Dadurch werden
+        // Kreise, Schrift, Icons, Linien und Abstände immer gemeinsam
+        // und gleichmäßig skaliert. Es gibt keinen zusätzlichen Zoomfaktor,
+        // der später zu Abschneiden oder ungenutzter Breite führen kann.
+        //
+        // Hausansicht:
+        // Weiterhin vollständig in Breite und Höhe einpassen.
+        let scale = currentDisplayMode === 'flow'
+            ? scaleX
+            : Math.min(scaleX, scaleY);
 
         root.style.transform = `scale(${scale})`;
 
         const scaledWidth = baseWidth * scale;
         const scaledHeight = baseHeight * scale;
 
-        // Horizontal bleibt die Ansicht sauber zentriert.
-        root.style.left = `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
+        // Energiefluss nutzt die maximale Breite exakt aus.
+        // Hausansicht bleibt bei eventuell vorhandener Restbreite zentriert.
+        root.style.left = currentDisplayMode === 'flow'
+            ? '0px'
+            : `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
 
         // Auf schmalen Handyansichten die proportional skalierte Grafik
         // nach unten ausrichten. Dadurch landet der untere Rand der internen
