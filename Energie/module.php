@@ -587,7 +587,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #n-haus .val {
-        font-size: 25px !important;
+        font-size: 21px !important;
         line-height: 1.05;
     }
 
@@ -1010,9 +1010,9 @@ class Energiefluss extends IPSModuleStrict
             `left:${n.x}px;top:${n.y}px;width:${n.r * 2}px;height:${n.r * 2}px;border:3px solid ${border};`;
 
         el.innerHTML =
-            `<div class="lbl ${n.lp}" style="font-size:${n.r < 44 ? 18 : 23}px">${n.lab}</div>` +
+            `<div class="lbl ${n.lp}" style="font-size:${n.r < 44 ? 17 : 21}px">${n.lab}</div>` +
             `<i class="fa-solid fa-${n.ic}" style="font-size:${isz}px;color:${n.icc}"></i>` +
-            `<div class="body" id="body-${id}" style="font-size:${n.r < 44 ? 18 : 23}px"></div>`;
+            `<div class="body" id="body-${id}" style="font-size:${n.r < 44 ? 17 : 21}px"></div>`;
 
         stage.appendChild(el);
     }
@@ -1100,7 +1100,7 @@ class Energiefluss extends IPSModuleStrict
             document.getElementById('body-pv' + i).innerHTML =
                 `<div class="val">${fmt(pv.value)}</div>` +
                 (pv.energy
-                    ? `<div class="sub" style="font-size:10px;line-height:1.25;">${pv.energy}</div>`
+                    ? `<div class="sub" style="font-size:13px;line-height:1.15;white-space:nowrap;">${pv.energy}</div>`
                     : '');
 
             addEdge(
@@ -1143,7 +1143,7 @@ class Energiefluss extends IPSModuleStrict
                 `<div class="sub" style="font-size:15px">${Math.round(bat.soc || 0)}%</div>` +
                 `<div class="val" style="color:${batColor}">${fmt(Math.abs(bat.value || 0))}</div>` +
                 (batteryEnergyLines.length
-                    ? `<div class="sub" style="font-size:18px;line-height:1.15;">${batteryEnergyLines.join('<br>')}</div>`
+                    ? `<div class="sub" style="font-size:13px;line-height:1.15;white-space:nowrap;">${batteryEnergyLines.join('<br>')}</div>`
                     : '');
 
             addEdge(
@@ -1193,7 +1193,7 @@ class Energiefluss extends IPSModuleStrict
         inner += `<div class="val" style="color:${AC.room}">${fmt(Math.max(wallbox.value || 0, 0))}</div>`;
 
         if (wallbox.energy) {
-            inner += `<div class="sub" style="font-size:10px;line-height:1.25;">${wallbox.energy}</div>`;
+            inner += `<div class="sub" style="font-size:13px;line-height:1.15;white-space:nowrap;">${wallbox.energy}</div>`;
         }
 
         const body = document.getElementById('body-wallbox');
