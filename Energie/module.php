@@ -690,7 +690,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-solar {
         left: 55%;
-        top: 1%;
+        top: -6%;
         border-color: rgba(239,160,32,.36);
     }
 
@@ -702,7 +702,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-battery {
         left: 55%;
-        bottom: 17%;
+        bottom: 10%;
         transform: translateX(-50%);
         border-color: var(--ef-battery-discharge, #29b6f6);
     }
