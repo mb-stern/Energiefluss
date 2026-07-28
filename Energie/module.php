@@ -578,7 +578,7 @@ class Energiefluss extends IPSModuleStrict
         margin: 0 !important;
         width: 90px;
         text-align: center;
-        font-size: 12px !important;
+        font-size: 14px !important;
         line-height: 1;
     }
 
@@ -953,14 +953,14 @@ class Energiefluss extends IPSModuleStrict
     let flowSpeedFactor = 1.0;
 
     const NSc = 'http://www.w3.org/2000/svg';
-    const RR = 34;
+    const RR = 38;
     const COL0 = 530;
     const COLW = 120;
 
     // ---------- klassische Ansicht ----------
     const MAIN = {
-        netz: { x: 110, y: 350, r: 46, ic: 'bolt', icc: AC.grid, lab: 'Netz', lp: 'bot' },
-        haus: { x: 360, y: 350, r: 52, ic: 'house', icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true }
+        netz: { x: 110, y: 350, r: 51, ic: 'bolt', icc: AC.grid, lab: 'Netz', lp: 'bot' },
+        haus: { x: 360, y: 350, r: 58, ic: 'house', icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true }
     };
 
     const stage = document.getElementById('stage');
@@ -999,15 +999,15 @@ class Energiefluss extends IPSModuleStrict
         el.id = 'n-' + id;
 
         const border = n.ring ? 'transparent' : n.icc;
-        const isz = n.r < 40 ? 18 : 22;
+        const isz = n.r < 44 ? 20 : 25;
 
         el.style.cssText =
             `left:${n.x}px;top:${n.y}px;width:${n.r * 2}px;height:${n.r * 2}px;border:3px solid ${border};`;
 
         el.innerHTML =
-            `<div class="lbl ${n.lp}" style="font-size:${n.r < 40 ? 12 : 14}px">${n.lab}</div>` +
+            `<div class="lbl ${n.lp}" style="font-size:${n.r < 44 ? 13 : 16}px">${n.lab}</div>` +
             `<i class="fa-solid fa-${n.ic}" style="font-size:${isz}px;color:${n.icc}"></i>` +
-            `<div class="body" id="body-${id}" style="font-size:${n.r < 40 ? 12 : 15}px"></div>`;
+            `<div class="body" id="body-${id}" style="font-size:${n.r < 44 ? 13 : 17}px"></div>`;
 
         stage.appendChild(el);
     }
@@ -1083,7 +1083,7 @@ class Energiefluss extends IPSModuleStrict
                 {
                     x: p.x,
                     y: p.y,
-                    r: 44,
+                    r: 49,
                     ic: 'solar-panel',
                     icc: AC.solar,
                     lab: pv.name || ('PV ' + (i + 1)),
@@ -1116,7 +1116,7 @@ class Energiefluss extends IPSModuleStrict
                 {
                     x: p.x,
                     y: p.y,
-                    r: 42,
+                    r: 47,
                     ic: 'battery-half',
                     icc: batColor,
                     lab: bat.name || ('Batterie ' + (i + 1)),
@@ -1162,7 +1162,7 @@ class Energiefluss extends IPSModuleStrict
             ? gpos(0)
             : { x: 532, y: 350, lp: 'bot' };
 
-        const radius = withConsumers ? 39 : 42;
+        const radius = withConsumers ? 44 : 47;
 
         addNode(
             'wallbox',
@@ -1318,13 +1318,13 @@ class Energiefluss extends IPSModuleStrict
     function updateRings(segs, batteries, wallbox, hasWallbox, groupCount) {
         ringG.innerHTML = '';
 
-        track(360, 350, 60);
+        track(360, 350, 66);
         const tot = segs.reduce((a, s) => a + s[1], 0) || 1;
         let acc = 0;
 
         segs.forEach(([col, v]) => {
             if (v > 0) {
-                arc(360, 350, 60, col, v / tot, acc / tot);
+                arc(360, 350, 66, col, v / tot, acc / tot);
                 acc += v;
             }
         });
@@ -1332,14 +1332,14 @@ class Energiefluss extends IPSModuleStrict
         batteries.forEach((bat, i) => {
             const p = batteryPos(i);
             const batColor = (bat.value || 0) >= 0 ? AC.discharge : AC.charge;
-            track(p.x, p.y, 48);
-            arc(p.x, p.y, 48, batColor, Math.max(0, Math.min(100, bat.soc || 0)) / 100, 0);
+            track(p.x, p.y, 53);
+            arc(p.x, p.y, 53, batColor, Math.max(0, Math.min(100, bat.soc || 0)) / 100, 0);
         });
 
         if (hasWallbox) {
             const withConsumers = groupCount > 0;
             const p = withConsumers ? gpos(0) : { x: 532, y: 350 };
-            const ringRadius = withConsumers ? 45 : 48;
+            const ringRadius = withConsumers ? 50 : 53;
             const soc = wallboxSocPercent(wallbox);
 
             track(p.x, p.y, ringRadius);
