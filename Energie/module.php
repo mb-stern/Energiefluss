@@ -1133,17 +1133,17 @@ class Energiefluss extends IPSModuleStrict
 
             const batteryEnergyLines = [];
             if (bat.dischargeEnergyText) {
-                batteryEnergyLines.push(`Entladen ${bat.dischargeEnergyText}`);
+                batteryEnergyLines.push(`→ ${bat.dischargeEnergyText}`);
             }
             if (bat.chargeEnergyText) {
-                batteryEnergyLines.push(`Laden ${bat.chargeEnergyText}`);
+                batteryEnergyLines.push(`← ${bat.chargeEnergyText}`);
             }
 
             document.getElementById('body-bat' + i).innerHTML =
-                `<div class="sub" style="font-size:11px">${Math.round(bat.soc || 0)}%</div>` +
+                `<div class="sub" style="font-size:15px">${Math.round(bat.soc || 0)}%</div>` +
                 `<div class="val" style="color:${batColor}">${fmt(Math.abs(bat.value || 0))}</div>` +
                 (batteryEnergyLines.length
-                    ? `<div class="sub" style="font-size:9px;line-height:1.25;">${batteryEnergyLines.join('<br>')}</div>`
+                    ? `<div class="sub" style="font-size:18px;line-height:1.15;">${batteryEnergyLines.join('<br>')}</div>`
                     : '');
 
             addEdge(
@@ -1864,10 +1864,10 @@ class Energiefluss extends IPSModuleStrict
                         const energyParts = [];
 
                         if (bat.dischargeEnergyText) {
-                            energyParts.push(`Entladen ${bat.dischargeEnergyText}`);
+                            energyParts.push(`→ ${bat.dischargeEnergyText}`);
                         }
                         if (bat.chargeEnergyText) {
-                            energyParts.push(`Laden ${bat.chargeEnergyText}`);
+                            energyParts.push(`← ${bat.chargeEnergyText}`);
                         }
 
                         const energy = energyParts.length
