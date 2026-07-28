@@ -1928,10 +1928,10 @@ class Energiefluss extends IPSModuleStrict
         if (compactGrid) {
             const isExport = grid < 0;
             const gridColor = isExport ? AC.export : AC.import;
-            const direction = isExport ? '←' : '→';
+            const gridLabel = isExport ? 'Einspeisung' : 'Bezug';
 
             if (gridImportEl) {
-                gridImportEl.textContent = `${direction} ${fmt(Math.abs(grid))}`;
+                gridImportEl.textContent = `${gridLabel} ${fmt(Math.abs(grid))}`;
                 gridImportEl.style.color = gridColor;
                 gridImportEl.style.display = '';
             }
