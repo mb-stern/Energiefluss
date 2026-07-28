@@ -1910,30 +1910,73 @@ class Energiefluss extends IPSModuleStrict
             }
         }
 
-        // Netz unten: beide Richtungen immer separat darstellen.
+        // Netz:
+        // Bis 600px nur EIN Gesamtwert (Saldo) anzeigen.
+        // positiv = Netzbezug -> rot
+        // negativ = Einspeisung -> grün
+        // Ab 601px bleiben Bezug und Einspeisung wie bisher getrennt sichtbar.
         const gridImport = Math.max(grid, 0);
         const gridExport = Math.max(-grid, 0);
 
+        const gridInfo = document.getElementById('pfc-info-grid');
         const gridImportEl = document.getElementById('pfc-grid-import');
         const gridExportEl = document.getElementById('pfc-grid-export');
         const gridSub = document.getElementById('pfc-grid-sub');
 
-        if (gridImportEl) {
-            gridImportEl.textContent = `→ ${fmt(gridImport)}`;
-        }
-        if (gridExportEl) {
-            gridExportEl.textContent = `← ${fmt(gridExport)}`;
-        }
+        const compactGrid = window.matchMedia('(max-width: 600px)').matches;
 
-        if (gridSub) {
-            const energy = [];
-            if (d.gridImportEnergy) {
-                energy.push('Bezug ' + d.gridImportEnergy);
+        if (compactGrid) {
+            const isExport = grid < 0;
+            const gridColor = isExport ? AC.export : AC.import;
+            const direction = isExport ? '←' : '→';
+
+            if (gridImportEl) {
+                gridImportEl.textContent = `${direction} ${fmt(Math.abs(grid))}`;
+                gridImportEl.style.color = gridColor;
+                gridImportEl.style.display = '';
             }
-            if (d.gridExportEnergy) {
-                energy.push('Einspeisung ' + d.gridExportEnergy);
+
+            if (gridExportEl) {
+                gridExportEl.textContent = '';
+                gridExportEl.style.display = 'none';
             }
-            gridSub.innerHTML = energy.join('<br>');
+
+            if (gridSub) {
+                gridSub.textContent = '';
+                gridSub.style.display = 'none';
+            }
+
+            if (gridInfo) {
+                gridInfo.style.borderColor = gridColor;
+            }
+        } else {
+            if (gridImportEl) {
+                gridImportEl.textContent = `→ ${fmt(gridImport)}`;
+                gridImportEl.style.color = AC.import;
+                gridImportEl.style.display = '';
+            }
+
+            if (gridExportEl) {
+                gridExportEl.textContent = `← ${fmt(gridExport)}`;
+                gridExportEl.style.color = AC.export;
+                gridExportEl.style.display = '';
+            }
+
+            if (gridSub) {
+                const energy = [];
+                if (d.gridImportEnergy) {
+                    energy.push('Bezug ' + d.gridImportEnergy);
+                }
+                if (d.gridExportEnergy) {
+                    energy.push('Einspeisung ' + d.gridExportEnergy);
+                }
+                gridSub.innerHTML = energy.join('<br>');
+                gridSub.style.display = '';
+            }
+
+            if (gridInfo) {
+                gridInfo.style.borderColor = 'rgba(255,255,255,.16)';
+            }
         }
 
         requestAnimationFrame(alignHomeInfoToSolarBottom);
@@ -2254,6 +2297,9 @@ class Energiefluss extends IPSModuleStrict
         );
     }
 
+    let lastStateData = null;
+    let lastCompactLayout = window.matchMedia('(max-width: 600px)').matches;
+
     function handleMessage(data) {
         const d = typeof data === 'string' ? JSON.parse(data) : data;
 
@@ -2262,7 +2308,23 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
+        lastStateData = d;
         setState(d);
+    }
+
+    function refreshResponsiveState() {
+        const compactNow = window.matchMedia('(max-width: 600px)').matches;
+
+        // Nur bei einem echten Wechsel zwischen den zwei vorhandenen
+        // Darstellungen neu aufbauen. So gibt es beim Ziehen keine alten
+        // Misch-/Zwischenanzeigen mehr.
+        if (compactNow !== lastCompactLayout) {
+            lastCompactLayout = compactNow;
+
+            if (lastStateData) {
+                setState(lastStateData);
+            }
+        }
     }
 
     // ---------- Animation ----------
@@ -2380,11 +2442,15 @@ class Energiefluss extends IPSModuleStrict
 
     const scaleHost = document.getElementById('scale-host');
     if (scaleHost) {
-        new ResizeObserver(fit).observe(scaleHost);
+        new ResizeObserver(() => {
+            fit();
+            refreshResponsiveState();
+        }).observe(scaleHost);
     }
 
     window.addEventListener('resize', () => {
         fit();
+        refreshResponsiveState();
         requestAnimationFrame(alignHomeInfoToSolarBottom);
     });
     window.addEventListener('load', () => {
