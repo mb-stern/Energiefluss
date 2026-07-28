@@ -781,12 +781,12 @@ class Energiefluss extends IPSModuleStrict
 
         #pfc-info-battery {
             left: 55%;
-            bottom: 12%;
+            bottom: 16%;
         }
 
         #pfc-info-grid {
             right: 4%;
-            bottom: 0%;
+            bottom: 4%;
         }
 
         #display-mode-button {
@@ -804,7 +804,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         .pfc-info .main {
-            font-size: 34px;
+            font-size: 30px;
         }
 
         .pfc-info .sub {
@@ -1760,7 +1760,7 @@ class Energiefluss extends IPSModuleStrict
                 const hasAnyEnergy = pvs.some(pv => !!pv.hasEnergy);
 
                 pvSub.textContent = hasAnyEnergy
-                    ? `Produktion ${fmtKwh(totalEnergy)}`
+                    ? fmtKwh(totalEnergy)
                     : '';
             } else {
                 pvSub.innerHTML = pvs.map((pv, i) => {
