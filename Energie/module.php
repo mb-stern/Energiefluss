@@ -473,7 +473,7 @@ class Energiefluss extends IPSModuleStrict
         flex: 0 0 auto;
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         gap: 8px;
         padding: 6px 4px 0;
         min-height: 32px;
@@ -696,7 +696,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-home {
         right: 7%;
-        top: 22%;
+        top: 1%;
         border-color: rgba(77,159,255,.36);
     }
 
@@ -750,9 +750,27 @@ class Energiefluss extends IPSModuleStrict
         color: var(--ef-consumer, #2fa98f);
     }
 
-    /* Handyansicht:
-       - Kachelpositionen bleiben identisch zur Desktopansicht
-       - Schrift innerhalb der Infokacheln wird auf 200 % der Desktopgröße gesetzt */
+    /* Responsive Infokacheln:
+       Die eigentliche Hausgrafik wird weiterhin ausschließlich über fit()
+       proportional skaliert. Nur die Schrift der Infokacheln wird je nach
+       verfügbarer Breite größer dargestellt. */
+
+    /* Nächstgrößere Ansicht / Tablet / schmale Kachel */
+    @media (min-width: 601px) and (max-width: 900px) {
+        .pfc-info .title {
+            font-size: 15px;
+        }
+
+        .pfc-info .main {
+            font-size: 25.5px;
+        }
+
+        .pfc-info .sub {
+            font-size: 13.5px;
+        }
+    }
+
+    /* Handyansicht */
     @media (max-width: 600px) {
         #eflow {
             padding: 2px 1px;
@@ -769,8 +787,6 @@ class Energiefluss extends IPSModuleStrict
             font-size: 12px;
         }
 
-        /* Position und Abmessungen der Kacheln bleiben unverändert.
-           Nur die Schrift wird gegenüber Desktop verdoppelt. */
         .pfc-info .title {
             font-size: 20px;
         }
@@ -1680,6 +1696,22 @@ class Energiefluss extends IPSModuleStrict
         return pfcInitPromise;
     }
 
+    function alignHomeInfoToSolarBottom() {
+        const solarInfo = document.getElementById('pfc-info-solar');
+        const homeInfo = document.getElementById('pfc-info-home');
+
+        if (!solarInfo || !homeInfo) {
+            return;
+        }
+
+        const top =
+            solarInfo.offsetTop +
+            solarInfo.offsetHeight -
+            homeInfo.offsetHeight;
+
+        homeInfo.style.top = Math.max(0, top) + 'px';
+    }
+
     function updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox) {
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -1832,6 +1864,8 @@ class Energiefluss extends IPSModuleStrict
             }
             gridSub.innerHTML = energy.join('<br>');
         }
+
+        requestAnimationFrame(alignHomeInfoToSolarBottom);
     }
 
     function updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox) {
@@ -2264,8 +2298,14 @@ class Energiefluss extends IPSModuleStrict
         new ResizeObserver(fit).observe(scaleHost);
     }
 
-    window.addEventListener('resize', fit);
-    window.addEventListener('load', fit);
+    window.addEventListener('resize', () => {
+        fit();
+        requestAnimationFrame(alignHomeInfoToSolarBottom);
+    });
+    window.addEventListener('load', () => {
+        fit();
+        requestAnimationFrame(alignHomeInfoToSolarBottom);
+    });
 
     fit();
     requestAnimationFrame(frame);
