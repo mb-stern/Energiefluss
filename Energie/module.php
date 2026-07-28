@@ -483,12 +483,18 @@ class Energiefluss extends IPSModuleStrict
         appearance: none;
         border: 1px solid var(--w-border);
         border-radius: 7px;
-        padding: 5px 12px;
+        width: 34px;
+        height: 30px;
+        padding: 0;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
         background: var(--w-surface);
         color: var(--w-text2);
         font: inherit;
-        font-size: 12px;
-        font-weight: 500;
+        font-size: 19px;
+        line-height: 1;
+        font-weight: 600;
         cursor: pointer;
         outline: none;
     }
@@ -755,15 +761,31 @@ class Energiefluss extends IPSModuleStrict
        proportional skaliert. Nur die Schrift der Infokacheln wird je nach
        verfügbarer Breite größer dargestellt. */
 
-    /* Kompakte Ansicht für Handy und schmale/ mittlere Kacheln */
-    @media (max-width: 900px) {
+    /* Ab 601 px überall dieselbe etwas größere Standardschrift.
+       Positionen und vollständige Detailinfos bleiben unverändert. */
+    @media (min-width: 601px) {
+        .pfc-info .title {
+            font-size: 12px;
+        }
+
+        .pfc-info .main {
+            font-size: 21px;
+        }
+
+        .pfc-info .sub {
+            font-size: 11px;
+        }
+    }
+
+    /* Kompakte Handyansicht */
+    @media (max-width: 600px) {
         #eflow {
             padding: 2px 1px;
             border-radius: 0;
         }
 
         #display-mode-bar {
-            justify-content: flex-start;
+            justify-content: center;
             padding-top: 3px;
             min-height: 28px;
         }
@@ -786,12 +808,14 @@ class Energiefluss extends IPSModuleStrict
 
         #pfc-info-grid {
             right: 4%;
-            bottom: 4%;
+            bottom: 0.5%;
         }
 
         #display-mode-button {
-            padding: 4px 10px;
-            font-size: 12px;
+            width: 34px;
+            height: 30px;
+            padding: 0;
+            font-size: 19px;
         }
 
         .pfc-info {
@@ -879,7 +903,7 @@ class Energiefluss extends IPSModuleStrict
     </div>
 
     <div id="display-mode-bar">
-        <button id="display-mode-button" type="button">Ansicht wechseln</button>
+        <button id="display-mode-button" type="button" title="Ansicht wechseln" aria-label="Ansicht wechseln">⇄</button>
     </div>
 </div>
 
@@ -1715,7 +1739,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         // Die Sonderposition gilt ausschließlich für die Handyansicht.
-        if (!window.matchMedia('(max-width: 900px)').matches) {
+        if (!window.matchMedia('(max-width: 600px)').matches) {
             homeInfo.style.top = '';
             return;
         }
@@ -1751,7 +1775,7 @@ class Energiefluss extends IPSModuleStrict
             pvMain.textContent = fmt(pvTotal);
         }
         if (pvSub) {
-            if (window.matchMedia('(max-width: 900px)').matches) {
+            if (window.matchMedia('(max-width: 600px)').matches) {
                 const totalEnergy = pvs.reduce((sum, pv) => {
                     const value = Number(pv.energyValue);
                     return sum + (Number.isFinite(value) ? value : 0);
@@ -1823,7 +1847,7 @@ class Energiefluss extends IPSModuleStrict
             }
 
             if (batterySub) {
-                if (window.matchMedia('(max-width: 900px)').matches) {
+                if (window.matchMedia('(max-width: 600px)').matches) {
                     const mainSoc = Number(mainBat.soc || 0);
                     batterySub.textContent =
                         `${Math.round(Number.isFinite(mainSoc) ? mainSoc : 0)} % SOC`;
@@ -1868,7 +1892,7 @@ class Energiefluss extends IPSModuleStrict
                 wallboxMain.textContent = fmt(wallbox.value || 0);
             }
             if (wallboxSub) {
-                if (window.matchMedia('(max-width: 900px)').matches) {
+                if (window.matchMedia('(max-width: 600px)').matches) {
                     wallboxSub.textContent = wallbox.hasSoc
                         ? wallbox.socText
                         : '';
@@ -1995,9 +2019,16 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        button.textContent = currentDisplayMode === 'house'
+        button.textContent = '⇄';
+        button.title = currentDisplayMode === 'house'
             ? 'Energiefluss anzeigen'
             : 'Hausansicht anzeigen';
+        button.setAttribute(
+            'aria-label',
+            currentDisplayMode === 'house'
+                ? 'Energiefluss anzeigen'
+                : 'Hausansicht anzeigen'
+        );
     }
 
     function applyDisplayMode(mode) {
