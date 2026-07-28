@@ -554,6 +554,20 @@ class Energiefluss extends IPSModuleStrict
     .node .val { color: #ffffff !important; font-weight: 500; }
     .node .sub { color: #ffffff !important; }
 
+    /* Energiefluss: Leistungswerte bewusst deutlich größer als Zusatzwerte. */
+    #stage .node .val {
+        font-size: 23px !important;
+        line-height: 1.05;
+        white-space: nowrap;
+    }
+
+    /* Hauswert minimal größer als die übrigen Hauptwerte. */
+    #n-haus .val {
+        font-size: 25px !important;
+        line-height: 1.05;
+        white-space: nowrap;
+    }
+
     /* Icons/Werte innerhalb der Kreise sollen unabhängig vom Symcon-Theme
        immer gut lesbar sein. */
     .node .body,
@@ -568,6 +582,13 @@ class Energiefluss extends IPSModuleStrict
         line-height: 1.15 !important;
         white-space: nowrap;
     }
+
+    #stage .energy-sub {
+        font-size: 13px !important;
+        line-height: 1.15;
+        white-space: nowrap;
+    }
+
     .lbl {
         position: absolute;
         left: 50%;
@@ -593,13 +614,7 @@ class Energiefluss extends IPSModuleStrict
     #n-haus .body {
         padding-top: 16px;
     }
-
-    #n-haus .val {
-        font-size: 21px !important;
-        line-height: 1.05;
-    }
-
-    /* Hausansicht – LordGuenni/power-flow-card */
+/* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
         width: 900px;
@@ -2469,11 +2484,7 @@ class Energiefluss extends IPSModuleStrict
         // 640px-Zeichenfläche tatsächlich am unteren Rand des verfügbaren
         // Grafikbereichs, statt durch vertikale Zentrierung Leerraum darunter
         // zu erzeugen. Ab 601px bleibt die bisherige Zentrierung erhalten.
-        if (currentDisplayMode === 'house' && window.matchMedia('(max-width: 600px)').matches) {
-            root.style.top = `${Math.max(0, availableHeight - scaledHeight)}px`;
-        } else {
-            root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
-        }
+        root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
     }
 
     const scaleHost = document.getElementById('scale-host');
