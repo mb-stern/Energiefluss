@@ -659,6 +659,13 @@ class Energiefluss extends IPSModuleStrict
         pointer-events: none;
     }
 
+
+    /* Energiefluss: kWh-/Energie-Zusatzwerte überall exakt gleich groß. */
+    #pfc-card .sub,
+    #pfc-root .sub {
+        font-size: 13px !important;
+    }
+
     .pfc-info {
         position: absolute;
         min-width: 118px;
@@ -1101,7 +1108,7 @@ class Energiefluss extends IPSModuleStrict
             document.getElementById('body-pv' + i).innerHTML =
                 `<div class="val">${fmt(pv.value)}</div>` +
                 (pv.energy
-                    ? `<div class="sub" style="font-size:13px;line-height:1.15;white-space:nowrap;">${pv.energy}</div>`
+                    ? `<div class="sub" style="font-size:13px !important;line-height:1.15;white-space:nowrap;">${pv.energy}</div>`
                     : '');
 
             addEdge(
@@ -1144,7 +1151,7 @@ class Energiefluss extends IPSModuleStrict
                 `<div class="sub" style="font-size:15px">${Math.round(bat.soc || 0)}%</div>` +
                 `<div class="val" style="color:${batColor}">${fmt(Math.abs(bat.value || 0))}</div>` +
                 (batteryEnergyLines.length
-                    ? `<div class="sub" style="font-size:13px;line-height:1.15;white-space:nowrap;">${batteryEnergyLines.join('<br>')}</div>`
+                    ? `<div class="sub" style="font-size:13px !important;line-height:1.15;white-space:nowrap;">${batteryEnergyLines.join('<br>')}</div>`
                     : '');
 
             addEdge(
@@ -1194,7 +1201,7 @@ class Energiefluss extends IPSModuleStrict
         inner += `<div class="val" style="color:${AC.room}">${fmt(Math.max(wallbox.value || 0, 0))}</div>`;
 
         if (wallbox.energy) {
-            inner += `<div class="sub" style="font-size:13px;line-height:1.15;white-space:nowrap;">${wallbox.energy}</div>`;
+            inner += `<div class="sub" style="font-size:13px !important;line-height:1.15;white-space:nowrap;">${wallbox.energy}</div>`;
         }
 
         const body = document.getElementById('body-wallbox');
