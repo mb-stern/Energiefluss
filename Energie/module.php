@@ -696,7 +696,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-home {
         right: 7%;
-        top: 28%;
+        top: 22%;
         border-color: rgba(77,159,255,.36);
     }
 
@@ -748,6 +748,71 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-wallbox-main {
         color: var(--ef-consumer, #2fa98f);
+    }
+
+    /* Handyansicht:
+       - nahezu die komplette verfügbare Breite nutzen
+       - Infokacheln relativ zur Hausgrafik größer darstellen
+       - äußere Kacheln näher an den Rand schieben */
+    @media (max-width: 600px) {
+        #eflow {
+            padding: 2px 1px;
+            border-radius: 0;
+        }
+
+        #display-mode-bar {
+            padding-top: 3px;
+            min-height: 28px;
+        }
+
+        #display-mode-button {
+            padding: 4px 10px;
+            font-size: 12px;
+        }
+
+        .pfc-info {
+            min-width: 145px;
+            max-width: 225px;
+            padding: 9px 11px;
+            border-radius: 11px;
+        }
+
+        .pfc-info .title {
+            font-size: 12px;
+        }
+
+        .pfc-info .main {
+            font-size: 21px;
+        }
+
+        .pfc-info .sub {
+            font-size: 11px;
+        }
+
+        #pfc-info-solar {
+            left: 61%;
+            top: 2%;
+        }
+
+        #pfc-info-home {
+            right: 1%;
+            top: 18%;
+        }
+
+        #pfc-info-wallbox {
+            left: 1%;
+            top: 37%;
+        }
+
+        #pfc-info-battery {
+            bottom: 17%;
+        }
+
+        #pfc-info-grid {
+            right: 1%;
+            bottom: 1%;
+            min-width: 190px;
+        }
     }
 
 
