@@ -560,6 +560,14 @@ class Energiefluss extends IPSModuleStrict
     .node .body * {
         color: #ffffff !important;
     }
+
+    /* Klassischer Energiefluss: alle Energie-/kWh-Zeilen exakt gleich groß.
+       SOC und andere Zusatzwerte bleiben davon unabhängig. */
+    .node .energy-sub {
+        font-size: 13px !important;
+        line-height: 1.15 !important;
+        white-space: nowrap;
+    }
     .lbl {
         position: absolute;
         left: 50%;
@@ -660,11 +668,6 @@ class Energiefluss extends IPSModuleStrict
     }
 
 
-    /* Energiefluss: kWh-/Energie-Zusatzwerte überall exakt gleich groß. */
-    #pfc-card .sub,
-    #pfc-root .sub {
-        font-size: 13px !important;
-    }
 
     .pfc-info {
         position: absolute;
@@ -1108,7 +1111,7 @@ class Energiefluss extends IPSModuleStrict
             document.getElementById('body-pv' + i).innerHTML =
                 `<div class="val">${fmt(pv.value)}</div>` +
                 (pv.energy
-                    ? `<div class="sub" style="font-size:13px !important;line-height:1.15;white-space:nowrap;">${pv.energy}</div>`
+                    ? `<div class="sub energy-sub">${pv.energy}</div>`
                     : '');
 
             addEdge(
@@ -1151,7 +1154,7 @@ class Energiefluss extends IPSModuleStrict
                 `<div class="sub" style="font-size:15px">${Math.round(bat.soc || 0)}%</div>` +
                 `<div class="val" style="color:${batColor}">${fmt(Math.abs(bat.value || 0))}</div>` +
                 (batteryEnergyLines.length
-                    ? `<div class="sub" style="font-size:13px !important;line-height:1.15;white-space:nowrap;">${batteryEnergyLines.join('<br>')}</div>`
+                    ? `<div class="sub energy-sub">${batteryEnergyLines.join('<br>')}</div>`
                     : '');
 
             addEdge(
@@ -1201,7 +1204,7 @@ class Energiefluss extends IPSModuleStrict
         inner += `<div class="val" style="color:${AC.room}">${fmt(Math.max(wallbox.value || 0, 0))}</div>`;
 
         if (wallbox.energy) {
-            inner += `<div class="sub" style="font-size:13px !important;line-height:1.15;white-space:nowrap;">${wallbox.energy}</div>`;
+            inner += `<div class="sub energy-sub">${wallbox.energy}</div>`;
         }
 
         const body = document.getElementById('body-wallbox');
@@ -1260,7 +1263,7 @@ class Energiefluss extends IPSModuleStrict
 
             let inner = `<div class="val">${fmt(g.value)}</div>`;
             if (g.daily) {
-                inner += `<div class="sub" style="font-size:10px;line-height:1.25;">${g.daily}</div>`;
+                inner += `<div class="sub energy-sub">${g.daily}</div>`;
             }
             document.getElementById('body-r' + i).innerHTML = inner;
 
@@ -2245,16 +2248,16 @@ class Energiefluss extends IPSModuleStrict
         document.getElementById('body-netz').innerHTML =
             `<div class="val" style="color:${gridColor}">${fmt(Math.abs(grid))}</div>` +
             (d.gridImportEnergy
-                ? `<div class="sub" style="font-size:10px;line-height:1.25;color:${AC.import}">&rarr; ${d.gridImportEnergy}</div>`
+                ? `<div class="sub energy-sub" style="color:${AC.import}">&rarr; ${d.gridImportEnergy}</div>`
                 : '') +
             (d.gridExportEnergy
-                ? `<div class="sub" style="font-size:10px;line-height:1.25;color:${AC.export}">&larr; ${d.gridExportEnergy}</div>`
+                ? `<div class="sub energy-sub" style="color:${AC.export}">&larr; ${d.gridExportEnergy}</div>`
                 : '');
 
         document.getElementById('body-haus').innerHTML =
             `<div class="val" style="font-size:17px">${fmt(haus)}</div>` +
             (d.houseEnergyAvailable
-                ? `<div class="sub" style="font-size:10px;line-height:1.25;">${fmtKwh(d.houseEnergy)}</div>`
+                ? `<div class="sub energy-sub">${fmtKwh(d.houseEnergy)}</div>`
                 : '');
 
         updateRings(
@@ -2447,9 +2450,10 @@ class Energiefluss extends IPSModuleStrict
         //
         // Hausansicht:
         // Weiterhin vollständig in Breite und Höhe einpassen.
-        let scale = currentDisplayMode === 'flow'
-            ? scaleX
-            : Math.min(scaleX, scaleY);
+        // Größtmögliche proportionale Skalierung ohne Abschneiden.
+        // Wenn die Höhe reicht, wird die volle Breite genutzt. Ist die Höhe
+        // der begrenzende Faktor, wird entsprechend kleiner skaliert.
+        const scale = Math.min(scaleX, scaleY);
 
         root.style.transform = `scale(${scale})`;
 
@@ -2458,16 +2462,14 @@ class Energiefluss extends IPSModuleStrict
 
         // Energiefluss nutzt die maximale Breite exakt aus.
         // Hausansicht bleibt bei eventuell vorhandener Restbreite zentriert.
-        root.style.left = currentDisplayMode === 'flow'
-            ? '0px'
-            : `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
+        root.style.left = `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
 
         // Auf schmalen Handyansichten die proportional skalierte Grafik
         // nach unten ausrichten. Dadurch landet der untere Rand der internen
         // 640px-Zeichenfläche tatsächlich am unteren Rand des verfügbaren
         // Grafikbereichs, statt durch vertikale Zentrierung Leerraum darunter
         // zu erzeugen. Ab 601px bleibt die bisherige Zentrierung erhalten.
-        if (window.matchMedia('(max-width: 600px)').matches) {
+        if (currentDisplayMode === 'house' && window.matchMedia('(max-width: 600px)').matches) {
             root.style.top = `${Math.max(0, availableHeight - scaledHeight)}px`;
         } else {
             root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
