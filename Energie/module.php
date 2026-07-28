@@ -695,14 +695,14 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-info-solar {
-        left: 60%;
-        top: 4%;
+        left: 56%;
+        top: 2%;
         border-color: rgba(239,160,32,.36);
     }
 
     #pfc-info-home {
         right: 7%;
-        top: 28%;
+        top: 25%;
         border-color: rgba(77,159,255,.36);
     }
 
@@ -723,7 +723,7 @@ class Energiefluss extends IPSModuleStrict
     /* Netz sitzt unten direkt bei den beiden Import-/Export-Leitungen. */
     #pfc-info-grid {
         right: 4%;
-        bottom: 4%;
+        bottom: 1%;
         min-width: 165px;
         border-color: rgba(255,255,255,.16);
     }
