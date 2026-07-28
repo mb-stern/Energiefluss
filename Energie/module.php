@@ -751,9 +751,8 @@ class Energiefluss extends IPSModuleStrict
     }
 
     /* Handyansicht:
-       - nahezu die komplette verfügbare Breite nutzen
-       - Infokacheln relativ zur Hausgrafik größer darstellen
-       - äußere Kacheln näher an den Rand schieben */
+       - Kachelpositionen bleiben identisch zur Desktopansicht
+       - Schrift innerhalb der Infokacheln wird um 50 % vergrößert */
     @media (max-width: 600px) {
         #eflow {
             padding: 2px 1px;
@@ -770,48 +769,18 @@ class Energiefluss extends IPSModuleStrict
             font-size: 12px;
         }
 
-        .pfc-info {
-            min-width: 145px;
-            max-width: 225px;
-            padding: 9px 11px;
-            border-radius: 11px;
-        }
-
+        /* Position und Abmessungen der Kacheln bleiben unverändert.
+           Nur die Schrift wird gegenüber Desktop um 50 % vergrößert. */
         .pfc-info .title {
-            font-size: 12px;
+            font-size: 15px;
         }
 
         .pfc-info .main {
-            font-size: 21px;
+            font-size: 25.5px;
         }
 
         .pfc-info .sub {
-            font-size: 11px;
-        }
-
-        #pfc-info-solar {
-            left: 61%;
-            top: 2%;
-        }
-
-        #pfc-info-home {
-            right: 1%;
-            top: 18%;
-        }
-
-        #pfc-info-wallbox {
-            left: 1%;
-            top: 37%;
-        }
-
-        #pfc-info-battery {
-            bottom: 17%;
-        }
-
-        #pfc-info-grid {
-            right: 1%;
-            bottom: 1%;
-            min-width: 190px;
+            font-size: 13.5px;
         }
     }
 
