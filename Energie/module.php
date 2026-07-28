@@ -694,9 +694,10 @@ class Energiefluss extends IPSModuleStrict
 
     .pfc-info .sub {
         color: var(--w-text2);
-        font-size: 9px;
+        font-size: 13px;
         margin-top: 2px;
-        line-height: 1.3;
+        line-height: 1.2;
+        white-space: nowrap;
     }
 
     #pfc-info-solar {
@@ -778,7 +779,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         .pfc-info .sub {
-            font-size: 11px;
+            font-size: 13px;
         }
     }
 
@@ -837,7 +838,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         .pfc-info .sub {
-            font-size: 18px;
+            font-size: 13px;
         }
     }
 
