@@ -708,7 +708,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-battery {
         left: 55%;
-        bottom: 20.5%;
+        bottom: 19%;
         transform: translateX(-50%);
         border-color: var(--ef-battery-discharge, #29b6f6);
     }
