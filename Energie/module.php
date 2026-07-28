@@ -1928,10 +1928,10 @@ class Energiefluss extends IPSModuleStrict
         if (compactGrid) {
             const isExport = grid < 0;
             const gridColor = isExport ? AC.export : AC.import;
-            const gridLabel = isExport ? 'Einspeisung' : 'Bezug';
 
+            // Oben nur die gesamte aktuelle Netzleistung.
             if (gridImportEl) {
-                gridImportEl.textContent = `${gridLabel} ${fmt(Math.abs(grid))}`;
+                gridImportEl.textContent = fmt(Math.abs(grid));
                 gridImportEl.style.color = gridColor;
                 gridImportEl.style.display = '';
             }
@@ -1941,9 +1941,18 @@ class Energiefluss extends IPSModuleStrict
                 gridExportEl.style.display = 'none';
             }
 
+            // Darunter wieder wie früher in kleiner Schrift:
+            // Bezug / Einspeisung mit den vorhandenen Energiewerten.
             if (gridSub) {
-                gridSub.textContent = '';
-                gridSub.style.display = 'none';
+                const energy = [];
+                if (d.gridImportEnergy) {
+                    energy.push('Bezug ' + d.gridImportEnergy);
+                }
+                if (d.gridExportEnergy) {
+                    energy.push('Einspeisung ' + d.gridExportEnergy);
+                }
+                gridSub.innerHTML = energy.join('<br>');
+                gridSub.style.display = '';
             }
 
             if (gridInfo) {
