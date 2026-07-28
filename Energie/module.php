@@ -473,7 +473,7 @@ class Energiefluss extends IPSModuleStrict
         flex: 0 0 auto;
         display: flex;
         align-items: center;
-        justify-content: flex-start;
+        justify-content: center;
         gap: 8px;
         padding: 6px 4px 0;
         min-height: 32px;
@@ -689,20 +689,20 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-info-solar {
-        left: 45%;
-        top: 1%;
+        left: 60%;
+        top: 4%;
         border-color: rgba(239,160,32,.36);
     }
 
     #pfc-info-home {
         right: 7%;
-        top: 1%;
+        top: 28%;
         border-color: rgba(77,159,255,.36);
     }
 
     #pfc-info-battery {
         left: 55%;
-        bottom: 0%;
+        bottom: 20.5%;
         transform: translateX(-50%);
         border-color: var(--ef-battery-discharge, #29b6f6);
     }
@@ -717,7 +717,7 @@ class Energiefluss extends IPSModuleStrict
     /* Netz sitzt unten direkt bei den beiden Import-/Export-Leitungen. */
     #pfc-info-grid {
         right: 4%;
-        bottom: 0%;
+        bottom: 4%;
         min-width: 165px;
         border-color: rgba(255,255,255,.16);
     }
@@ -778,8 +778,30 @@ class Energiefluss extends IPSModuleStrict
         }
 
         #display-mode-bar {
+            justify-content: flex-start;
             padding-top: 3px;
             min-height: 28px;
+        }
+
+        /* Nur auf dem Handy gelten die speziellen Kachelpositionen. */
+        #pfc-info-solar {
+            left: 45%;
+            top: 1%;
+        }
+
+        #pfc-info-home {
+            right: 7%;
+            top: 1%;
+        }
+
+        #pfc-info-battery {
+            left: 55%;
+            bottom: 0%;
+        }
+
+        #pfc-info-grid {
+            right: 4%;
+            bottom: 0%;
         }
 
         #display-mode-button {
@@ -1697,10 +1719,19 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function alignHomeInfoToSolarBottom() {
-        const solarInfo = document.getElementById('pfc-info-solar');
         const homeInfo = document.getElementById('pfc-info-home');
+        if (!homeInfo) {
+            return;
+        }
 
-        if (!solarInfo || !homeInfo) {
+        // Die Sonderposition gilt ausschließlich für die Handyansicht.
+        if (!window.matchMedia('(max-width: 600px)').matches) {
+            homeInfo.style.top = '';
+            return;
+        }
+
+        const solarInfo = document.getElementById('pfc-info-solar');
+        if (!solarInfo) {
             return;
         }
 
