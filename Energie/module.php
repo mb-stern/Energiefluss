@@ -473,7 +473,7 @@ class Energiefluss extends IPSModuleStrict
         flex: 0 0 auto;
         display: flex;
         align-items: center;
-        justify-content: center;
+        justify-content: flex-start;
         gap: 8px;
         padding: 6px 4px 0;
         min-height: 32px;
@@ -696,7 +696,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-home {
         right: 7%;
-        top: 22%;
+        top: 1%;
         border-color: rgba(77,159,255,.36);
     }
 
@@ -753,14 +753,15 @@ class Energiefluss extends IPSModuleStrict
     /* Handyansicht:
        - Kachelpositionen bleiben identisch zur Desktopansicht
        - Schrift innerhalb der Infokacheln wird auf 200 % der Desktopgröße gesetzt */
-    @media (max-width: 600px) {
+    @media (max-width: 900px) {
         #eflow {
             padding: 2px 1px;
             border-radius: 0;
         }
 
         #display-mode-bar {
-            padding-top: 3px;
+            justify-content: flex-start;
+            padding: 3px 4px 0;
             min-height: 28px;
         }
 
@@ -1680,6 +1681,20 @@ class Energiefluss extends IPSModuleStrict
         return pfcInitPromise;
     }
 
+    function alignHomeInfoToSolarBottom() {
+        const solarInfo = document.getElementById('pfc-info-solar');
+        const homeInfo = document.getElementById('pfc-info-home');
+
+        if (!solarInfo || !homeInfo) {
+            return;
+        }
+
+        // Unterkante der Hausverbrauch-Kachel exakt auf die Unterkante
+        // der PV-Kachel setzen – unabhängig von Schriftgröße/Inhalt.
+        const targetTop = solarInfo.offsetTop + solarInfo.offsetHeight - homeInfo.offsetHeight;
+        homeInfo.style.top = Math.max(0, targetTop) + 'px';
+    }
+
     function updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox) {
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -1832,6 +1847,9 @@ class Energiefluss extends IPSModuleStrict
             }
             gridSub.innerHTML = energy.join('<br>');
         }
+        }
+
+        requestAnimationFrame(alignHomeInfoToSolarBottom);
     }
 
     function updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox) {
@@ -2264,7 +2282,10 @@ class Energiefluss extends IPSModuleStrict
         new ResizeObserver(fit).observe(scaleHost);
     }
 
-    window.addEventListener('resize', fit);
+        window.addEventListener('resize', () => {
+        fit();
+        requestAnimationFrame(alignHomeInfoToSolarBottom);
+    });
     window.addEventListener('load', fit);
 
     fit();
