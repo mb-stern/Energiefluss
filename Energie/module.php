@@ -702,7 +702,7 @@ class Energiefluss extends IPSModuleStrict
 
     #pfc-info-home {
         right: 7%;
-        top: 25%;
+        top: 20%;
         border-color: rgba(77,159,255,.36);
     }
 
