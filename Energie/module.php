@@ -863,7 +863,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         .pfc-info .sub {
-            font-size: 13px;
+            font-size: 18px;
         }
     }
 
@@ -1977,10 +1977,10 @@ class Energiefluss extends IPSModuleStrict
             if (gridSub) {
                 const energy = [];
                 if (d.gridImportEnergy) {
-                    energy.push('Bezug ' + d.gridImportEnergy);
+                    energy.push('→ ' + d.gridImportEnergy);
                 }
                 if (d.gridExportEnergy) {
-                    energy.push('Einspeisung ' + d.gridExportEnergy);
+                    energy.push('← ' + d.gridExportEnergy);
                 }
                 gridSub.innerHTML = energy.join('<br>');
                 gridSub.style.display = '';
