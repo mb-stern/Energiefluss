@@ -2761,73 +2761,103 @@ class Energiefluss extends IPSModuleStrict
         return null;
     }
 
+    function getOpenShadowRoots(root) {
+        const roots = [];
+        const visit = current => {
+            if (!current || roots.includes(current)) return;
+            roots.push(current);
+            current.querySelectorAll?.('*').forEach(element => {
+                if (element.shadowRoot) visit(element.shadowRoot);
+            });
+        };
+        visit(root);
+        return roots;
+    }
+
     function applyInverterPowerDisplay(card, d) {
         if (!card || !d) return;
 
-        // Die Konfiguration liefert zusätzlich das explizite Available-Flag.
-        // Nicht allein auf d.available verlassen, da ältere gespeicherte
-        // Payloads dieses Unterfeld eventuell noch nicht enthalten.
         const available = entityAvailable(d, 'inverterPower') || d.inverterPowerAvailable === true;
         if (!available) return;
 
         const value = Number(d.inverterPower);
         const text = `${Math.round(Number.isFinite(value) ? value : 0).toLocaleString('de-DE')} W`;
         const searchRoot = card.shadowRoot || card;
+        const roots = getOpenShadowRoots(searchRoot);
 
-        // Originalfeld über alle offenen Shadow-Roots suchen. Bei mehreren
-        // Layoutvarianten kann das SVG in einem untergeordneten Render-Root liegen.
-        const originalPowerNode = findInOpenShadowRoots(
-            searchRoot,
-            '#inverter_power_175, [id="inverter_power_175"]'
-        );
-
-        if (originalPowerNode) {
-            originalPowerNode.removeAttribute('display');
-            originalPowerNode.removeAttribute('visibility');
-            originalPowerNode.removeAttribute('opacity');
-            originalPowerNode.removeAttribute('hidden');
-            originalPowerNode.classList?.remove('st12');
-            originalPowerNode.style?.setProperty('display', 'inline', 'important');
-            originalPowerNode.style?.setProperty('visibility', 'visible', 'important');
-            originalPowerNode.style?.setProperty('opacity', '1', 'important');
-            originalPowerNode.textContent = text;
+        // Zuerst ein eventuell vorhandenes originales Leistungsfeld verwenden.
+        const powerSelectors = [
+            '#inverter_power_175', '[id="inverter_power_175"]',
+            '#inverter-power-175', '[id*="inverter_power"]', '[id*="inverter-power"]'
+        ];
+        for (const root of roots) {
+            const node = root.querySelector?.(powerSelectors.join(','));
+            if (!node) continue;
+            node.removeAttribute?.('display');
+            node.removeAttribute?.('visibility');
+            node.removeAttribute?.('opacity');
+            node.removeAttribute?.('hidden');
+            node.style?.setProperty('display', 'inline', 'important');
+            node.style?.setProperty('visibility', 'visible', 'important');
+            node.style?.setProperty('opacity', '1', 'important');
+            node.textContent = text;
             return;
         }
 
-        // Fallback: Das sichtbare Amperefeld liegt garantiert in der gewünschten
-        // Wechselrichterbox. Dieses Element wird tief gesucht und als Vorlage
-        // geklont, damit Position, Schrift und SVG-Kontext exakt übereinstimmen.
-        const currentNode = findInOpenShadowRoots(
-            searchRoot,
-            '#inverter_current_164, [id="inverter_current_164"]'
-        );
-        if (!currentNode || !currentNode.parentNode) return;
+        // Die GoodWe-Darstellung erzeugt das Leistungsfeld teilweise nicht,
+        // obwohl die Amperewerte vorhanden sind. Dann wird das sichtbare
+        // Ampere-Textelement derselben WR-Box als positionsgetreue Vorlage
+        // verwendet. Die Suche erfolgt zusätzlich über den angezeigten Inhalt,
+        // weil die SVG-IDs zwischen den Card-Versionen abweichen.
+        let currentNode = null;
+        for (const root of roots) {
+            currentNode = root.querySelector?.(
+                '#inverter_current_164, [id="inverter_current_164"], [id*="inverter_current"], [id*="inverter-current"]'
+            );
+            if (currentNode) break;
 
-        let powerNode = currentNode.parentNode.querySelector('#symcon_inverter_power_fixed');
+            const candidates = root.querySelectorAll?.('svg text, svg tspan') || [];
+            currentNode = Array.from(candidates).find(node => {
+                const shown = String(node.textContent || '').trim();
+                if (!/^-?[\d.,]+\s*A$/i.test(shown)) return false;
+                const style = getComputedStyle(node);
+                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+            }) || null;
+            if (currentNode) break;
+        }
+        if (!currentNode) return;
+
+        // Bei einem tspan das umschließende text-Element verwenden.
+        const template = String(currentNode.tagName || '').toLowerCase() === 'tspan'
+            ? (currentNode.closest?.('text') || currentNode)
+            : currentNode;
+        const parent = template.parentNode;
+        if (!parent) return;
+
+        let powerNode = parent.querySelector?.('#symcon_inverter_power_fixed');
         if (!powerNode) {
-            powerNode = currentNode.cloneNode(false);
+            powerNode = template.cloneNode(true);
             powerNode.id = 'symcon_inverter_power_fixed';
-            powerNode.removeAttribute('hidden');
-            powerNode.classList?.remove('st12');
-            currentNode.parentNode.insertBefore(powerNode, currentNode);
+            parent.insertBefore(powerNode, template);
         }
 
-        // In der Originalkarte liegt die WR-Leistung bei dreiphasiger Anzeige
-        // auf y=174, bei einphasiger Anzeige auf y=178. Damit steht sie direkt
-        // oberhalb der Amperewerte in derselben Box.
-        const hasL2 = entityAvailable(d, 'inverterCurrentL2');
-        const hasL3 = entityAvailable(d, 'inverterCurrentL3');
-        powerNode.setAttribute('x', currentNode.getAttribute('x') || '180.5');
-        powerNode.setAttribute('y', (hasL2 || hasL3) ? '174' : '178');
         powerNode.textContent = text;
-        powerNode.removeAttribute('display');
-        powerNode.removeAttribute('visibility');
-        powerNode.removeAttribute('opacity');
-        powerNode.removeAttribute('hidden');
-        powerNode.classList?.remove('st12');
+        powerNode.removeAttribute?.('display');
+        powerNode.removeAttribute?.('visibility');
+        powerNode.removeAttribute?.('opacity');
+        powerNode.removeAttribute?.('hidden');
         powerNode.style?.setProperty('display', 'inline', 'important');
         powerNode.style?.setProperty('visibility', 'visible', 'important');
         powerNode.style?.setProperty('opacity', '1', 'important');
+
+        // Exakt oberhalb der Amperezeile innerhalb derselben Box platzieren.
+        const y = Number(template.getAttribute?.('y'));
+        if (Number.isFinite(y)) {
+            powerNode.setAttribute('y', String(y - 16));
+        } else {
+            const oldTransform = template.getAttribute?.('transform') || '';
+            powerNode.setAttribute('transform', `${oldTransform} translate(0 -16)`.trim());
+        }
     }
 
     function applyAdditionalLoadColours(card) {
@@ -2835,86 +2865,75 @@ class Energiefluss extends IPSModuleStrict
 
         const colour = AC.room;
         const root = card.shadowRoot;
+        const roots = getOpenShadowRoots(root);
 
-        // Die Originalkarte verwendet je nach Compact/Lite/Full andere IDs
-        // und Klassen. Darum nicht nur einzelne bekannte Texte selektieren,
-        // sondern jeden kompletten Verbraucherbereich 1..6 bearbeiten.
-        const belongsToAdditionalLoad = (element, index) => {
+        const belongsToAdditionalLoad = (element, index, boundary) => {
             let node = element;
             const needles = [
-                `essload${index}`,
-                `ess-load${index}`,
-                `ess_load${index}`,
-                `essential_load${index}`,
-                `essential-load${index}`
+                `essload${index}`, `ess-load${index}`, `ess_load${index}`,
+                `essential_load${index}`, `essential-load${index}`,
+                `load${index}_`, `load-${index}`, `load_${index}`
             ];
-
-            while (node && node !== root) {
+            while (node && node !== boundary) {
                 const id = String(node.id || '').toLowerCase();
                 const cls = String(node.getAttribute?.('class') || '').toLowerCase();
-                if (needles.some(needle => id.includes(needle) || cls.includes(needle))) {
-                    return true;
-                }
+                if (needles.some(needle => id.includes(needle) || cls.includes(needle))) return true;
                 node = node.parentNode || node.host || null;
             }
             return false;
         };
 
-        // Rekursiv auch offene untergeordnete Shadow-Roots berücksichtigen.
-        const roots = [root];
-        for (let pos = 0; pos < roots.length; pos++) {
-            roots[pos].querySelectorAll?.('*').forEach(element => {
-                if (element.shadowRoot) roots.push(element.shadowRoot);
-            });
-        }
-
         for (const currentRoot of roots) {
             for (let i = 1; i <= 6; i++) {
                 currentRoot.querySelectorAll?.('*').forEach(element => {
-                    if (!belongsToAdditionalLoad(element, i)) return;
-
+                    if (!belongsToAdditionalLoad(element, i, currentRoot)) return;
                     const tag = String(element.tagName || '').toLowerCase();
 
-                    // Sämtliche Schriften des Verbrauchers: Wert in der Box,
-                    // Zusatzwert und Beschriftung darunter. Alle gleichfarbig
-                    // und ausdrücklich ohne Fettschrift.
+                    // Wert in der Box, Zusatzwert und Bezeichnung darunter:
+                    // alle in Verbraucherfarbe und ausdrücklich nicht fett.
                     if (['text', 'tspan', 'span', 'div', 'p'].includes(tag)) {
                         element.style?.setProperty('color', colour, 'important');
                         element.style?.setProperty('fill', colour, 'important');
                         element.style?.setProperty('font-weight', '400', 'important');
+                        element.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
+                        element.setAttribute?.('fill', colour);
                         element.setAttribute?.('font-weight', '400');
                     }
 
-                    // Rahmen, Box, Icon und Leitung erhalten dieselbe Farbe.
-                    // Bei SVG-Text bleibt die Behandlung oben maßgebend.
-                    if (['rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line', 'path'].includes(tag)) {
+                    // Rahmen der Wertebox: gleiche Verbraucherfarbe, aber keine
+                    // vollflächige Füllung, damit der Wert sichtbar bleibt.
+                    if (tag === 'rect' || tag === 'circle' || tag === 'ellipse') {
                         element.style?.setProperty('stroke', colour, 'important');
                         element.setAttribute?.('stroke', colour);
+                        element.style?.setProperty('fill', 'transparent', 'important');
+                        element.setAttribute?.('fill', 'transparent');
+                    }
 
-                        // Flächen der eigentlichen Verbraucherbox/des Icons
-                        // ebenfalls in Verbraucherfarbe. Animationspfade bleiben
-                        // ohne Füllung.
-                        if (!element.classList?.contains('anim-line') && tag !== 'line' && tag !== 'polyline') {
-                            const currentFill = String(element.getAttribute?.('fill') || '').toLowerCase();
-                            if (currentFill !== 'none') {
-                                element.style?.setProperty('fill', colour, 'important');
-                                element.setAttribute?.('fill', colour);
-                            }
+                    // Leitungen und Icons ebenfalls in derselben Farbe.
+                    if (tag === 'line' || tag === 'polyline') {
+                        element.style?.setProperty('stroke', colour, 'important');
+                        element.setAttribute?.('stroke', colour);
+                    }
+                    if (tag === 'path' || tag === 'polygon') {
+                        element.style?.setProperty('stroke', colour, 'important');
+                        element.setAttribute?.('stroke', colour);
+                        if (!element.classList?.contains('anim-line')) {
+                            element.style?.setProperty('fill', colour, 'important');
+                            element.setAttribute?.('fill', colour);
                         }
                     }
 
-                    // Home-Assistant-Icons verwenden color/--state-icon-color.
                     element.style?.setProperty('--state-icon-color', colour, 'important');
-                    if (tag === 'ha-icon' || element.classList?.toString().includes('icon')) {
+                    if (tag === 'ha-icon' || String(element.className || '').toLowerCase().includes('icon')) {
                         element.style?.setProperty('color', colour, 'important');
                     }
                 });
             }
         }
 
-        // Die Upstream-Klasse .st8 setzt font-weight:500. Eine abschließende
-        // Regel im Haupt-Shadow-Root verhindert, dass sie unsere direkte
-        // Einstellung bei einem erneuten Rendern wieder überschreibt.
+        // Zusätzliche CSS-Regel für separat gerenderte Beschriftungen, deren
+        // Elterncontainer keine der obigen IDs trägt. Dadurch bleibt insbesondere
+        // die Schrift unter den Verbrauchern sicher auf normalem Gewicht.
         let style = root.getElementById('symcon-additional-load-colours');
         if (!style) {
             style = document.createElement('style');
@@ -2927,18 +2946,21 @@ class Energiefluss extends IPSModuleStrict
                 `[id*="essload${i}"]`, `[class*="essload${i}"]`,
                 `[id*="ess-load${i}"]`, `[class*="ess-load${i}"]`,
                 `[id*="ess_load${i}"]`, `[class*="ess_load${i}"]`,
-                `[id*="essential_load${i}"]`, `[class*="essential_load${i}"]`
+                `[id*="essential_load${i}"]`, `[class*="essential_load${i}"]`,
+                `[id*="load${i}_"]`, `[class*="load${i}_"]`,
+                `[id*="load-${i}"]`, `[class*="load-${i}"]`
             );
         }
-        style.textContent = `${selectors.join(',')} {
-            color: ${colour} !important;
-            font-weight: 400 !important;
-        }
-        ${selectors.map(selector => `${selector} text, ${selector} tspan, ${selector} span, ${selector} div`).join(',')} {
-            color: ${colour} !important;
-            fill: ${colour} !important;
-            font-weight: 400 !important;
-        }`;
+        const all = selectors.join(',');
+        style.textContent = `
+            ${all},
+            ${selectors.map(s => `${s} text, ${s} tspan, ${s} span, ${s} div, ${s} p`).join(',')} {
+                color: ${colour} !important;
+                fill: ${colour} !important;
+                font-weight: 400 !important;
+                font-variation-settings: "wght" 400 !important;
+            }
+        `;
     }
 
     function updateSunsynkWallboxAuxInfo() {
