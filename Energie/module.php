@@ -2713,13 +2713,17 @@ class Energiefluss extends IPSModuleStrict
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
+        applyAdditionalLoadWattColourByGeometry(card);
         applyInverterPowerDisplay(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
         // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
         // stellen sicher, dass das Leistungsfeld anschließend gesetzt wird.
-        [80, 250, 600].forEach(delay => {
-            setTimeout(() => applyInverterPowerDisplay(card, card.__symconLastData || d), delay);
+        [0, 80, 250, 600, 1200].forEach(delay => {
+            setTimeout(() => {
+                applyAdditionalLoadWattColourByGeometry(card);
+                applyInverterPowerDisplay(card, card.__symconLastData || d);
+            }, delay);
         });
 
         // Lit rendert bei jeder neuen hass-Zuweisung Teile des Shadow-DOM neu.
@@ -2732,6 +2736,7 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
+                    applyAdditionalLoadWattColourByGeometry(card);
                     applyInverterPowerDisplay(card, card.__symconLastData || null);
                 });
             });
@@ -2860,6 +2865,67 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
+    function applyAdditionalLoadWattColourByGeometry(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const consumerColour = AC.room;
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            const boxes = [];
+
+            // Je nach Layout/Version heißen die Verbraucherboxen es-load1 ... es-load6.
+            // Wir verwenden zusätzlich alle passenden Rechtecke, damit auch doppelte IDs
+            // und leicht abweichende DOM-Strukturen der Originalkarte erfasst werden.
+            root.querySelectorAll?.('rect[id^="es-load"], rect[id^="ess-load"]').forEach(rect => {
+                try {
+                    const box = rect.getBBox();
+                    if (box && box.width > 0 && box.height > 0) boxes.push(box);
+                } catch (_) {}
+            });
+
+            const wattNodes = new Set();
+            root.querySelectorAll?.('[id^="ess_load"][id$="_value"], [id^="ess-load"][id$="-value"]').forEach(node => wattNodes.add(node));
+
+            // Fallback: Die Watttexte anhand ihrer tatsächlichen Position innerhalb
+            // einer Verbraucherbox erkennen. Damit sind wir nicht mehr von den IDs
+            // der jeweiligen Karten-Version abhängig.
+            root.querySelectorAll?.('text, tspan').forEach(node => {
+                const text = String(node.textContent || '').trim();
+                if (!/(?:^|\s)[−+\-]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(text)) return;
+
+                try {
+                    const b = node.getBBox();
+                    const cx = b.x + b.width / 2;
+                    const cy = b.y + b.height / 2;
+                    const inside = boxes.some(box =>
+                        cx >= box.x - 2 && cx <= box.x + box.width + 2 &&
+                        cy >= box.y - 2 && cy <= box.y + box.height + 2
+                    );
+                    if (inside) wattNodes.add(node);
+                } catch (_) {}
+            });
+
+            wattNodes.forEach(node => {
+                node.setAttribute?.('fill', consumerColour);
+                node.setAttribute?.('color', consumerColour);
+                node.setAttribute?.('font-weight', '400');
+                node.style?.setProperty('fill', consumerColour, 'important');
+                node.style?.setProperty('color', consumerColour, 'important');
+                node.style?.setProperty('font-weight', '400', 'important');
+                node.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
+
+                // Manche Varianten schreiben die sichtbare Farbe auf ein inneres tspan.
+                node.querySelectorAll?.('tspan').forEach(tspan => {
+                    tspan.setAttribute?.('fill', consumerColour);
+                    tspan.style?.setProperty('fill', consumerColour, 'important');
+                    tspan.style?.setProperty('color', consumerColour, 'important');
+                    tspan.style?.setProperty('font-weight', '400', 'important');
+                });
+            });
+        }
+    }
+
     function applyAdditionalLoadColours(card) {
         if (!card || !card.shadowRoot) return;
 
@@ -2871,6 +2937,29 @@ class Energiefluss extends IPSModuleStrict
         // soll jedoch AC.home behalten, während nur load1 ... load6 die
         // separat konfigurierte Farbe „Weitere Verbraucher“ erhalten.
         for (const root of roots) {
+            // Nur die Watt-Leistungswerte in den Verbraucherboxen dauerhaft
+            // auf die konfigurierte Farbe „Weitere Verbraucher“ festlegen.
+            // Die Original-Card setzt diese Texte bei Aktualisierungen erneut,
+            // deshalb erfolgt die Korrektur zusätzlich über eine lokale CSS-Regel.
+            if (!root.getElementById?.('symcon-additional-load-watt-colours')) {
+                const wattStyle = document.createElement('style');
+                wattStyle.id = 'symcon-additional-load-watt-colours';
+                wattStyle.textContent = `
+                    #ess_load1_value,
+                    #ess_load2_value,
+                    #ess_load3_value,
+                    #ess_load4_value,
+                    #ess_load5_value,
+                    #ess_load6_value {
+                        fill: ${consumerColour} !important;
+                        color: ${consumerColour} !important;
+                        font-weight: 400 !important;
+                        font-variation-settings: "wght" 400 !important;
+                    }
+                `;
+                root.appendChild?.(wattStyle);
+            }
+
             for (let i = 1; i <= 6; i++) {
                 const selectors = [
                     `[id="es-load${i}"]`,
