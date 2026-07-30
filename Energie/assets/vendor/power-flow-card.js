@@ -1,4 +1,4 @@
-import { LitElement, html, css, svg } from "https://unpkg.com/lit?module";
+import { LitElement, html, css, svg } from "./lit-core.min.js";
 
 class PowerFlowCard extends LitElement {
   static get properties() {
