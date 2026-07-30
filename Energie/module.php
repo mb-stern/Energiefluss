@@ -2883,30 +2883,73 @@ class Energiefluss extends IPSModuleStrict
             return false;
         };
 
+        // Nur den Text IN einer gefüllten Wertebox kontrastreich darstellen.
+        // Rahmen, Füllung, Icon, Leitung und Beschriftung unterhalb der Box
+        // bleiben vollständig so, wie sie von der Originalkarte erzeugt werden.
+        const isTextInsideFilledBox = (element, boundary) => {
+            if (!element || typeof element.getBBox !== 'function') return false;
+
+            let textBox;
+            try {
+                textBox = element.getBBox();
+            } catch (_) {
+                return false;
+            }
+
+            const overlaps = (a, b) =>
+                a.x < (b.x + b.width) &&
+                (a.x + a.width) > b.x &&
+                a.y < (b.y + b.height) &&
+                (a.y + a.height) > b.y;
+
+            let node = element.parentNode;
+            while (node && node !== boundary) {
+                const shapes = node.querySelectorAll?.(':scope > rect, :scope > circle, :scope > ellipse') || [];
+                for (const shape of shapes) {
+                    let shapeBox;
+                    try {
+                        shapeBox = shape.getBBox();
+                    } catch (_) {
+                        continue;
+                    }
+
+                    const fill = String(
+                        shape.style?.fill ||
+                        shape.getAttribute?.('fill') ||
+                        getComputedStyle(shape).fill ||
+                        ''
+                    ).toLowerCase();
+
+                    if (fill && fill !== 'none' && fill !== 'transparent' && !fill.includes('rgba(0, 0, 0, 0)') && overlaps(textBox, shapeBox)) {
+                        return true;
+                    }
+                }
+                node = node.parentNode || node.host || null;
+            }
+
+            return false;
+        };
+
         for (const currentRoot of roots) {
             for (let i = 1; i <= 6; i++) {
                 currentRoot.querySelectorAll?.('*').forEach(element => {
                     if (!belongsToAdditionalLoad(element, i, currentRoot)) return;
                     const tag = String(element.tagName || '').toLowerCase();
 
-                    // Wert in der Box, Zusatzwert und Bezeichnung darunter:
-                    // alle in Verbraucherfarbe und ausdrücklich nicht fett.
+                    // Ausschließlich den Inhalt der gefüllten Wertebox ändern:
+                    // dort weiß für guten Kontrast; Beschriftungen außerhalb der
+                    // Box bleiben in Verbraucherfarbe. Die Box selbst wird nicht verändert.
                     if (['text', 'tspan', 'span', 'div', 'p'].includes(tag)) {
-                        element.style?.setProperty('color', colour, 'important');
-                        element.style?.setProperty('fill', colour, 'important');
+                        const textColour = isTextInsideFilledBox(element, currentRoot)
+                            ? '#ffffff'
+                            : colour;
+
+                        element.style?.setProperty('color', textColour, 'important');
+                        element.style?.setProperty('fill', textColour, 'important');
                         element.style?.setProperty('font-weight', '400', 'important');
                         element.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
-                        element.setAttribute?.('fill', colour);
+                        element.setAttribute?.('fill', textColour);
                         element.setAttribute?.('font-weight', '400');
-                    }
-
-                    // Rahmen der Wertebox: gleiche Verbraucherfarbe, aber keine
-                    // vollflächige Füllung, damit der Wert sichtbar bleibt.
-                    if (tag === 'rect' || tag === 'circle' || tag === 'ellipse') {
-                        element.style?.setProperty('stroke', colour, 'important');
-                        element.setAttribute?.('stroke', colour);
-                        element.style?.setProperty('fill', 'transparent', 'important');
-                        element.setAttribute?.('fill', 'transparent');
                     }
 
                     // Leitungen und Icons ebenfalls in derselben Farbe.
@@ -2917,15 +2960,9 @@ class Energiefluss extends IPSModuleStrict
                     if (tag === 'path' || tag === 'polygon') {
                         element.style?.setProperty('stroke', colour, 'important');
                         element.setAttribute?.('stroke', colour);
-
-                        // Die Originalkarte zeichnet einzelne Verbraucherboxen
-                        // ebenfalls als SVG-Pfad/Polygon. Deshalb diese Flächen
-                        // nicht einfärben: sichtbar bleibt nur der farbige Rahmen.
-                        // Icons erhalten ihre Farbe weiterhin über color bzw.
-                        // --state-icon-color.
                         if (!element.classList?.contains('anim-line')) {
-                            element.style?.setProperty('fill', 'transparent', 'important');
-                            element.setAttribute?.('fill', 'transparent');
+                            element.style?.setProperty('fill', colour, 'important');
+                            element.setAttribute?.('fill', colour);
                         }
                     }
 
@@ -2961,8 +2998,6 @@ class Energiefluss extends IPSModuleStrict
         style.textContent = `
             ${all},
             ${selectors.map(s => `${s} text, ${s} tspan, ${s} span, ${s} div, ${s} p`).join(',')} {
-                color: ${colour} !important;
-                fill: ${colour} !important;
                 font-weight: 400 !important;
                 font-variation-settings: "wght" 400 !important;
             }
