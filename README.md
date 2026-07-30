@@ -1,4 +1,4 @@
-# Modul für Goodwe für IP-Symcon
+# Modul zur Visualisierung des Energieflusses für IP-Symcon
 Folgende Funktionen beinhaltet das Energiefluss Symcon Repository
 
 - __Energiefluss__ ([Dokumentation](Energiefluss))   
