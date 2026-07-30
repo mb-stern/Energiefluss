@@ -1,16 +1,13 @@
 <?php
 
 /*
- * Zweite Visualisierungsansicht integriert die Open-Source-Karte:
+ * Integriert die Open-Source-Karte:
  * LordGuenni/power-flow-card
  * https://github.com/LordGuenni/power-flow-card
  *
  * Autor: Florian Stamer
  * Lizenz: MIT (laut package.json des Projekts)
  *
- * Die Home-Assistant-Datenanbindung wird hier nicht verwendet.
- * Stattdessen erzeugt das IP-Symcon-Modul ein kompatibles State-Objekt
- * aus seinem bestehenden BuildPayload().
  * power-flow-card.js und Lit liegen versioniert im Modulbaum unter
  * assets/vendor/ und werden von ApplyChanges() lediglich in den
  * Web-Pfad /user/Energiefluss/vendor/ veröffentlicht.
