@@ -2871,6 +2871,29 @@ class Energiefluss extends IPSModuleStrict
         // soll jedoch AC.home behalten, während nur load1 ... load6 die
         // separat konfigurierte Farbe „Weitere Verbraucher“ erhalten.
         for (const root of roots) {
+            // Nur die Watt-Leistungswerte in den Verbraucherboxen dauerhaft
+            // auf die konfigurierte Farbe „Weitere Verbraucher“ festlegen.
+            // Die Original-Card setzt diese Texte bei Aktualisierungen erneut,
+            // deshalb erfolgt die Korrektur zusätzlich über eine lokale CSS-Regel.
+            if (!root.getElementById?.('symcon-additional-load-watt-colours')) {
+                const wattStyle = document.createElement('style');
+                wattStyle.id = 'symcon-additional-load-watt-colours';
+                wattStyle.textContent = `
+                    #ess_load1_value,
+                    #ess_load2_value,
+                    #ess_load3_value,
+                    #ess_load4_value,
+                    #ess_load5_value,
+                    #ess_load6_value {
+                        fill: ${consumerColour} !important;
+                        color: ${consumerColour} !important;
+                        font-weight: 400 !important;
+                        font-variation-settings: "wght" 400 !important;
+                    }
+                `;
+                root.appendChild?.(wattStyle);
+            }
+
             for (let i = 1; i <= 6; i++) {
                 const selectors = [
                     `[id="es-load${i}"]`,
