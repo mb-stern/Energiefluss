@@ -2429,9 +2429,11 @@ class Energiefluss extends IPSModuleStrict
             },
             battery: {
                 count: Math.min(2, Math.max(1, batteries.length)),
-                // Die Originalkarte behandelt 0 als "nicht angegeben" und bricht ab.
-                // 0.0001 bleibt für die Validierung gültig, wird bei 0 Dezimalstellen aber als 0 % angezeigt.
-                shutdown_soc: Math.max(0.0001, Math.min(100, Number(batteries[0]?.maxDischargeSoc ?? 0))),
+                // Als Zeichenkette bleibt 0 für die Original-Validierung vorhanden,
+                // wird numerisch aber weiterhin als 0 % verarbeitet.
+                shutdown_soc: Number(batteries[0]?.maxDischargeSoc ?? 0) === 0
+                    ? '0'
+                    : Math.max(0, Math.min(100, Math.round(Number(batteries[0]?.maxDischargeSoc ?? 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
                 soc_decimal_places: 0,
@@ -2441,7 +2443,9 @@ class Energiefluss extends IPSModuleStrict
                 invert_power: false, invert_flow: false
             },
             battery2: {
-                shutdown_soc: Math.max(0.0001, Math.min(100, Number(batteries[1]?.maxDischargeSoc ?? 0))),
+                shutdown_soc: Number(batteries[1]?.maxDischargeSoc ?? 0) === 0
+                    ? '0'
+                    : Math.max(0, Math.min(100, Math.round(Number(batteries[1]?.maxDischargeSoc ?? 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
                 soc_decimal_places: 0,
@@ -2623,14 +2627,20 @@ class Energiefluss extends IPSModuleStrict
             .essload1-icon, .essload1-icon-full, .essload1-small-icon,
             .essload2-icon, .essload2-small-icon,
             .essload3-icon, .essload3-small-icon,
-            .essload4-small-icon, .essload5-small-icon, .essload6-small-icon {
+            .essload4-small-icon, .essload5-small-icon, .essload6-small-icon,
+            [class*="essload"][class*="icon"],
+            [id*="essential_load"], [id*="essload"],
+            [class*="essential-load"], [class*="essload"] {
                 color: ${AC.room} !important;
                 fill: ${AC.room} !important;
+                stroke: ${AC.room} !important;
             }
 
             /* Eigener AUX-Zweig der Wallbox. */
             .aux-icon, .aux-off-icon, [class*="aux-icon"],
-            [id*="aux_power"], [id*="aux-line"], [class*="aux-line"] {
+            [id*="aux_power"], [id*="aux-line"], [id*="aux_line"],
+            [class*="aux-line"], [class*="aux_line"],
+            [class*="aux"] path, [class*="aux"] line, [class*="aux"] polyline {
                 color: ${AC.wallbox} !important;
                 fill: ${AC.wallbox} !important;
                 stroke: ${AC.wallbox} !important;
@@ -2656,6 +2666,18 @@ class Energiefluss extends IPSModuleStrict
         roundPercentTexts();
         requestAnimationFrame(roundPercentTexts);
         setTimeout(roundPercentTexts, 100);
+
+        // Die Karte aktualisiert Teile des SVG nachträglich. Der Observer hält
+        // deshalb auch spätere SOC-/Entladegrenzen konsequent bei 0 Dezimalstellen.
+        if (card.__symconPercentObserver) {
+            card.__symconPercentObserver.disconnect();
+        }
+        card.__symconPercentObserver = new MutationObserver(() => roundPercentTexts());
+        card.__symconPercentObserver.observe(root, {
+            subtree: true,
+            childList: true,
+            characterData: true
+        });
     }
 
     function updateSunsynkWallboxAuxInfo(card, d, wallbox) {
