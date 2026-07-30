@@ -2472,10 +2472,18 @@ class Energiefluss extends IPSModuleStrict
         addEntity('inverter_current_164', 'sensor.symcon_inverter_current_l1', entityAvailable(d, 'inverterCurrentL1'));
         addEntity('inverter_current_L2', 'sensor.symcon_inverter_current_l2', entityAvailable(d, 'inverterCurrentL2'));
         addEntity('inverter_current_L3', 'sensor.symcon_inverter_current_l3', entityAvailable(d, 'inverterCurrentL3'));
-        // Die Originalkarte verwendet zusätzlich grid_power_169 für die
-        // AC-Seite des Wechselrichters. Ohne diesen Wert bleibt die
-        // Wechselrichterleistung in einzelnen Ansichten leer.
-        addEntity('grid_power_169', 'sensor.symcon_grid_power', hasGrid);
+        // Die Box oberhalb des Wechselrichters verwendet je nach Layout/Modell
+        // nicht inverter_power_175, sondern grid_power_169. Deshalb erhält
+        // grid_power_169 bei konfigurierter WR-Gesamtleistung denselben Sensor.
+        // Nur wenn keine WR-Leistung konfiguriert ist, bleibt der Netzsensor
+        // der Rückfallwert.
+        addEntity(
+            'grid_power_169',
+            (entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable)
+                ? 'sensor.symcon_inverter'
+                : 'sensor.symcon_grid_power',
+            (entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable) || hasGrid
+        );
         addEntity('inverter_voltage_154', 'sensor.symcon_grid_voltage_l1', entityAvailable(d, 'gridVoltageL1'));
         addEntity('inverter_voltage_L2', 'sensor.symcon_grid_voltage_l2', entityAvailable(d, 'gridVoltageL2'));
         addEntity('inverter_voltage_L3', 'sensor.symcon_grid_voltage_l3', entityAvailable(d, 'gridVoltageL3'));
@@ -2826,105 +2834,111 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot) return;
 
         const colour = AC.room;
-        const valueColour = colour;
         const root = card.shadowRoot;
+
+        // Die Originalkarte verwendet je nach Compact/Lite/Full andere IDs
+        // und Klassen. Darum nicht nur einzelne bekannte Texte selektieren,
+        // sondern jeden kompletten Verbraucherbereich 1..6 bearbeiten.
+        const belongsToAdditionalLoad = (element, index) => {
+            let node = element;
+            const needles = [
+                `essload${index}`,
+                `ess-load${index}`,
+                `ess_load${index}`,
+                `essential_load${index}`,
+                `essential-load${index}`
+            ];
+
+            while (node && node !== root) {
+                const id = String(node.id || '').toLowerCase();
+                const cls = String(node.getAttribute?.('class') || '').toLowerCase();
+                if (needles.some(needle => id.includes(needle) || cls.includes(needle))) {
+                    return true;
+                }
+                node = node.parentNode || node.host || null;
+            }
+            return false;
+        };
+
+        // Rekursiv auch offene untergeordnete Shadow-Roots berücksichtigen.
+        const roots = [root];
+        for (let pos = 0; pos < roots.length; pos++) {
+            roots[pos].querySelectorAll?.('*').forEach(element => {
+                if (element.shadowRoot) roots.push(element.shadowRoot);
+            });
+        }
+
+        for (const currentRoot of roots) {
+            for (let i = 1; i <= 6; i++) {
+                currentRoot.querySelectorAll?.('*').forEach(element => {
+                    if (!belongsToAdditionalLoad(element, i)) return;
+
+                    const tag = String(element.tagName || '').toLowerCase();
+
+                    // Sämtliche Schriften des Verbrauchers: Wert in der Box,
+                    // Zusatzwert und Beschriftung darunter. Alle gleichfarbig
+                    // und ausdrücklich ohne Fettschrift.
+                    if (['text', 'tspan', 'span', 'div', 'p'].includes(tag)) {
+                        element.style?.setProperty('color', colour, 'important');
+                        element.style?.setProperty('fill', colour, 'important');
+                        element.style?.setProperty('font-weight', '400', 'important');
+                        element.setAttribute?.('font-weight', '400');
+                    }
+
+                    // Rahmen, Box, Icon und Leitung erhalten dieselbe Farbe.
+                    // Bei SVG-Text bleibt die Behandlung oben maßgebend.
+                    if (['rect', 'circle', 'ellipse', 'polygon', 'polyline', 'line', 'path'].includes(tag)) {
+                        element.style?.setProperty('stroke', colour, 'important');
+                        element.setAttribute?.('stroke', colour);
+
+                        // Flächen der eigentlichen Verbraucherbox/des Icons
+                        // ebenfalls in Verbraucherfarbe. Animationspfade bleiben
+                        // ohne Füllung.
+                        if (!element.classList?.contains('anim-line') && tag !== 'line' && tag !== 'polyline') {
+                            const currentFill = String(element.getAttribute?.('fill') || '').toLowerCase();
+                            if (currentFill !== 'none') {
+                                element.style?.setProperty('fill', colour, 'important');
+                                element.setAttribute?.('fill', colour);
+                            }
+                        }
+                    }
+
+                    // Home-Assistant-Icons verwenden color/--state-icon-color.
+                    element.style?.setProperty('--state-icon-color', colour, 'important');
+                    if (tag === 'ha-icon' || element.classList?.toString().includes('icon')) {
+                        element.style?.setProperty('color', colour, 'important');
+                    }
+                });
+            }
+        }
+
+        // Die Upstream-Klasse .st8 setzt font-weight:500. Eine abschließende
+        // Regel im Haupt-Shadow-Root verhindert, dass sie unsere direkte
+        // Einstellung bei einem erneuten Rendern wieder überschreibt.
         let style = root.getElementById('symcon-additional-load-colours');
         if (!style) {
             style = document.createElement('style');
             style.id = 'symcon-additional-load-colours';
             root.appendChild(style);
         }
-
-        const labelSelectors = [];
-        const valueSelectors = [];
-        const iconSelectors = [];
-        const iconShapeSelectors = [];
-        const lineSelectors = [];
-
+        const selectors = [];
         for (let i = 1; i <= 6; i++) {
-            // Beschriftung und Wert innerhalb der Verbraucherbox verwenden
-            // dieselbe konfigurierte Farbe. Die Beschriftung bleibt normalgewichtig.
-            labelSelectors.push(
-                `#ess-load${i}`,
-                `[id="ess-load${i}"]`
-            );
-            valueSelectors.push(
-                `#ess_load${i}_value`,
-                `#ess_load${i}_value_extra`,
-                `#ess_load${i}_extra`
-            );
-            iconSelectors.push(
-                `.essload${i}-icon`,
-                `.essload${i}-small-icon`,
-                `.essload${i}-icon-full`
-            );
-            iconShapeSelectors.push(
-                `.essload${i}-icon path`,
-                `.essload${i}-small-icon path`,
-                `.essload${i}-icon-full path`,
-                `[id*="essload${i}"] path`,
-                `[id*="essential_load${i}"] path`
-            );
-            lineSelectors.push(
-                `#es-load${i}`,
-                `[id="es-load${i}"]`,
-                `[id^="es-load${i}-"]`,
-                `[id^="ess_load${i}_"] line`,
-                `[id^="ess_load${i}_"] polyline`,
-                `[id^="ess_load${i}_"] path.anim-line`
+            selectors.push(
+                `[id*="essload${i}"]`, `[class*="essload${i}"]`,
+                `[id*="ess-load${i}"]`, `[class*="ess-load${i}"]`,
+                `[id*="ess_load${i}"]`, `[class*="ess_load${i}"]`,
+                `[id*="essential_load${i}"]`, `[class*="essential_load${i}"]`
             );
         }
-
-        style.textContent = `
-            ${labelSelectors.join(',')} {
-                color: ${colour} !important;
-                fill: ${colour} !important;
-                font-weight: 400 !important;
-            }
-            ${valueSelectors.join(',')},
-            ${valueSelectors.map(selector => selector + ' *').join(',')} {
-                color: ${valueColour} !important;
-                fill: ${valueColour} !important;
-            }
-            ${iconSelectors.join(',')} {
-                color: ${colour} !important;
-                --state-icon-color: ${colour} !important;
-            }
-            ${iconShapeSelectors.join(',')} {
-                fill: ${colour} !important;
-                stroke: ${colour} !important;
-            }
-            ${lineSelectors.join(',')} {
-                color: ${colour} !important;
-                stroke: ${colour} !important;
-            }
-        `;
-
-        root.querySelectorAll(labelSelectors.join(',')).forEach(element => {
-            element.style?.setProperty('color', colour, 'important');
-            element.style?.setProperty('fill', colour, 'important');
-            element.style?.setProperty('font-weight', '400', 'important');
-        });
-        root.querySelectorAll(valueSelectors.join(',')).forEach(element => {
-            element.style?.setProperty('color', valueColour, 'important');
-            element.style?.setProperty('fill', valueColour, 'important');
-            element.querySelectorAll?.('*').forEach(child => {
-                child.style?.setProperty('color', valueColour, 'important');
-                child.style?.setProperty('fill', valueColour, 'important');
-            });
-        });
-        root.querySelectorAll(iconSelectors.join(',')).forEach(element => {
-            element.style?.setProperty('color', colour, 'important');
-            element.style?.setProperty('--state-icon-color', colour, 'important');
-        });
-        root.querySelectorAll(iconShapeSelectors.join(',')).forEach(element => {
-            element.style?.setProperty('fill', colour, 'important');
-            element.style?.setProperty('stroke', colour, 'important');
-        });
-        root.querySelectorAll(lineSelectors.join(',')).forEach(element => {
-            element.style?.setProperty('stroke', colour, 'important');
-            element.style?.setProperty('color', colour, 'important');
-        });
+        style.textContent = `${selectors.join(',')} {
+            color: ${colour} !important;
+            font-weight: 400 !important;
+        }
+        ${selectors.map(selector => `${selector} text, ${selector} tspan, ${selector} span, ${selector} div`).join(',')} {
+            color: ${colour} !important;
+            fill: ${colour} !important;
+            font-weight: 400 !important;
+        }`;
     }
 
     function updateSunsynkWallboxAuxInfo() {
