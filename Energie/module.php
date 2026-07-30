@@ -224,6 +224,20 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
+                                    'caption' => 'Strom (A)',
+                                    'name'    => 'CurrentVariableID',
+                                    'width'   => '180px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Spannung (V)',
+                                    'name'    => 'VoltageVariableID',
+                                    'width'   => '180px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
                                     'caption' => 'Max. Entladezustand Variable',
                                     'name'    => 'MaxDischargeSoCVariableID',
                                     'width'   => '240px',
@@ -2456,12 +2470,16 @@ class Energiefluss extends IPSModuleStrict
         if (activeBatteries[0]) {
             addEntity('battery_soc_184', 'sensor.symcon_battery_soc', activeBatteries[0].hasSoc);
             addEntity('battery_power_190', 'sensor.symcon_battery_power', activeBatteries[0].hasPower);
+            addEntity('battery_current_191', 'sensor.symcon_battery_current');
+            addEntity('battery_voltage_183', 'sensor.symcon_battery_voltage', activeBatteries[0].hasVoltage);
             addEntity('day_battery_charge_70', 'sensor.symcon_battery_charge_energy', activeBatteries[0].hasChargeEnergy);
             addEntity('day_battery_discharge_71', 'sensor.symcon_battery_discharge_energy', activeBatteries[0].hasDischargeEnergy);
         }
         if (activeBatteries[1]) {
             addEntity('battery2_soc_184', 'sensor.symcon_battery2_soc', activeBatteries[1].hasSoc);
             addEntity('battery2_power_190', 'sensor.symcon_battery2_power', activeBatteries[1].hasPower);
+            addEntity('battery2_current_191', 'sensor.symcon_battery2_current');
+            addEntity('battery2_voltage_183', 'sensor.symcon_battery2_voltage', activeBatteries[1].hasVoltage);
             addEntity('day_battery2_charge_70', 'sensor.symcon_battery2_charge_energy', activeBatteries[1].hasChargeEnergy);
             addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
         }
@@ -2620,8 +2638,12 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_load_energy': ssState(d.houseEnergy || 0, 'kWh'),
             'sensor.symcon_battery_soc': ssState(Math.round(Number(bat1.soc || 0)), '%'),
             'sensor.symcon_battery_power': ssState(Number(bat1.value || 0), 'W'),
+            'sensor.symcon_battery_current': ssState(Number(bat1.current || 0), 'A'),
+            'sensor.symcon_battery_voltage': ssState(Number(bat1.voltage || 0), 'V'),
             'sensor.symcon_battery2_soc': ssState(Math.round(Number(bat2.soc || 0)), '%'),
             'sensor.symcon_battery2_power': ssState(Number(bat2.value || 0), 'W'),
+            'sensor.symcon_battery2_current': ssState(Number(bat2.current || 0), 'A'),
+            'sensor.symcon_battery2_voltage': ssState(Number(bat2.voltage || 0), 'V'),
             'sensor.symcon_battery_charge_energy': ssState(bat1.chargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery_discharge_energy': ssState(bat1.dischargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery2_charge_energy': ssState(bat2.chargeEnergy || 0, 'kWh'),
@@ -3403,6 +3425,8 @@ HTML;
                     'ChargeEnergyVariableID',
                     'DischargeEnergyVariableID',
                     'SoCVariableID',
+                    'CurrentVariableID',
+                    'VoltageVariableID',
                     'MaxDischargeSoCVariableID'
                 ] as $key) {
                     $variableID = (int) ($battery[$key] ?? 0);
@@ -3476,6 +3500,7 @@ HTML;
                         ? (string) $source['Name']
                         : 'PV ' . (count($pvs) + 1),
                     'value'       => (float) GetValue($variableID),
+                    'hasPower'    => true,
                     'energy'      => $hasEnergy ? GetValueFormatted($energyVariableID) : '',
                     'energyValue' => $hasEnergy ? (float) GetValue($energyVariableID) : 0.0,
                     'hasEnergy'   => $hasEnergy,
@@ -3495,6 +3520,8 @@ HTML;
                 $chargeEnergyVariableID = (int) ($source['ChargeEnergyVariableID'] ?? 0);
                 $dischargeEnergyVariableID = (int) ($source['DischargeEnergyVariableID'] ?? 0);
                 $socVariableID = (int) ($source['SoCVariableID'] ?? 0);
+                $currentVariableID = (int) ($source['CurrentVariableID'] ?? 0);
+                $voltageVariableID = (int) ($source['VoltageVariableID'] ?? 0);
                 $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
 
                 $value = (float) GetValue($variableID);
@@ -3520,6 +3547,14 @@ HTML;
                     'invertFlow'            => (bool) ($source['InvertFlow'] ?? false),
                     'soc'                  => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
                         ? (float) GetValue($socVariableID)
+                        : 0.0,
+                    'hasCurrent'           => ($currentVariableID > 0 && IPS_VariableExists($currentVariableID)),
+                    'current'              => ($currentVariableID > 0 && IPS_VariableExists($currentVariableID))
+                        ? (float) GetValue($currentVariableID)
+                        : 0.0,
+                    'hasVoltage'           => ($voltageVariableID > 0 && IPS_VariableExists($voltageVariableID)),
+                    'voltage'              => ($voltageVariableID > 0 && IPS_VariableExists($voltageVariableID))
+                        ? (float) GetValue($voltageVariableID)
                         : 0.0,
                     'maxDischargeSoc'      => max(
                         0,
