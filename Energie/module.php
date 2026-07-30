@@ -49,6 +49,8 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('ColorBatteryCharge', 6600182);
         $this->RegisterPropertyInteger('ColorBatteryDischarge', 2733814);
         $this->RegisterPropertyInteger('ColorConsumers', 3123599);
+        $this->RegisterPropertyInteger('ColorWallbox', 3123599);
+        $this->RegisterPropertyInteger('ColorHouseLoad', 5087231);
 
         // Farben der Haus-Visualisierung.
         // Vorgaben entsprechen den Originalfarben der eingebetteten home.svg.
@@ -70,7 +72,7 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyString('DisplayMode', 'flow');
 
         // full = alle technischen Details, compact = verdichtete Technikansicht.
-        $this->RegisterPropertyString('TechnicalLayout', 'full');
+        $this->RegisterPropertyString('TechnicalLayout', 'lite');
 
         $this->SetVisualizationType(1);
     }
@@ -127,8 +129,9 @@ class Energiefluss extends IPSModuleStrict
                     'name'    => 'TechnicalLayout',
                     'caption' => 'Technische Ansicht',
                     'options' => [
-                        ['caption' => 'Komplett – alle Details', 'value' => 'full'],
-                        ['caption' => 'Kompakt – wichtigste Werte', 'value' => 'compact'],
+                        ['caption' => 'Compact – kompakte Originalansicht', 'value' => 'compact'],
+                        ['caption' => 'Lite – mittlere Originalansicht', 'value' => 'lite'],
+                        ['caption' => 'Full – vollständige Originalansicht', 'value' => 'full'],
                     ],
                 ],
                 [
@@ -307,11 +310,13 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorGridExport', 'caption' => 'Netzeinspeisung', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryCharge', 'caption' => 'Batterie laden', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
-                        ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Verbraucher', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorHouseLoad', 'caption' => 'Hausverbrauch', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorWallbox', 'caption' => 'Wallbox', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Weitere Verbraucher', 'allowTransparent' => false],
                         [
                             'type' => 'HorizontalSlider',
                             'name' => 'FlowSpeedPercent',
-                            'caption' => 'Animationsgeschwindigkeit',
+                            'caption' => 'Animationsgeschwindigkeit (links langsam, rechts schnell)',
                             'minimum' => 25,
                             'maximum' => 300,
                             'stepSize' => 5,
@@ -370,7 +375,8 @@ class Energiefluss extends IPSModuleStrict
     public function RequestAction(string $Ident, mixed $Value): void
     {
         if ($Ident === 'ToggleTechnicalLayout') {
-            $newLayout = ((string) $Value === 'compact') ? 'compact' : 'full';
+            $requestedLayout = (string) $Value;
+            $newLayout = in_array($requestedLayout, ['compact', 'lite', 'full'], true) ? $requestedLayout : 'lite';
 
             if ($newLayout !== $this->ReadPropertyString('TechnicalLayout')) {
                 IPS_SetProperty($this->InstanceID, 'TechnicalLayout', $newLayout);
@@ -2382,17 +2388,19 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function createSunsynkConfig(d, pvs, batteries, wallbox, groups) {
-        const compact = currentTechnicalLayout === 'compact';
+        const style = ['compact', 'lite', 'full'].includes(currentTechnicalLayout) ? currentTechnicalLayout : 'lite';
+        const compact = style === 'compact';
+        const full = style === 'full';
         const pvCount = Math.max(1, Math.min(6, pvs.length || 1));
-        // Kompakt zeigt nur den Gesamt-Hausverbrauch. Einzelverbraucher,
-        // Wallbox und Non-Essential-Lasten erscheinen nur in der Full-Ansicht.
-        const essentialCount = compact ? 0 : Math.min(6, groups.length);
-        const auxGroups = compact ? [] : groups.slice(6, 8);
-        const gridGroups = compact ? [] : groups.slice(8, 11);
+        const essentialLoads = [];
+        if (d.hasWallbox) essentialLoads.push({name: wallbox?.name || 'Wallbox', value: Number(wallbox?.value || 0), dailyValue: Number(wallbox?.energyValue || 0), hasDaily: !!wallbox?.hasEnergy, icon: 'mdi:ev-station', isWallbox: true});
+        groups.forEach(group => essentialLoads.push({...group, icon: group.icon || 'mdi:power-plug', isWallbox: false}));
+        const shownLoads = essentialLoads.slice(0, full ? 6 : 3);
+        const essentialCount = shownLoads.length;
         const showEnergyDetails = !compact;
         return {
-            cardstyle: compact ? 'compact' : 'full',
-            wide: !compact,
+            cardstyle: style,
+            wide: full,
             large_font: true,
             show_solar: pvs.length > 0,
             show_battery: batteries.length > 0,
@@ -2402,10 +2410,10 @@ class Energiefluss extends IPSModuleStrict
             dynamic_line_width: true,
             max_line_width: 5,
             min_line_width: 2,
-            inverter: { modern: true, model: 'goodwe', autarky: 'power', auto_scale: false, label_autarky: 'Autarkie' },
+            inverter: { modern: true, model: 'goodwe', colour: AC.home, autarky: 'power', auto_scale: false, label_autarky: 'Autarkie', label_ratio: 'Eigenverbrauch' },
             solar: {
                 colour: AC.solar, show_daily: showEnergyDetails && pvs.some(pv => pv.hasEnergy), mppts: pvCount,
-                animation_speed: Math.max(1, Math.round(9 * flowSpeedFactor)), max_power: 12000,
+                animation_speed: Math.max(1, Math.round(9 / flowSpeedFactor)), max_power: 12000,
                 auto_scale: false, display_mode: 1,
                 pv1_name: pvs[0]?.name || 'PV 1', pv2_name: pvs[1]?.name || 'PV 2',
                 pv3_name: pvs[2]?.name || 'PV 3', pv4_name: pvs[3]?.name || 'PV 4',
@@ -2418,37 +2426,38 @@ class Energiefluss extends IPSModuleStrict
                 shutdown_soc: Math.max(0.0001, Math.min(100, Number(batteries[0]?.maxDischargeSoc ?? 0))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
+                soc_decimal_places: 0,
                 colour: AC.discharge, charge_colour: AC.charge, show_daily: showEnergyDetails && batteries.some(b => b.hasChargeEnergy || b.hasDischargeEnergy),
-                animation_speed: Math.max(1, Math.round(6 * flowSpeedFactor)), max_power: 10000,
+                animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)), max_power: 10000,
                 auto_scale: false, dynamic_colour: true, linear_gradient: true, animate: true, show_absolute: true
             },
             battery2: {
                 shutdown_soc: Math.max(0.0001, Math.min(100, Number(batteries[1]?.maxDischargeSoc ?? 0))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
+                soc_decimal_places: 0,
                 colour: AC.discharge,
                 charge_colour: AC.charge, show_absolute: true, auto_scale: false,
                 dynamic_colour: true, linear_gradient: true, animate: true
             },
             load: {
-                colour: AC.room, off_colour: '#9e9e9e', dynamic_colour: true,
-                show_daily: showEnergyDetails && groups.some(g => g.hasDaily), show_aux: !compact && !!d.hasWallbox, show_daily_aux: !compact && showEnergyDetails && !!wallbox?.hasEnergy,
-                animation_speed: Math.max(1, Math.round(4 * flowSpeedFactor)), max_power: 12000,
-                auto_scale: false, additional_loads: essentialCount, aux_loads: auxGroups.length,
+                colour: AC.home, off_colour: '#9e9e9e', dynamic_colour: false, dynamic_icon: false,
+                show_daily: showEnergyDetails && groups.some(g => g.hasDaily), show_aux: false, show_daily_aux: false,
+                animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)), max_power: 12000,
+                auto_scale: false, additional_loads: essentialCount, aux_loads: 0,
                 essential_name: 'Hausverbrauch',
-                aux_name: wallbox?.name || 'Wallbox',
-                aux_daily_name: 'Wallbox Energie',
-                aux_load1_name: auxGroups[0]?.name || '', aux_load2_name: auxGroups[1]?.name || '',
-                load1_name: groups[0]?.name || '', load2_name: groups[1]?.name || '',
-                load3_name: groups[2]?.name || '', load4_name: groups[3]?.name || '',
-                load5_name: groups[4]?.name || '', load6_name: groups[5]?.name || ''
+                load1_name: shownLoads[0]?.name || '', load2_name: shownLoads[1]?.name || '',
+                load3_name: shownLoads[2]?.name || '', load4_name: shownLoads[3]?.name || '',
+                load5_name: shownLoads[4]?.name || '', load6_name: shownLoads[5]?.name || '',
+                load1_icon: shownLoads[0]?.icon || 'mdi:power-plug', load2_icon: shownLoads[1]?.icon || 'mdi:power-plug',
+                load3_icon: shownLoads[2]?.icon || 'mdi:power-plug', load4_icon: shownLoads[3]?.icon || 'mdi:power-plug',
+                load5_icon: shownLoads[4]?.icon || 'mdi:power-plug', load6_icon: shownLoads[5]?.icon || 'mdi:power-plug'
             },
             grid: {
                 colour: AC.import, export_colour: AC.export, grid_name: 'Netz',
                 show_daily_buy: showEnergyDetails && !!d.gridImportEnergyValueAvailable, show_daily_sell: showEnergyDetails && !!d.gridExportEnergyValueAvailable,
-                show_nonessential: gridGroups.length > 0, additional_loads: gridGroups.length,
-                load1_name: gridGroups[0]?.name || '', load2_name: gridGroups[1]?.name || '', load3_name: gridGroups[2]?.name || '',
-                animation_speed: Math.max(1, Math.round(8 * flowSpeedFactor)), max_power: 12000,
+                show_nonessential: false, additional_loads: 0,
+                animation_speed: Math.max(1, Math.round(8 / flowSpeedFactor)), max_power: 12000,
                 auto_scale: false, show_absolute: true
             },
             entities: {
@@ -2468,17 +2477,12 @@ class Energiefluss extends IPSModuleStrict
                 day_battery_discharge_71: 'sensor.symcon_battery_discharge_energy',
                 day_battery2_charge_70: 'sensor.symcon_battery2_charge_energy',
                 day_battery2_discharge_71: 'sensor.symcon_battery2_discharge_energy',
-                essential_load1: 'sensor.symcon_load1', essential_load1_extra: 'sensor.symcon_load1_daily',
-                essential_load2: 'sensor.symcon_load2', essential_load2_extra: 'sensor.symcon_load2_daily',
-                essential_load3: 'sensor.symcon_load3', essential_load3_extra: 'sensor.symcon_load3_daily',
-                essential_load4: 'sensor.symcon_load4', essential_load4_extra: 'sensor.symcon_load4_daily',
-                essential_load5: 'sensor.symcon_load5', essential_load5_extra: 'sensor.symcon_load5_daily',
-                essential_load6: 'sensor.symcon_load6', essential_load6_extra: 'sensor.symcon_load6_daily',
-                aux_load1: 'sensor.symcon_load7', aux_load1_extra: 'sensor.symcon_load7_daily',
-                aux_load2: 'sensor.symcon_load8', aux_load2_extra: 'sensor.symcon_load8_daily',
-                non_essential_load1: 'sensor.symcon_load9', non_essential_load1_extra: 'sensor.symcon_load9_daily',
-                non_essential_load2: 'sensor.symcon_load10', non_essential_load2_extra: 'sensor.symcon_load10_daily',
-                non_essential_load3: 'sensor.symcon_load11', non_essential_load3_extra: 'sensor.symcon_load11_daily'
+                essential_load1: 'sensor.symcon_branch1', essential_load1_extra: 'sensor.symcon_branch1_daily',
+                essential_load2: 'sensor.symcon_branch2', essential_load2_extra: 'sensor.symcon_branch2_daily',
+                essential_load3: 'sensor.symcon_branch3', essential_load3_extra: 'sensor.symcon_branch3_daily',
+                essential_load4: 'sensor.symcon_branch4', essential_load4_extra: 'sensor.symcon_branch4_daily',
+                essential_load5: 'sensor.symcon_branch5', essential_load5_extra: 'sensor.symcon_branch5_daily',
+                essential_load6: 'sensor.symcon_branch6', essential_load6_extra: 'sensor.symcon_branch6_daily'
             }
         };
     }
@@ -2513,9 +2517,12 @@ class Energiefluss extends IPSModuleStrict
         for (let i = 0; i < 6; i++) {
             states[`sensor.symcon_pv${i + 1}`] = ssState(pvs[i]?.value || 0, 'W');
         }
-        for (let i = 0; i < 11; i++) {
-            states[`sensor.symcon_load${i + 1}`] = ssState(groups[i]?.value || 0, 'W');
-            states[`sensor.symcon_load${i + 1}_daily`] = ssState(groups[i]?.dailyValue || 0, 'kWh');
+        const branchLoads = [];
+        if (d.hasWallbox) branchLoads.push({value: Number(wallbox?.value || 0), dailyValue: Number(wallbox?.energyValue || 0)});
+        groups.forEach(group => branchLoads.push(group));
+        for (let i = 0; i < 6; i++) {
+            states[`sensor.symcon_branch${i + 1}`] = ssState(branchLoads[i]?.value || 0, 'W');
+            states[`sensor.symcon_branch${i + 1}_daily`] = ssState(branchLoads[i]?.dailyValue || 0, 'kWh');
         }
         return {
             states,
@@ -2529,7 +2536,8 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
-    async function applySunsynkViewOverrides(card, compact) {
+    async function applySunsynkViewOverrides(card, styleName) {
+        const compact = styleName === 'compact';
         if (!card) return;
 
         try {
@@ -2615,7 +2623,7 @@ class Energiefluss extends IPSModuleStrict
             );
             host.appendChild(card);
             sunsynkCard = card;
-            await applySunsynkViewOverrides(card, currentTechnicalLayout === 'compact');
+            await applySunsynkViewOverrides(card, currentTechnicalLayout);
             document.getElementById('sunsynk-loading').style.display = 'none';
             if (sunsynkPending) {
                 const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
@@ -2633,11 +2641,11 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
-        currentTechnicalLayout = d.technicalLayout === 'compact' ? 'compact' : 'full';
+        currentTechnicalLayout = ['compact', 'lite', 'full'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
         const layoutButton = document.getElementById('technical-layout-button');
         if (layoutButton) {
-            layoutButton.textContent = currentTechnicalLayout === 'full' ? '▦' : '▤';
-            layoutButton.title = currentTechnicalLayout === 'full' ? 'Kompakte Sunsynk-Ansicht' : 'Vollständige Sunsynk-Ansicht';
+            layoutButton.textContent = ({compact: 'C', lite: 'L', full: 'F'})[currentTechnicalLayout] || 'L';
+            layoutButton.title = `Sunsynk-Ansicht: ${currentTechnicalLayout}`;
         }
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
@@ -2646,7 +2654,7 @@ class Energiefluss extends IPSModuleStrict
         }
         sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
-        applySunsynkViewOverrides(sunsynkCard, currentTechnicalLayout === 'compact');
+        applySunsynkViewOverrides(sunsynkCard, currentTechnicalLayout);
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
@@ -2654,7 +2662,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     let currentDisplayMode = '__INITIAL_DISPLAY_MODE__';
-    let currentTechnicalLayout = 'full';
+    let currentTechnicalLayout = 'lite';
 
     function updateDisplayModeButton() {
         const button = document.getElementById('display-mode-button');
@@ -2704,7 +2712,8 @@ class Energiefluss extends IPSModuleStrict
     const technicalLayoutButton = document.getElementById('technical-layout-button');
     if (technicalLayoutButton) {
         technicalLayoutButton.addEventListener('click', function () {
-            const newLayout = currentTechnicalLayout === 'full' ? 'compact' : 'full';
+            const order = ['compact', 'lite', 'full'];
+            const newLayout = order[(Math.max(0, order.indexOf(currentTechnicalLayout)) + 1) % order.length];
             requestAction('ToggleTechnicalLayout', newLayout);
         });
     }
@@ -2756,7 +2765,9 @@ class Energiefluss extends IPSModuleStrict
             Object.assign(AC, d.colors);
             AC.grid = AC.import;
             AC.batt = AC.charge;
-            AC.room = AC.room;
+            AC.room = d.colors.room || AC.room;
+            AC.wallbox = d.colors.wallbox || AC.wallbox;
+            AC.home = d.colors.home || AC.home;
         }
 
         const speedPercent = Number(d && d.flowSpeedPercent);
@@ -2769,7 +2780,7 @@ class Energiefluss extends IPSModuleStrict
         document.documentElement.style.setProperty('--ef-grid-export', AC.export);
         document.documentElement.style.setProperty('--ef-battery-charge', AC.charge);
         document.documentElement.style.setProperty('--ef-battery-discharge', AC.discharge);
-        document.documentElement.style.setProperty('--ef-wallbox', AC.room);
+        document.documentElement.style.setProperty('--ef-wallbox', AC.wallbox);
         document.documentElement.style.setProperty('--ef-consumer', AC.room);
 
         const solarMain = document.getElementById('pfc-solar-main');
@@ -2785,8 +2796,8 @@ class Energiefluss extends IPSModuleStrict
         if (gridImport) gridImport.style.color = AC.import;
         if (gridExport) gridExport.style.color = AC.export;
         if (gridInfo) gridInfo.style.borderColor = AC.import;
-        if (wallboxMain) wallboxMain.style.color = AC.room;
-        if (wallboxInfo) wallboxInfo.style.borderColor = AC.room;
+        if (wallboxMain) wallboxMain.style.color = AC.wallbox;
+        if (wallboxInfo) wallboxInfo.style.borderColor = AC.wallbox;
     }
 
     function setState(d) {
@@ -2806,7 +2817,7 @@ class Energiefluss extends IPSModuleStrict
         const haus = Math.max(pvTotal + batteryTotal + grid, 0);
 
         // Neue technische Ansicht.
-        currentTechnicalLayout = d.technicalLayout === 'compact' ? 'compact' : 'full';
+        currentTechnicalLayout = ['compact', 'lite', 'full'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
         renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups);
 
         // Alte SVG-Struktur bleibt intern nur für Abwärtskompatibilität erhalten.
@@ -3594,6 +3605,8 @@ HTML;
                 'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
                 'charge'    => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryCharge')),
                 'discharge' => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryDischarge')),
+                'home'      => $this->ColorToHex($this->ReadPropertyInteger('ColorHouseLoad')),
+                'wallbox'   => $this->ColorToHex($this->ReadPropertyInteger('ColorWallbox')),
                 'room'      => $this->ColorToHex($this->ReadPropertyInteger('ColorConsumers')),
             ],
         ];
