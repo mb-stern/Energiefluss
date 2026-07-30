@@ -250,7 +250,7 @@ class Energiefluss extends IPSModuleStrict
                             'type'     => 'List',
                             'name'     => 'Groups',
                             'caption'  => 'Verbraucher (excl. Wallbox)',
-                            'rowCount' => 10,
+                            'rowCount' => 11,
                             'add'      => true,
                             'delete'   => true,
                             'columns'  => [
@@ -2372,11 +2372,14 @@ class Energiefluss extends IPSModuleStrict
     function createSunsynkConfig(d, pvs, batteries, wallbox, groups) {
         const compact = currentTechnicalLayout === 'compact';
         const pvCount = Math.max(1, Math.min(6, pvs.length || 1));
-        const groupCount = Math.min(6, groups.length);
+        const essentialCount = Math.min(6, groups.length);
+        const auxGroups = groups.slice(6, 8);
+        const gridGroups = groups.slice(8, 11);
+        const showEnergyDetails = !compact;
         return {
             cardstyle: compact ? 'compact' : 'full',
-            wide: false,
-            large_font: true,
+            wide: !compact,
+            large_font: compact,
             show_solar: pvs.length > 0,
             show_battery: batteries.length > 0,
             show_grid: true,
@@ -2387,7 +2390,7 @@ class Energiefluss extends IPSModuleStrict
             min_line_width: 2,
             inverter: { modern: true, model: 'goodwe', autarky: 'power', auto_scale: true, label_autarky: 'Autarkie' },
             solar: {
-                colour: AC.solar, show_daily: false, mppts: pvCount,
+                colour: AC.solar, show_daily: showEnergyDetails && pvs.some(pv => pv.hasEnergy), mppts: pvCount,
                 animation_speed: Math.max(1, Math.round(9 * flowSpeedFactor)), max_power: 12000,
                 auto_scale: true, display_mode: 1,
                 pv1_name: pvs[0]?.name || 'PV 1', pv2_name: pvs[1]?.name || 'PV 2',
@@ -2396,7 +2399,7 @@ class Energiefluss extends IPSModuleStrict
             },
             battery: {
                 count: Math.min(2, Math.max(1, batteries.length)), shutdown_soc: 1, soc_end_of_charge: 100,
-                colour: AC.discharge, charge_colour: AC.charge, show_daily: false,
+                colour: AC.discharge, charge_colour: AC.charge, show_daily: showEnergyDetails && batteries.some(b => b.hasChargeEnergy || b.hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 * flowSpeedFactor)), max_power: 10000,
                 auto_scale: true, dynamic_colour: true, linear_gradient: true, animate: true, show_absolute: true
             },
@@ -2407,17 +2410,21 @@ class Energiefluss extends IPSModuleStrict
             },
             load: {
                 colour: AC.room, off_colour: '#9e9e9e', dynamic_colour: true,
-                show_daily: false, show_aux: !!d.hasWallbox, show_daily_aux: false,
+                show_daily: showEnergyDetails && groups.some(g => g.hasDaily), show_aux: !!d.hasWallbox, show_daily_aux: showEnergyDetails && !!wallbox?.hasEnergy,
                 animation_speed: Math.max(1, Math.round(4 * flowSpeedFactor)), max_power: 12000,
-                auto_scale: true, additional_loads: groupCount,
+                auto_scale: true, additional_loads: essentialCount, aux_loads: auxGroups.length,
                 aux_name: wallbox?.name || 'Wallbox',
+                aux_daily_name: 'Wallbox Energie',
+                aux_load1_name: auxGroups[0]?.name || '', aux_load2_name: auxGroups[1]?.name || '',
                 load1_name: groups[0]?.name || '', load2_name: groups[1]?.name || '',
                 load3_name: groups[2]?.name || '', load4_name: groups[3]?.name || '',
                 load5_name: groups[4]?.name || '', load6_name: groups[5]?.name || ''
             },
             grid: {
                 colour: AC.import, export_colour: AC.export, grid_name: 'Netz',
-                show_daily_buy: false, show_daily_sell: false,
+                show_daily_buy: showEnergyDetails && !!d.gridImportEnergyValueAvailable, show_daily_sell: showEnergyDetails && !!d.gridExportEnergyValueAvailable,
+                show_nonessential: gridGroups.length > 0, additional_loads: gridGroups.length,
+                load1_name: gridGroups[0]?.name || '', load2_name: gridGroups[1]?.name || '', load3_name: gridGroups[2]?.name || '',
                 animation_speed: Math.max(1, Math.round(8 * flowSpeedFactor)), max_power: 12000,
                 auto_scale: true, show_absolute: true
             },
@@ -2429,10 +2436,26 @@ class Energiefluss extends IPSModuleStrict
                 pv4_power_189: 'sensor.symcon_pv4', pv5_power: 'sensor.symcon_pv5', pv6_power: 'sensor.symcon_pv6',
                 grid_ct_power_172: 'sensor.symcon_grid', grid_connected_status_194: 'sensor.symcon_grid_status',
                 essential_power: 'sensor.symcon_home', inverter_power_175: 'sensor.symcon_inverter',
-                aux_power_166: 'sensor.symcon_wallbox', essential_load1: 'sensor.symcon_load1',
-                essential_load2: 'sensor.symcon_load2', essential_load3: 'sensor.symcon_load3',
-                essential_load4: 'sensor.symcon_load4', essential_load5: 'sensor.symcon_load5',
-                essential_load6: 'sensor.symcon_load6'
+                aux_power_166: 'sensor.symcon_wallbox', day_aux_energy: 'sensor.symcon_wallbox_energy',
+                day_pv_energy_108: 'sensor.symcon_pv_energy',
+                day_grid_import_76: 'sensor.symcon_grid_import_energy',
+                day_grid_export_77: 'sensor.symcon_grid_export_energy',
+                day_load_energy_84: 'sensor.symcon_load_energy',
+                day_battery_charge_70: 'sensor.symcon_battery_charge_energy',
+                day_battery_discharge_71: 'sensor.symcon_battery_discharge_energy',
+                day_battery2_charge_70: 'sensor.symcon_battery2_charge_energy',
+                day_battery2_discharge_71: 'sensor.symcon_battery2_discharge_energy',
+                essential_load1: 'sensor.symcon_load1', essential_load1_extra: 'sensor.symcon_load1_daily',
+                essential_load2: 'sensor.symcon_load2', essential_load2_extra: 'sensor.symcon_load2_daily',
+                essential_load3: 'sensor.symcon_load3', essential_load3_extra: 'sensor.symcon_load3_daily',
+                essential_load4: 'sensor.symcon_load4', essential_load4_extra: 'sensor.symcon_load4_daily',
+                essential_load5: 'sensor.symcon_load5', essential_load5_extra: 'sensor.symcon_load5_daily',
+                essential_load6: 'sensor.symcon_load6', essential_load6_extra: 'sensor.symcon_load6_daily',
+                aux_load1: 'sensor.symcon_load7', aux_load1_extra: 'sensor.symcon_load7_daily',
+                aux_load2: 'sensor.symcon_load8', aux_load2_extra: 'sensor.symcon_load8_daily',
+                non_essential_load1: 'sensor.symcon_load9', non_essential_load1_extra: 'sensor.symcon_load9_daily',
+                non_essential_load2: 'sensor.symcon_load10', non_essential_load2_extra: 'sensor.symcon_load10_daily',
+                non_essential_load3: 'sensor.symcon_load11', non_essential_load3_extra: 'sensor.symcon_load11_daily'
             }
         };
     }
@@ -2441,6 +2464,8 @@ class Energiefluss extends IPSModuleStrict
         const bat1 = batteries[0] || { value: 0, soc: 0 };
         const bat2 = batteries[1] || { value: 0, soc: 0 };
         const pvTotal = pvs.reduce((sum, pv) => sum + Number(pv.value || 0), 0);
+        const pvEnergyTotal = pvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
+        const loadEnergyTotal = groups.reduce((sum, group) => sum + Number(group.dailyValue || 0), 0);
         const states = {
             'sensor.symcon_battery_soc': ssState(bat1.soc || 0, '%'),
             'sensor.symcon_battery_power': ssState(-(bat1.value || 0), 'W'),
@@ -2451,11 +2476,23 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_grid_status': { state: 'on-grid', attributes: {} },
             'sensor.symcon_home': ssState(haus || 0, 'W'),
             'sensor.symcon_inverter': ssState(pvTotal, 'W'),
-            'sensor.symcon_wallbox': ssState(wallbox?.value || 0, 'W')
+            'sensor.symcon_wallbox': ssState(wallbox?.value || 0, 'W'),
+            'sensor.symcon_wallbox_energy': ssState(wallbox?.energyValue || 0, 'kWh'),
+            'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
+            'sensor.symcon_grid_import_energy': ssState(d.gridImportEnergyValue || 0, 'kWh'),
+            'sensor.symcon_grid_export_energy': ssState(d.gridExportEnergyValue || 0, 'kWh'),
+            'sensor.symcon_load_energy': ssState(loadEnergyTotal, 'kWh'),
+            'sensor.symcon_battery_charge_energy': ssState(bat1.chargeEnergy || 0, 'kWh'),
+            'sensor.symcon_battery_discharge_energy': ssState(bat1.dischargeEnergy || 0, 'kWh'),
+            'sensor.symcon_battery2_charge_energy': ssState(bat2.chargeEnergy || 0, 'kWh'),
+            'sensor.symcon_battery2_discharge_energy': ssState(bat2.dischargeEnergy || 0, 'kWh')
         };
         for (let i = 0; i < 6; i++) {
             states[`sensor.symcon_pv${i + 1}`] = ssState(pvs[i]?.value || 0, 'W');
+        }
+        for (let i = 0; i < 11; i++) {
             states[`sensor.symcon_load${i + 1}`] = ssState(groups[i]?.value || 0, 'W');
+            states[`sensor.symcon_load${i + 1}_daily`] = ssState(groups[i]?.dailyValue || 0, 'kWh');
         }
         return {
             states,
@@ -3331,6 +3368,8 @@ HTML;
             'name'    => $this->ReadPropertyString('WallboxName'),
             'value'   => $this->ReadVar('WallboxPower'),
             'energy'  => $this->ReadVarFormatted('WallboxEnergy'),
+            'energyValue' => $this->ReadVar('WallboxEnergy'),
+            'hasEnergy' => ($this->ReadPropertyInteger('WallboxEnergy') > 0 && IPS_VariableExists($this->ReadPropertyInteger('WallboxEnergy'))),
             'socText' => $wallboxSoC['socText'],
             'hasSoc'  => $wallboxSoC['hasSoc'],
         ];
@@ -3346,15 +3385,17 @@ HTML;
                     : 0.0;
 
                 $dailyVariableID = (int) ($group['DailyVariableID'] ?? 0);
-                $daily = ($dailyVariableID > 0 && IPS_VariableExists($dailyVariableID))
-                    ? GetValueFormatted($dailyVariableID)
-                    : '';
+                $hasDaily = ($dailyVariableID > 0 && IPS_VariableExists($dailyVariableID));
+                $daily = $hasDaily ? GetValueFormatted($dailyVariableID) : '';
+                $dailyValue = $hasDaily ? (float) GetValue($dailyVariableID) : 0.0;
 
                 $groups[] = [
                     'name'  => (string) ($group['Name'] ?? ''),
                     'icon'  => (string) ($group['Icon'] ?? 'plug'),
                     'value' => $value,
                     'daily' => $daily,
+                    'dailyValue' => $dailyValue,
+                    'hasDaily' => $hasDaily,
                 ];
             }
         }
@@ -3429,6 +3470,10 @@ HTML;
             'grid'             => $grid,
             'gridImportEnergy' => $this->ReadVarFormatted('GridImportEnergy'),
             'gridExportEnergy' => $this->ReadVarFormatted('GridExportEnergy'),
+            'gridImportEnergyValue' => $hasGridImportEnergy ? (float) GetValue($gridImportEnergyID) : 0.0,
+            'gridExportEnergyValue' => $hasGridExportEnergy ? (float) GetValue($gridExportEnergyID) : 0.0,
+            'gridImportEnergyValueAvailable' => $hasGridImportEnergy,
+            'gridExportEnergyValueAvailable' => $hasGridExportEnergy,
             'houseEnergy'       => $houseEnergy,
             'houseEnergyAvailable' => $houseEnergyAvailable,
             'wallbox'          => $wallbox,
