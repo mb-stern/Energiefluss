@@ -2826,7 +2826,7 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot) return;
 
         const colour = AC.room;
-        const textColour = colour;
+        const valueColour = colour;
         const root = card.shadowRoot;
         let style = root.getElementById('symcon-additional-load-colours');
         if (!style) {
@@ -2835,14 +2835,20 @@ class Energiefluss extends IPSModuleStrict
             root.appendChild(style);
         }
 
-        const textSelectors = [];
+        const labelSelectors = [];
+        const valueSelectors = [];
         const iconSelectors = [];
         const iconShapeSelectors = [];
         const lineSelectors = [];
 
         for (let i = 1; i <= 6; i++) {
-            textSelectors.push(
+            // Beschriftung und Wert innerhalb der Verbraucherbox verwenden
+            // dieselbe konfigurierte Farbe. Die Beschriftung bleibt normalgewichtig.
+            labelSelectors.push(
                 `#ess-load${i}`,
+                `[id="ess-load${i}"]`
+            );
+            valueSelectors.push(
                 `#ess_load${i}_value`,
                 `#ess_load${i}_value_extra`,
                 `#ess_load${i}_extra`
@@ -2869,13 +2875,16 @@ class Energiefluss extends IPSModuleStrict
             );
         }
 
-        // Verbraucher-Symbol/Box und Leitung erhalten die konfigurierte
-        // Verbraucherfarbe. Die Schrift im farbigen Feld wird weiß gehalten,
-        // damit die Werte lesbar bleiben und nicht wieder verschwinden.
         style.textContent = `
-            ${textSelectors.join(',')} {
-                color: ${textColour} !important;
-                fill: ${textColour} !important;
+            ${labelSelectors.join(',')} {
+                color: ${colour} !important;
+                fill: ${colour} !important;
+                font-weight: 400 !important;
+            }
+            ${valueSelectors.join(',')},
+            ${valueSelectors.map(selector => selector + ' *').join(',')} {
+                color: ${valueColour} !important;
+                fill: ${valueColour} !important;
             }
             ${iconSelectors.join(',')} {
                 color: ${colour} !important;
@@ -2891,9 +2900,18 @@ class Energiefluss extends IPSModuleStrict
             }
         `;
 
-        root.querySelectorAll(textSelectors.join(',')).forEach(element => {
-            element.style?.setProperty('color', textColour, 'important');
-            element.style?.setProperty('fill', textColour, 'important');
+        root.querySelectorAll(labelSelectors.join(',')).forEach(element => {
+            element.style?.setProperty('color', colour, 'important');
+            element.style?.setProperty('fill', colour, 'important');
+            element.style?.setProperty('font-weight', '400', 'important');
+        });
+        root.querySelectorAll(valueSelectors.join(',')).forEach(element => {
+            element.style?.setProperty('color', valueColour, 'important');
+            element.style?.setProperty('fill', valueColour, 'important');
+            element.querySelectorAll?.('*').forEach(child => {
+                child.style?.setProperty('color', valueColour, 'important');
+                child.style?.setProperty('fill', valueColour, 'important');
+            });
         });
         root.querySelectorAll(iconSelectors.join(',')).forEach(element => {
             element.style?.setProperty('color', colour, 'important');
