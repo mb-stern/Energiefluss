@@ -2460,7 +2460,7 @@ class Energiefluss extends IPSModuleStrict
         const entities = {};
         const addEntity = (key, entity, available = true) => { if (available) entities[key] = entity; };
 
-        addEntity('inverter_power_175', 'sensor.symcon_inverter', entityAvailable(d, 'inverterPower'));
+        addEntity('inverter_power_175', 'sensor.symcon_inverter', entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable);
         // Die Originalkarte verwendet zusätzlich grid_power_169 für die
         // AC-Seite des Wechselrichters. Ohne diesen Wert bleibt die
         // Wechselrichterleistung in einzelnen Ansichten leer.
@@ -2684,39 +2684,101 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
-    async function applySunsynkViewOverrides(card) {
-        // Absichtlich keine geometrischen CSS-Eingriffe mehr: Positionen,
-        // Leitungen und Boxen kommen vollständig aus der Originalkarte.
+    async function applySunsynkViewOverrides(card, d = null) {
+        // Keine Geometrie verändern. Wir korrigieren ausschließlich Werte
+        // und Farben in den bereits von der Originalkarte erzeugten Elementen.
         if (!card) return;
         await card.updateComplete;
+
+        applyAdditionalLoadColours(card);
+        applyInverterPowerDisplay(card, d);
+
+        // Lit rendert bei jeder neuen hass-Zuweisung Teile des Shadow-DOM neu.
+        // Deshalb die rein optischen Korrekturen nach jedem Render erneut anwenden.
+        if (!card.__symconVisualObserver && card.shadowRoot) {
+            let scheduled = false;
+            card.__symconVisualObserver = new MutationObserver(() => {
+                if (scheduled) return;
+                scheduled = true;
+                requestAnimationFrame(() => {
+                    scheduled = false;
+                    applyAdditionalLoadColours(card);
+                    applyInverterPowerDisplay(card, card.__symconLastData || null);
+                });
+            });
+            card.__symconVisualObserver.observe(card.shadowRoot, {
+                childList: true,
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['style', 'class', 'fill', 'stroke']
+            });
+        }
     }
 
+    function applyInverterPowerDisplay(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+        const available = entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable;
+        if (!available) return;
+
+        const value = Number(d.inverterPower || 0);
+        const text = `${Math.round(Number.isFinite(value) ? value : 0).toLocaleString('de-DE')} W`;
+
+        // Die Originalkarte besitzt dieses Text-Element bereits. Bei einigen
+        // Modell-/Layoutkombinationen setzt sie es jedoch fälschlich unsichtbar.
+        const node = card.shadowRoot.getElementById('inverter_power_175')
+            || card.shadowRoot.querySelector('[id="inverter_power_175"]');
+        if (node) {
+            node.style.setProperty('display', '', 'important');
+            node.style.setProperty('visibility', 'visible', 'important');
+            node.style.setProperty('opacity', '1', 'important');
+            node.textContent = text;
+        }
+    }
 
     function applyAdditionalLoadColours(card) {
         if (!card || !card.shadowRoot) return;
 
         const colour = AC.room;
-        const matchesAdditionalLoad = element => {
-            const marker = `${element.id || ''} ${element.getAttribute?.('class') || ''}`;
-            return /(?:essload|essential[_-]?load)[1-6](?!\d)/i.test(marker);
-        };
+        let style = card.shadowRoot.getElementById('symcon-additional-load-colours');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'symcon-additional-load-colours';
+            card.shadowRoot.appendChild(style);
+        }
 
-        card.shadowRoot.querySelectorAll('*').forEach(element => {
-            if (!matchesAdditionalLoad(element)) return;
-            element.style.setProperty('color', colour, 'important');
+        // Die Originalkarte verwendet je nach Layout unterschiedliche Klassen
+        // wie essload1-icon, essload1-small-icon und essload1-icon-full.
+        // Die Hauptlast/Hausanzeige wird ausdrücklich nicht erfasst.
+        const selectors = [];
+        for (let i = 1; i <= 6; i++) {
+            selectors.push(
+                `[class*="essload${i}"]`,
+                `[id*="essload${i}"]`,
+                `[class*="essential-load${i}"]`,
+                `[id*="essential-load${i}"]`,
+                `[class*="essential_load${i}"]`,
+                `[id*="essential_load${i}"]`
+            );
+        }
+        style.textContent = `${selectors.join(',')} { color: ${colour} !important; fill: ${colour} !important; stroke: ${colour} !important; }`;
 
-            // SVG-Linien, Symbole und Beschriftungen der zusätzlichen Lasten.
-            if (element instanceof SVGElement) {
-                const tag = element.tagName.toLowerCase();
-                if (['path', 'line', 'polyline', 'circle', 'rect', 'polygon'].includes(tag)) {
-                    element.style.setProperty('stroke', colour, 'important');
-                    if (tag !== 'line' && tag !== 'polyline') {
-                        element.style.setProperty('fill', colour, 'important');
+        // Inline-Attribute der SVG-Elemente übersteuern, inklusive Kinder der
+        // jeweiligen Lastgruppe. So werden Icon, Text, Kreis und Leitung erfasst.
+        const roots = card.shadowRoot.querySelectorAll(selectors.join(','));
+        roots.forEach(root => {
+            const all = [root, ...root.querySelectorAll('*')];
+            all.forEach(element => {
+                element.style?.setProperty('color', colour, 'important');
+                if (element instanceof SVGElement) {
+                    const tag = element.tagName.toLowerCase();
+                    if (['path', 'line', 'polyline', 'circle', 'rect', 'polygon', 'text', 'tspan'].includes(tag)) {
+                        element.style.setProperty('stroke', colour, 'important');
+                        if (!['line', 'polyline'].includes(tag)) {
+                            element.style.setProperty('fill', colour, 'important');
+                        }
                     }
-                } else if (tag === 'text' || tag === 'tspan') {
-                    element.style.setProperty('fill', colour, 'important');
                 }
-            }
+            });
         });
     }
 
@@ -2749,7 +2811,8 @@ class Energiefluss extends IPSModuleStrict
             );
             host.appendChild(card);
             sunsynkCard = card;
-            await applySunsynkViewOverrides(card, currentTechnicalLayout);
+            card.__symconLastData = d;
+            await applySunsynkViewOverrides(card, d);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
             document.getElementById('sunsynk-loading').style.display = 'none';
             if (sunsynkPending) {
@@ -2782,7 +2845,8 @@ class Energiefluss extends IPSModuleStrict
         window.__symconHasWallbox = !!d.hasWallbox;
         sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
-        applySunsynkViewOverrides(sunsynkCard, currentTechnicalLayout);
+        sunsynkCard.__symconLastData = d;
+        applySunsynkViewOverrides(sunsynkCard, d);
         updateSunsynkWallboxAuxInfo(sunsynkCard, d, wallbox);
     }
 
