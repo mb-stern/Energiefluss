@@ -196,6 +196,18 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
+                                    'caption' => 'Max. Entladezustand (%)',
+                                    'name'    => 'MaxDischargeSoC',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 100,
+                                        'digits'  => 0,
+                                    ],
+                                ],
+                                [
                                     'caption' => 'Entladeenergie (kWh)',
                                     'name'    => 'DischargeEnergyVariableID',
                                     'width'   => '220px',
@@ -2400,13 +2412,21 @@ class Energiefluss extends IPSModuleStrict
                 pv5_name: pvs[4]?.name || 'PV 5', pv6_name: pvs[5]?.name || 'PV 6'
             },
             battery: {
-                count: Math.min(2, Math.max(1, batteries.length)), shutdown_soc: 0, soc_end_of_charge: 100,
+                count: Math.min(2, Math.max(1, batteries.length)),
+                // Die Originalkarte behandelt 0 als "nicht angegeben" und bricht ab.
+                // 0.0001 bleibt für die Validierung gültig, wird bei 0 Dezimalstellen aber als 0 % angezeigt.
+                shutdown_soc: Math.max(0.0001, Math.min(100, Number(batteries[0]?.maxDischargeSoc ?? 0))),
+                soc_end_of_charge: 100,
+                hide_soc: false,
                 colour: AC.discharge, charge_colour: AC.charge, show_daily: showEnergyDetails && batteries.some(b => b.hasChargeEnergy || b.hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 * flowSpeedFactor)), max_power: 10000,
                 auto_scale: false, dynamic_colour: true, linear_gradient: true, animate: true, show_absolute: true
             },
             battery2: {
-                shutdown_soc: 0, soc_end_of_charge: 100, colour: AC.discharge,
+                shutdown_soc: Math.max(0.0001, Math.min(100, Number(batteries[1]?.maxDischargeSoc ?? 0))),
+                soc_end_of_charge: 100,
+                hide_soc: false,
+                colour: AC.discharge,
                 charge_colour: AC.charge, show_absolute: true, auto_scale: false,
                 dynamic_colour: true, linear_gradient: true, animate: true
             },
@@ -3412,6 +3432,10 @@ HTML;
                     'soc'                  => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
                         ? (float) GetValue($socVariableID)
                         : 0.0,
+                    'maxDischargeSoc'      => max(
+                        0,
+                        min(100, (int) ($source['MaxDischargeSoC'] ?? 0))
+                    ),
                     'chargeEnergy'         => $hasChargeEnergy
                         ? (float) GetValue($chargeEnergyVariableID)
                         : 0.0,
