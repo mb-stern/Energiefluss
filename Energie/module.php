@@ -2707,6 +2707,13 @@ class Energiefluss extends IPSModuleStrict
         applyAdditionalLoadColours(card);
         applyInverterPowerDisplay(card, d);
 
+        // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
+        // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
+        // stellen sicher, dass das Leistungsfeld anschließend gesetzt wird.
+        [80, 250, 600].forEach(delay => {
+            setTimeout(() => applyInverterPowerDisplay(card, card.__symconLastData || d), delay);
+        });
+
         // Lit rendert bei jeder neuen hass-Zuweisung Teile des Shadow-DOM neu.
         // Deshalb die rein optischen Korrekturen nach jedem Render erneut anwenden.
         if (!card.__symconVisualObserver && card.shadowRoot) {
@@ -2729,75 +2736,97 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-    function applyInverterPowerDisplay(card, d) {
-        if (!card || !card.shadowRoot || !d) return;
+    function findInOpenShadowRoots(root, selector) {
+        if (!root) return null;
 
-        const available = entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable;
+        const direct = root.querySelector ? root.querySelector(selector) : null;
+        if (direct) return direct;
+
+        const elements = root.querySelectorAll ? root.querySelectorAll('*') : [];
+        for (const element of elements) {
+            if (element.shadowRoot) {
+                const found = findInOpenShadowRoots(element.shadowRoot, selector);
+                if (found) return found;
+            }
+        }
+
+        return null;
+    }
+
+    function applyInverterPowerDisplay(card, d) {
+        if (!card || !d) return;
+
+        // Die Konfiguration liefert zusätzlich das explizite Available-Flag.
+        // Nicht allein auf d.available verlassen, da ältere gespeicherte
+        // Payloads dieses Unterfeld eventuell noch nicht enthalten.
+        const available = entityAvailable(d, 'inverterPower') || d.inverterPowerAvailable === true;
         if (!available) return;
 
-        const value = Number(d.inverterPower || 0);
+        const value = Number(d.inverterPower);
         const text = `${Math.round(Number.isFinite(value) ? value : 0).toLocaleString('de-DE')} W`;
-        const root = card.shadowRoot;
+        const searchRoot = card.shadowRoot || card;
 
-        // Zuerst das originale Leistungsfeld aktualisieren, falls es vorhanden ist.
-        root.querySelectorAll('#inverter_power_175, [id="inverter_power_175"]').forEach(node => {
-            node.removeAttribute('display');
-            node.removeAttribute('visibility');
-            node.removeAttribute('opacity');
-            node.removeAttribute('hidden');
-            node.classList?.remove('st12');
-            node.style?.setProperty('display', 'inline', 'important');
-            node.style?.setProperty('visibility', 'visible', 'important');
-            node.style?.setProperty('opacity', '1', 'important');
-            node.textContent = text;
-        });
+        // Originalfeld über alle offenen Shadow-Roots suchen. Bei mehreren
+        // Layoutvarianten kann das SVG in einem untergeordneten Render-Root liegen.
+        const originalPowerNode = findInOpenShadowRoots(
+            searchRoot,
+            '#inverter_power_175, [id="inverter_power_175"]'
+        );
 
-        // Die Stromwerte sind in der gewünschten Wechselrichterbox bereits sichtbar.
-        // Daher wird die Leistung zuverlässig als eigenes SVG-Textobjekt in genau
-        // denselben Elternknoten eingesetzt. Das ist unabhängig davon, ob das
-        // Upstream-Layout sein originales Leistungsfeld erzeugt oder ausblendet.
-        const currentNode = root.querySelector(
+        if (originalPowerNode) {
+            originalPowerNode.removeAttribute('display');
+            originalPowerNode.removeAttribute('visibility');
+            originalPowerNode.removeAttribute('opacity');
+            originalPowerNode.removeAttribute('hidden');
+            originalPowerNode.classList?.remove('st12');
+            originalPowerNode.style?.setProperty('display', 'inline', 'important');
+            originalPowerNode.style?.setProperty('visibility', 'visible', 'important');
+            originalPowerNode.style?.setProperty('opacity', '1', 'important');
+            originalPowerNode.textContent = text;
+            return;
+        }
+
+        // Fallback: Das sichtbare Amperefeld liegt garantiert in der gewünschten
+        // Wechselrichterbox. Dieses Element wird tief gesucht und als Vorlage
+        // geklont, damit Position, Schrift und SVG-Kontext exakt übereinstimmen.
+        const currentNode = findInOpenShadowRoots(
+            searchRoot,
             '#inverter_current_164, [id="inverter_current_164"]'
         );
         if (!currentNode || !currentNode.parentNode) return;
 
-        let powerNode = root.getElementById('symcon_inverter_power_fixed');
+        let powerNode = currentNode.parentNode.querySelector('#symcon_inverter_power_fixed');
         if (!powerNode) {
-            powerNode = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            powerNode = currentNode.cloneNode(false);
             powerNode.id = 'symcon_inverter_power_fixed';
-
-            // Position, Klassen und Ausrichtung direkt vom sichtbaren Amperefeld übernehmen.
-            for (const attr of ['x', 'text-anchor', 'dominant-baseline', 'transform']) {
-                const v = currentNode.getAttribute(attr);
-                if (v !== null) powerNode.setAttribute(attr, v);
-            }
-            powerNode.setAttribute('class', currentNode.getAttribute('class') || 'st4 st8');
+            powerNode.removeAttribute('hidden');
+            powerNode.classList?.remove('st12');
             currentNode.parentNode.insertBefore(powerNode, currentNode);
         }
 
-        const currentY = Number(currentNode.getAttribute('y'));
-        powerNode.setAttribute('y', Number.isFinite(currentY) ? String(currentY - 14) : '174');
+        // In der Originalkarte liegt die WR-Leistung bei dreiphasiger Anzeige
+        // auf y=174, bei einphasiger Anzeige auf y=178. Damit steht sie direkt
+        // oberhalb der Amperewerte in derselben Box.
+        const hasL2 = entityAvailable(d, 'inverterCurrentL2');
+        const hasL3 = entityAvailable(d, 'inverterCurrentL3');
+        powerNode.setAttribute('x', currentNode.getAttribute('x') || '180.5');
+        powerNode.setAttribute('y', (hasL2 || hasL3) ? '174' : '178');
         powerNode.textContent = text;
         powerNode.removeAttribute('display');
         powerNode.removeAttribute('visibility');
+        powerNode.removeAttribute('opacity');
+        powerNode.removeAttribute('hidden');
         powerNode.classList?.remove('st12');
-        powerNode.style.setProperty('display', 'inline', 'important');
-        powerNode.style.setProperty('visibility', 'visible', 'important');
-        powerNode.style.setProperty('opacity', '1', 'important');
-
-        // Dieselbe Textfarbe wie beim sichtbaren Amperefeld verwenden.
-        const currentColour = getComputedStyle(currentNode).fill || getComputedStyle(currentNode).color;
-        if (currentColour) {
-            powerNode.style.setProperty('fill', currentColour, 'important');
-            powerNode.style.setProperty('color', currentColour, 'important');
-        }
+        powerNode.style?.setProperty('display', 'inline', 'important');
+        powerNode.style?.setProperty('visibility', 'visible', 'important');
+        powerNode.style?.setProperty('opacity', '1', 'important');
     }
 
     function applyAdditionalLoadColours(card) {
         if (!card || !card.shadowRoot) return;
 
         const colour = AC.room;
-        const textColour = '#ffffff';
+        const textColour = colour;
         const root = card.shadowRoot;
         let style = root.getElementById('symcon-additional-load-colours');
         if (!style) {
