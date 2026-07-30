@@ -66,8 +66,11 @@ class Energiefluss extends IPSModuleStrict
         // Animationsgeschwindigkeit: 100 % entspricht dem bisherigen Verhalten.
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
-        // flow = klassische Energieflussansicht, house = Hausansicht.
+        // flow = technische Energieflussansicht, house = Hausansicht.
         $this->RegisterPropertyString('DisplayMode', 'flow');
+
+        // full = alle technischen Details, compact = verdichtete Technikansicht.
+        $this->RegisterPropertyString('TechnicalLayout', 'full');
 
         $this->SetVisualizationType(1);
     }
@@ -115,8 +118,17 @@ class Energiefluss extends IPSModuleStrict
                     'name'    => 'DisplayMode',
                     'caption' => 'Darstellung',
                     'options' => [
-                        ['caption' => 'Energiefluss', 'value' => 'flow'],
+                        ['caption' => 'Technische Energieflussansicht', 'value' => 'flow'],
                         ['caption' => 'Hausansicht', 'value' => 'house'],
+                    ],
+                ],
+                [
+                    'type'    => 'Select',
+                    'name'    => 'TechnicalLayout',
+                    'caption' => 'Technische Ansicht',
+                    'options' => [
+                        ['caption' => 'Komplett – alle Details', 'value' => 'full'],
+                        ['caption' => 'Kompakt – wichtigste Werte', 'value' => 'compact'],
                     ],
                 ],
                 [
@@ -345,6 +357,20 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
+        if ($Ident === 'ToggleTechnicalLayout') {
+            $newLayout = ((string) $Value === 'compact') ? 'compact' : 'full';
+
+            if ($newLayout !== $this->ReadPropertyString('TechnicalLayout')) {
+                IPS_SetProperty($this->InstanceID, 'TechnicalLayout', $newLayout);
+                IPS_ApplyChanges($this->InstanceID);
+                $this->ReloadForm();
+            } else {
+                $this->PushState();
+            }
+
+            return;
+        }
+
         if ($Ident === 'ToggleDisplayMode') {
             $newMode = ((string) $Value === 'house') ? 'house' : 'flow';
 
@@ -476,7 +502,8 @@ class Energiefluss extends IPSModuleStrict
         min-height: 32px;
     }
 
-    #display-mode-button {
+    #display-mode-button,
+    #technical-layout-button {
         appearance: none;
         border: 1px solid var(--w-border);
         border-radius: 7px;
@@ -496,12 +523,14 @@ class Energiefluss extends IPSModuleStrict
         outline: none;
     }
 
-    #display-mode-button:hover {
+    #display-mode-button:hover,
+    #technical-layout-button:hover {
         color: var(--w-text);
         border-color: var(--w-text2);
     }
 
-    #display-mode-button:active {
+    #display-mode-button:active,
+    #technical-layout-button:active {
         transform: translateY(1px);
     }
     #scale-root {
@@ -536,6 +565,7 @@ class Energiefluss extends IPSModuleStrict
     }
     #svg { position: absolute; inset: 0; z-index: 1; }
     #svg #lines line, #svg #lines path { stroke: var(--w-line); }
+    #stage > .node { display: none !important; }
     .node {
         position: absolute;
         transform: translate(-50%, -50%);
@@ -611,6 +641,158 @@ class Energiefluss extends IPSModuleStrict
     #n-haus .body {
         padding-top: 16px;
     }
+
+    /* Neue technische Energieflussansicht. Die Hauptwerte bleiben groß;
+       zusätzliche Informationen stehen in dynamischen Technikfeldern. */
+    #technical-dashboard {
+        position: absolute;
+        inset: 0;
+        z-index: 10;
+        display: grid;
+        grid-template-columns: 1fr 1.15fr 1fr;
+        grid-template-rows: auto 1fr auto;
+        grid-template-areas:
+            "pv summary grid"
+            "pv center grid"
+            "battery consumers wallbox";
+        gap: 10px;
+        padding: 8px;
+        box-sizing: border-box;
+        color: var(--w-text);
+    }
+
+    #technical-dashboard.compact {
+        grid-template-columns: 1fr 1fr;
+        grid-template-rows: auto auto 1fr;
+        grid-template-areas:
+            "summary summary"
+            "pv grid"
+            "battery consumers";
+    }
+
+    .tech-card {
+        min-width: 0;
+        overflow: hidden;
+        border: 1px solid var(--w-border);
+        border-radius: 12px;
+        background: color-mix(in srgb, var(--w-surface) 92%, transparent);
+        box-shadow: 0 4px 14px rgba(0,0,0,.10);
+        padding: 10px 12px;
+        box-sizing: border-box;
+    }
+
+    .tech-card-title {
+        display: flex;
+        align-items: center;
+        gap: 7px;
+        color: var(--w-text2);
+        font-size: 15px;
+        font-weight: 700;
+        margin-bottom: 7px;
+        white-space: nowrap;
+    }
+
+    .tech-main {
+        font-size: 30px;
+        line-height: 1.05;
+        font-weight: 750;
+        white-space: nowrap;
+    }
+
+    .tech-sub {
+        margin-top: 4px;
+        color: var(--w-text2);
+        font-size: 14px;
+        line-height: 1.25;
+    }
+
+    .tech-list { display: grid; gap: 5px; }
+    .tech-row {
+        display: grid;
+        grid-template-columns: minmax(0,1fr) auto;
+        gap: 8px;
+        align-items: baseline;
+        padding: 5px 0;
+        border-top: 1px solid var(--w-border);
+    }
+    .tech-row:first-child { border-top: 0; }
+    .tech-row-name {
+        overflow: hidden;
+        text-overflow: ellipsis;
+        white-space: nowrap;
+        font-size: 14px;
+        font-weight: 650;
+    }
+    .tech-row-value {
+        white-space: nowrap;
+        font-size: 17px;
+        font-weight: 750;
+    }
+    .tech-row-detail {
+        grid-column: 1 / -1;
+        margin-top: -3px;
+        color: var(--w-text2);
+        font-size: 12px;
+        line-height: 1.15;
+    }
+
+    #tech-summary { grid-area: summary; }
+    #tech-pv { grid-area: pv; border-color: color-mix(in srgb, var(--ef-solar) 55%, var(--w-border)); }
+    #tech-grid { grid-area: grid; }
+    #tech-center { grid-area: center; display:flex; flex-direction:column; justify-content:center; align-items:center; text-align:center; }
+    #tech-battery { grid-area: battery; }
+    #tech-consumers { grid-area: consumers; }
+    #tech-wallbox { grid-area: wallbox; }
+
+    .tech-summary-grid {
+        display: grid;
+        grid-template-columns: repeat(4, minmax(0,1fr));
+        gap: 7px;
+    }
+    .tech-summary-cell {
+        min-width: 0;
+        border-left: 3px solid var(--w-border);
+        padding-left: 7px;
+    }
+    .tech-summary-label { color: var(--w-text2); font-size: 11px; white-space: nowrap; }
+    .tech-summary-value { font-size: 18px; font-weight: 750; white-space: nowrap; }
+
+    .tech-flow-hub {
+        width: 150px;
+        height: 150px;
+        border-radius: 50%;
+        border: 7px solid var(--ef-consumer);
+        display:flex;
+        flex-direction:column;
+        justify-content:center;
+        align-items:center;
+        background: var(--w-surface);
+        box-shadow: 0 0 0 6px color-mix(in srgb, var(--w-line) 50%, transparent);
+    }
+    .tech-flow-hub i { font-size: 32px; margin-bottom: 4px; }
+    .tech-flow-hub .tech-main { font-size: 28px; }
+
+    .tech-direction { font-size: 14px; font-weight: 700; margin-top: 5px; }
+    .tech-empty { color: var(--w-text2); font-size: 14px; padding: 8px 0; }
+
+    #technical-dashboard.compact #tech-center,
+    #technical-dashboard.compact #tech-wallbox { display: none !important; }
+    #technical-dashboard.compact .tech-card { padding: 9px 11px; }
+    #technical-dashboard.compact .tech-main { font-size: 27px; }
+    #technical-dashboard.compact .tech-row-value { font-size: 16px; }
+
+    @media (max-width: 600px) {
+        #technical-dashboard { gap: 7px; padding: 5px; }
+        .tech-card { padding: 9px 10px; border-radius: 10px; }
+        .tech-card-title { font-size: 17px; }
+        .tech-main { font-size: 31px; }
+        .tech-row-name { font-size: 16px; }
+        .tech-row-value { font-size: 19px; }
+        .tech-row-detail { font-size: 14px; }
+        .tech-summary-label { font-size: 13px; }
+        .tech-summary-value { font-size: 21px; }
+    }
+
 /* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
@@ -839,7 +1021,8 @@ class Energiefluss extends IPSModuleStrict
             bottom: 0%;
         }
 
-        #display-mode-button {
+        #display-mode-button,
+        #technical-layout-button {
             width: 34px;
             height: 30px;
             padding: 0;
@@ -879,7 +1062,16 @@ class Energiefluss extends IPSModuleStrict
 
                     <!-- Klassische Energieflussansicht -->
                     <div id="stage">
-                        <svg id="svg" width="1080" height="640" viewBox="0 0 1080 640" aria-hidden="true">
+                        <div id="technical-dashboard" class="full">
+                            <section id="tech-summary" class="tech-card"></section>
+                            <section id="tech-pv" class="tech-card"></section>
+                            <section id="tech-grid" class="tech-card"></section>
+                            <section id="tech-center" class="tech-card"></section>
+                            <section id="tech-battery" class="tech-card"></section>
+                            <section id="tech-consumers" class="tech-card"></section>
+                            <section id="tech-wallbox" class="tech-card"></section>
+                        </div>
+                        <svg id="svg" style="display:none" width="1080" height="640" viewBox="0 0 1080 640" aria-hidden="true">
                             <g id="lines" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></g>
                             <g id="ring"></g>
                             <g id="dots"></g>
@@ -931,6 +1123,7 @@ class Energiefluss extends IPSModuleStrict
     </div>
 
     <div id="display-mode-bar">
+        <button id="technical-layout-button" type="button" title="Technikansicht verdichten" aria-label="Technikansicht verdichten">▦</button>
         <button id="display-mode-button" type="button" title="Ansicht wechseln" aria-label="Ansicht wechseln">⇄</button>
     </div>
 </div>
@@ -2088,11 +2281,124 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+
+    function techRow(name, value, detail = '', color = '') {
+        const style = color ? ` style="color:${color}"` : '';
+        return `<div class="tech-row">
+            <div class="tech-row-name">${escapeHtml(name)}</div>
+            <div class="tech-row-value"${style}>${escapeHtml(value)}</div>
+            ${detail ? `<div class="tech-row-detail">${detail}</div>` : ''}
+        </div>`;
+    }
+
+    function escapeHtml(value) {
+        return String(value ?? '')
+            .replaceAll('&', '&amp;')
+            .replaceAll('<', '&lt;')
+            .replaceAll('>', '&gt;')
+            .replaceAll('"', '&quot;')
+            .replaceAll("'", '&#039;');
+    }
+
+    function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
+        const dashboard = document.getElementById('technical-dashboard');
+        if (!dashboard) return;
+
+        const layout = d.technicalLayout === 'compact' ? 'compact' : 'full';
+        dashboard.className = layout;
+
+        const pvTotal = pvs.reduce((sum, pv) => sum + Number(pv.value || 0), 0);
+        const batteryTotal = batteries.reduce((sum, bat) => sum + Number(bat.value || 0), 0);
+        const consumerTotal = groups.reduce((sum, g) => sum + Number(g.value || 0), 0)
+            + (d.hasWallbox ? Math.max(Number(wallbox.value || 0), 0) : 0);
+        const gridColor = grid >= 0 ? AC.import : AC.export;
+        const batteryColor = batteryTotal >= 0 ? AC.discharge : AC.charge;
+
+        const summary = document.getElementById('tech-summary');
+        summary.innerHTML = `<div class="tech-summary-grid">
+            <div class="tech-summary-cell" style="border-color:${AC.solar}"><div class="tech-summary-label">PV</div><div class="tech-summary-value" style="color:${AC.solar}">${fmt(pvTotal)}</div></div>
+            <div class="tech-summary-cell" style="border-color:${AC.home}"><div class="tech-summary-label">Haus</div><div class="tech-summary-value">${fmt(haus)}</div></div>
+            <div class="tech-summary-cell" style="border-color:${gridColor}"><div class="tech-summary-label">Netz</div><div class="tech-summary-value" style="color:${gridColor}">${fmt(Math.abs(grid))}</div></div>
+            <div class="tech-summary-cell" style="border-color:${batteryColor}"><div class="tech-summary-label">Batterie</div><div class="tech-summary-value" style="color:${batteryColor}">${batteries.length ? fmt(Math.abs(batteryTotal)) : '–'}</div></div>
+        </div>`;
+
+        const pvCard = document.getElementById('tech-pv');
+        const pvRows = pvs.map((pv, i) => techRow(
+            pv.name || `PV ${i + 1}`,
+            fmt(pv.value || 0),
+            pv.energy ? escapeHtml(pv.energy) : '',
+            AC.solar
+        )).join('');
+        pvCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-solar-panel"></i> PV-Anlagen</div>
+            <div class="tech-main" style="color:${AC.solar}">${fmt(pvTotal)}</div>
+            <div class="tech-list">${pvRows || '<div class="tech-empty">Keine PV-Anlage konfiguriert</div>'}</div>`;
+
+        const gridCard = document.getElementById('tech-grid');
+        const gridDirection = grid < 0 ? 'Einspeisung ins Netz' : 'Bezug aus dem Netz';
+        const gridEnergy = [
+            d.gridImportEnergy ? `→ ${escapeHtml(d.gridImportEnergy)}` : '',
+            d.gridExportEnergy ? `← ${escapeHtml(d.gridExportEnergy)}` : ''
+        ].filter(Boolean).join('<br>');
+        gridCard.style.borderColor = gridColor;
+        gridCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-bolt"></i> Netz</div>
+            <div class="tech-main" style="color:${gridColor}">${fmt(Math.abs(grid))}</div>
+            <div class="tech-direction" style="color:${gridColor}">${grid < 0 ? '←' : '→'} ${gridDirection}</div>
+            <div class="tech-sub">${gridEnergy}</div>`;
+
+        const center = document.getElementById('tech-center');
+        center.innerHTML = `<div class="tech-flow-hub" style="border-color:${AC.home}">
+            <i class="fa-solid fa-house"></i>
+            <div class="tech-main">${fmt(haus)}</div>
+            <div class="tech-sub">${d.houseEnergyAvailable ? fmtKwh(d.houseEnergy) : 'Hausverbrauch'}</div>
+        </div>`;
+
+        const batteryCard = document.getElementById('tech-battery');
+        const batteryRows = batteries.map((bat, i) => {
+            const details = [
+                `${Math.round(Number(bat.soc || 0))} % SOC`,
+                bat.dischargeEnergyText ? `→ ${escapeHtml(bat.dischargeEnergyText)}` : '',
+                bat.chargeEnergyText ? `← ${escapeHtml(bat.chargeEnergyText)}` : ''
+            ].filter(Boolean).join(' · ');
+            return techRow(bat.name || `Batterie ${i + 1}`, fmt(Math.abs(bat.value || 0)), details,
+                Number(bat.value || 0) >= 0 ? AC.discharge : AC.charge);
+        }).join('');
+        batteryCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-battery-half"></i> Batterie</div>
+            ${batteries.length ? `<div class="tech-main" style="color:${batteryColor}">${fmt(Math.abs(batteryTotal))}</div>` : ''}
+            <div class="tech-list">${batteryRows || '<div class="tech-empty">Keine Batterie konfiguriert</div>'}</div>`;
+
+        const consumerCard = document.getElementById('tech-consumers');
+        const consumerRows = groups.map((g, i) => techRow(
+            g.name || `Verbraucher ${i + 1}`,
+            fmt(g.value || 0),
+            g.daily ? escapeHtml(g.daily) : '',
+            AC.room
+        )).join('');
+        consumerCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-plug"></i> Verbraucher</div>
+            <div class="tech-main" style="color:${AC.room}">${fmt(consumerTotal)}</div>
+            <div class="tech-list">${consumerRows || '<div class="tech-empty">Keine weiteren Verbraucher</div>'}</div>`;
+
+        const wallboxCard = document.getElementById('tech-wallbox');
+        wallboxCard.style.display = d.hasWallbox ? '' : 'none';
+        if (d.hasWallbox) {
+            const wbDetails = [wallbox.hasSoc ? escapeHtml(wallbox.socText) : '', wallbox.energy ? escapeHtml(wallbox.energy) : ''].filter(Boolean).join(' · ');
+            wallboxCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-charging-station"></i> ${escapeHtml(wallbox.name || 'Wallbox')}</div>
+                <div class="tech-main" style="color:${AC.room}">${fmt(Math.max(wallbox.value || 0, 0))}</div>
+                <div class="tech-sub">${wbDetails}</div>`;
+        }
+
+        const layoutButton = document.getElementById('technical-layout-button');
+        if (layoutButton) {
+            layoutButton.textContent = layout === 'full' ? '▦' : '▤';
+            layoutButton.title = layout === 'full' ? 'Kompakte Technikansicht' : 'Vollständige Technikansicht';
+        }
+    }
+
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
         updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
     }
 
     let currentDisplayMode = '__INITIAL_DISPLAY_MODE__';
+    let currentTechnicalLayout = 'full';
 
     function updateDisplayModeButton() {
         const button = document.getElementById('display-mode-button');
@@ -2118,6 +2424,8 @@ class Energiefluss extends IPSModuleStrict
 
         if (stage) stage.style.display = house ? 'none' : 'block';
         if (houseStage) houseStage.style.display = house ? 'block' : 'none';
+        const layoutButton = document.getElementById('technical-layout-button');
+        if (layoutButton) layoutButton.style.display = house ? 'none' : 'inline-flex';
 
         updateDisplayModeButton();
 
@@ -2134,6 +2442,14 @@ class Energiefluss extends IPSModuleStrict
         displayModeButton.addEventListener('click', function () {
             const newMode = currentDisplayMode === 'house' ? 'flow' : 'house';
             requestAction('ToggleDisplayMode', newMode);
+        });
+    }
+
+    const technicalLayoutButton = document.getElementById('technical-layout-button');
+    if (technicalLayoutButton) {
+        technicalLayoutButton.addEventListener('click', function () {
+            const newLayout = currentTechnicalLayout === 'full' ? 'compact' : 'full';
+            requestAction('ToggleTechnicalLayout', newLayout);
         });
     }
 
@@ -2233,7 +2549,11 @@ class Energiefluss extends IPSModuleStrict
         // Netzbezug positiv, Rücklieferung negativ.
         const haus = Math.max(pvTotal + batteryTotal + grid, 0);
 
-        // Klassische Ansicht.
+        // Neue technische Ansicht.
+        currentTechnicalLayout = d.technicalLayout === 'compact' ? 'compact' : 'full';
+        renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups);
+
+        // Alte SVG-Struktur bleibt intern nur für Abwärtskompatibilität erhalten.
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
@@ -2971,6 +3291,7 @@ HTML;
 
         return [
             'displayMode'      => $this->ReadPropertyString('DisplayMode'),
+            'technicalLayout'  => $this->ReadPropertyString('TechnicalLayout'),
             'pvs'              => $pvs,
             'batteries'        => $batteries,
             'grid'             => $grid,
