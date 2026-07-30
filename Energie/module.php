@@ -32,13 +32,17 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyBoolean('InvertGridPower', false);
         $this->RegisterPropertyInteger('GridImportEnergy', 0);
         $this->RegisterPropertyInteger('GridExportEnergy', 0);
-        $this->RegisterPropertyInteger('GridVoltage', 0);
-        $this->RegisterPropertyInteger('GridCurrent', 0);
+        $this->RegisterPropertyInteger('GridPhaseL1', 0);
+        $this->RegisterPropertyInteger('GridPhaseL2', 0);
+        $this->RegisterPropertyInteger('GridPhaseL3', 0);
         $this->RegisterPropertyInteger('GridFrequency', 0);
         $this->RegisterPropertyInteger('GridConnectedStatus', 0);
 
         // Wechselrichter-Messwerte für die originale Sunsynk-Anzeige.
         $this->RegisterPropertyInteger('InverterPower', 0);
+        $this->RegisterPropertyInteger('HousePower', 0);
+        // Alte Eigenschaften bleiben zur Abwärtskompatibilität registriert,
+        // werden in der neuen Sunsynk-Konfiguration aber nicht mehr angezeigt.
         $this->RegisterPropertyInteger('InverterVoltage', 0);
         $this->RegisterPropertyInteger('InverterCurrent', 0);
         $this->RegisterPropertyInteger('InverterFrequency', 0);
@@ -255,19 +259,17 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'GridExportPower', 'caption' => 'Rücklieferung Leistung (W, optional)'],
                         ['type' => 'SelectVariable', 'name' => 'GridImportEnergy', 'caption' => 'Netzbezug gesamt (kWh)'],
                         ['type' => 'SelectVariable', 'name' => 'GridExportEnergy', 'caption' => 'Rücklieferung / Einspeisung gesamt (kWh)'],
-                        ['type' => 'Label', 'caption' => 'Smartmeter / Netz-Messwerte (optional)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridVoltage', 'caption' => 'Smartmeter Spannung (V)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridCurrent', 'caption' => 'Smartmeter Strom (A)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridFrequency', 'caption' => 'Smartmeter Frequenz (Hz)'],
+                        ['type' => 'Label', 'caption' => 'Smartmeter / dreiphasiges Netz (optional)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridPhaseL1', 'caption' => 'Phase L1 Leistung (W)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridPhaseL2', 'caption' => 'Phase L2 Leistung (W)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridPhaseL3', 'caption' => 'Phase L3 Leistung (W)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridFrequency', 'caption' => 'Netzfrequenz (Hz)'],
                         ['type' => 'SelectVariable', 'name' => 'GridConnectedStatus', 'caption' => 'Netz verbunden / Status'],
-                        ['type' => 'Label', 'caption' => 'Wechselrichter-Messwerte (optional)'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterPower', 'caption' => 'Wechselrichterleistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterVoltage', 'caption' => 'Wechselrichter Spannung (V)'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterCurrent', 'caption' => 'Wechselrichter Strom (A)'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterFrequency', 'caption' => 'Wechselrichter Frequenz (Hz)'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterTemperature', 'caption' => 'Wechselrichter Temperatur (°C)'],
+                        ['type' => 'Label', 'caption' => 'Wechselrichter und Haus'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterPower', 'caption' => 'Wechselrichterleistung (W, optional)'],
+                        ['type' => 'SelectVariable', 'name' => 'HousePower', 'caption' => 'Hausverbrauch (W, optional; sonst berechnet)'],
 
-                        ['type' => 'Label', 'caption' => 'Wallbox'],
+                        ['type' => 'Label', 'caption' => 'Wallbox als AUX-Verbraucher'],
                         ['type' => 'ValidationTextBox', 'name' => 'WallboxName', 'caption' => 'Name'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxPower', 'caption' => 'Ladeleistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxEnergy', 'caption' => 'Ladeenergie (optional)'],
@@ -331,7 +333,6 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorGridExport', 'caption' => 'Netzeinspeisung', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryCharge', 'caption' => 'Batterie laden', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
-                        ['type' => 'SelectColor', 'name' => 'ColorInverter', 'caption' => 'Wechselrichter (technische Ansicht)', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorHouseLoad', 'caption' => 'Hausverbrauch', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorWallbox', 'caption' => 'Wallbox', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Weitere Verbraucher', 'allowTransparent' => false],
@@ -2410,73 +2411,144 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
+    function entityAvailable(d, key) {
+        return !!d?.available?.[key];
+    }
+
     function createSunsynkConfig(d, pvs, batteries, wallbox, groups) {
-        const requestedLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(currentTechnicalLayout) ? currentTechnicalLayout : 'lite';
+        const requestedLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(currentTechnicalLayout)
+            ? currentTechnicalLayout
+            : 'lite';
         const wide = requestedLayout.endsWith('-wide');
         const style = requestedLayout.replace('-wide', '');
-        const compact = style === 'compact';
         const full = style === 'full';
-        const pvCount = Math.max(1, Math.min(6, pvs.length || 1));
-        // Die Wallbox wird als eigener AUX-Zweig dargestellt und gehört
-        // deshalb nicht mehr zu den nachgeschalteten Hausverbrauchern.
-        const essentialLoads = [];
-        groups.forEach(group => essentialLoads.push({...group, icon: group.icon || 'mdi:power-plug', isWallbox: false}));
-        const shownLoads = essentialLoads.slice(0, full ? 6 : 3);
-        const essentialCount = shownLoads.length;
-        const showEnergyDetails = !compact;
-        return {
+        const showEnergyDetails = style !== 'compact';
+
+        const activePvs = pvs.filter(pv => pv.hasPower);
+        const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
+        const activeGroups = groups.filter(g => g.hasPower).slice(0, full ? 6 : 3);
+        const hasGrid = entityAvailable(d, 'gridPower');
+        const hasWallbox = !!d.hasWallbox;
+        const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3');
+
+        const entities = {};
+        const addEntity = (key, entity, available = true) => { if (available) entities[key] = entity; };
+
+        addEntity('inverter_power_175', 'sensor.symcon_inverter', entityAvailable(d, 'inverterPower'));
+        addEntity('essential_power', 'sensor.symcon_home', true);
+
+        addEntity('grid_ct_power_172', 'sensor.symcon_grid', hasGrid);
+        addEntity('grid_ct_power_total', 'sensor.symcon_grid_total', hasGrid && threePhase);
+        addEntity('grid_ct_power_L2', 'sensor.symcon_grid_l2', entityAvailable(d, 'gridPhaseL2'));
+        addEntity('grid_ct_power_L3', 'sensor.symcon_grid_l3', entityAvailable(d, 'gridPhaseL3'));
+        addEntity('grid_connected_status_194', 'sensor.symcon_grid_status', entityAvailable(d, 'gridStatus'));
+        addEntity('load_frequency_192', 'sensor.symcon_grid_frequency', entityAvailable(d, 'gridFrequency'));
+
+        activePvs.forEach((pv, i) => addEntity(i < 4 ? `pv${i + 1}_power_${186 + i}` : `pv${i + 1}_power`, `sensor.symcon_pv${i + 1}`));
+        if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+
+        if (activeBatteries[0]) {
+            addEntity('battery_soc_184', 'sensor.symcon_battery_soc', activeBatteries[0].hasSoc);
+            addEntity('battery_power_190', 'sensor.symcon_battery_power', activeBatteries[0].hasPower);
+            addEntity('day_battery_charge_70', 'sensor.symcon_battery_charge_energy', activeBatteries[0].hasChargeEnergy);
+            addEntity('day_battery_discharge_71', 'sensor.symcon_battery_discharge_energy', activeBatteries[0].hasDischargeEnergy);
+        }
+        if (activeBatteries[1]) {
+            addEntity('battery2_soc_184', 'sensor.symcon_battery2_soc', activeBatteries[1].hasSoc);
+            addEntity('battery2_power_190', 'sensor.symcon_battery2_power', activeBatteries[1].hasPower);
+            addEntity('day_battery2_charge_70', 'sensor.symcon_battery2_charge_energy', activeBatteries[1].hasChargeEnergy);
+            addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
+        }
+
+        if (hasWallbox) {
+            addEntity('aux_power_166', 'sensor.symcon_wallbox');
+            addEntity('day_aux_energy', 'sensor.symcon_wallbox_energy', wallbox.hasEnergy);
+        }
+
+        activeGroups.forEach((group, i) => {
+            addEntity(`essential_load${i + 1}`, `sensor.symcon_branch${i + 1}`);
+            addEntity(`essential_load${i + 1}_extra`, `sensor.symcon_branch${i + 1}_daily`, group.hasDaily);
+        });
+        addEntity('day_grid_import_76', 'sensor.symcon_grid_import_energy', d.gridImportEnergyValueAvailable);
+        addEntity('day_grid_export_77', 'sensor.symcon_grid_export_energy', d.gridExportEnergyValueAvailable);
+        addEntity('day_load_energy_84', 'sensor.symcon_load_energy', d.houseEnergyAvailable);
+
+        const cfg = {
             cardstyle: style,
-            wide: wide,
+            wide,
             large_font: true,
-            show_solar: pvs.length > 0,
-            show_battery: batteries.length > 0,
-            show_grid: true,
+            show_solar: activePvs.length > 0,
+            show_battery: activeBatteries.length > 0,
+            show_grid: hasGrid,
+            center_no_grid: !hasGrid,
             decimal_places: 0,
             decimal_places_energy: 2,
             dynamic_line_width: true,
             max_line_width: 5,
             min_line_width: 2,
-            inverter: { modern: true, model: 'goodwe', colour: AC.inverter, autarky: 'power', auto_scale: false, label_autarky: 'Autarkie', label_ratio: 'Eigenverbrauch' },
+            inverter: {
+                modern: true,
+                model: 'goodwe',
+                colour: d.houseColors?.inverter || '#0d151c',
+                autarky: 'power',
+                auto_scale: false,
+                three_phase: threePhase,
+                label_autarky: 'Autarkie',
+                label_ratio: 'Eigenverbrauch'
+            },
             solar: {
-                colour: AC.solar, show_daily: showEnergyDetails && pvs.some(pv => pv.hasEnergy), mppts: pvCount,
-                animation_speed: Math.max(1, Math.round(9 / flowSpeedFactor)), max_power: 12000,
-                auto_scale: false, display_mode: 1,
-                pv1_name: pvs[0]?.name || 'PV 1', pv2_name: pvs[1]?.name || 'PV 2',
-                pv3_name: pvs[2]?.name || 'PV 3', pv4_name: pvs[3]?.name || 'PV 4',
-                pv5_name: pvs[4]?.name || 'PV 5', pv6_name: pvs[5]?.name || 'PV 6'
+                colour: AC.solar,
+                show_daily: showEnergyDetails && activePvs.some(pv => pv.hasEnergy),
+                mppts: Math.max(1, Math.min(6, activePvs.length || 1)),
+                animation_speed: Math.max(1, Math.round(9 / flowSpeedFactor)),
+                max_power: 12000,
+                auto_scale: false,
+                display_mode: 1,
+                pv1_name: activePvs[0]?.name || 'PV 1', pv2_name: activePvs[1]?.name || 'PV 2',
+                pv3_name: activePvs[2]?.name || 'PV 3', pv4_name: activePvs[3]?.name || 'PV 4',
+                pv5_name: activePvs[4]?.name || 'PV 5', pv6_name: activePvs[5]?.name || 'PV 6'
             },
             battery: {
-                count: Math.min(2, Math.max(1, batteries.length)),
-                // Als Zeichenkette bleibt 0 für die Original-Validierung vorhanden,
-                // wird numerisch aber weiterhin als 0 % verarbeitet.
-                shutdown_soc: Number(batteries[0]?.maxDischargeSoc ?? 0) === 0
-                    ? '0'
-                    : Math.max(0, Math.min(100, Math.round(Number(batteries[0]?.maxDischargeSoc ?? 0)))),
+                count: Math.min(2, Math.max(1, activeBatteries.length)),
+                shutdown_soc: Number(activeBatteries[0]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[0]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                soc_decimal_places: 0,
-                colour: AC.discharge, charge_colour: AC.charge, show_daily: showEnergyDetails && batteries.some(b => b.hasChargeEnergy || b.hasDischargeEnergy),
-                animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)), max_power: 10000,
-                auto_scale: false, dynamic_colour: true, linear_gradient: true, animate: true, show_absolute: true,
-                invert_power: false, invert_flow: false
+                colour: AC.discharge,
+                charge_colour: AC.charge,
+                show_daily: showEnergyDetails && !!activeBatteries[0] && (activeBatteries[0].hasChargeEnergy || activeBatteries[0].hasDischargeEnergy),
+                animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
+                max_power: 10000,
+                auto_scale: false,
+                dynamic_colour: true,
+                linear_gradient: true,
+                animate: true,
+                show_absolute: true,
+                invert_power: !!activeBatteries[0]?.invertFlow,
+                invert_flow: false
             },
             battery2: {
-                shutdown_soc: Number(batteries[1]?.maxDischargeSoc ?? 0) === 0
-                    ? '0'
-                    : Math.max(0, Math.min(100, Math.round(Number(batteries[1]?.maxDischargeSoc ?? 0)))),
+                shutdown_soc: Number(activeBatteries[1]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[1]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                soc_decimal_places: 0,
                 colour: AC.discharge,
-                charge_colour: AC.charge, show_absolute: true, auto_scale: false,
-                dynamic_colour: true, linear_gradient: true, animate: true,
-                invert_power: false, invert_flow: false
+                charge_colour: AC.charge,
+                show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
+                show_absolute: true,
+                auto_scale: false,
+                dynamic_colour: true,
+                linear_gradient: true,
+                animate: true,
+                invert_power: !!activeBatteries[1]?.invertFlow,
+                invert_flow: false
             },
             load: {
-                colour: AC.room, off_colour: '#9e9e9e', dynamic_colour: false, dynamic_icon: false,
-                show_daily: showEnergyDetails && groups.some(g => g.hasDaily),
-                show_aux: !!d.hasWallbox,
-                show_daily_aux: showEnergyDetails && !!wallbox?.hasEnergy,
+                colour: AC.home,
+                off_colour: '#9e9e9e',
+                dynamic_colour: false,
+                dynamic_icon: false,
+                show_daily: showEnergyDetails && d.houseEnergyAvailable,
+                show_aux: hasWallbox,
+                show_daily_aux: showEnergyDetails && hasWallbox && wallbox.hasEnergy,
                 aux_name: wallbox?.name || 'Wallbox',
                 aux_daily_name: 'Ladeenergie',
                 aux_type: 'default',
@@ -2485,97 +2557,75 @@ class Energiefluss extends IPSModuleStrict
                 aux_dynamic_colour: false,
                 show_absolute_aux: true,
                 invert_aux: false,
-                animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)), max_power: 12000,
-                auto_scale: false, additional_loads: essentialCount, aux_loads: 0,
+                animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
+                max_power: 12000,
+                auto_scale: false,
+                additional_loads: activeGroups.length,
+                aux_loads: 0,
                 essential_name: 'Hausverbrauch',
-                load1_name: shownLoads[0]?.name || '', load2_name: shownLoads[1]?.name || '',
-                load3_name: shownLoads[2]?.name || '', load4_name: shownLoads[3]?.name || '',
-                load5_name: shownLoads[4]?.name || '', load6_name: shownLoads[5]?.name || '',
-                load1_icon: shownLoads[0]?.icon || 'mdi:power-plug', load2_icon: shownLoads[1]?.icon || 'mdi:power-plug',
-                load3_icon: shownLoads[2]?.icon || 'mdi:power-plug', load4_icon: shownLoads[3]?.icon || 'mdi:power-plug',
-                load5_icon: shownLoads[4]?.icon || 'mdi:power-plug', load6_icon: shownLoads[5]?.icon || 'mdi:power-plug'
+                load1_name: activeGroups[0]?.name || '', load2_name: activeGroups[1]?.name || '',
+                load3_name: activeGroups[2]?.name || '', load4_name: activeGroups[3]?.name || '',
+                load5_name: activeGroups[4]?.name || '', load6_name: activeGroups[5]?.name || '',
+                load1_icon: activeGroups[0]?.icon || 'mdi:power-plug', load2_icon: activeGroups[1]?.icon || 'mdi:power-plug',
+                load3_icon: activeGroups[2]?.icon || 'mdi:power-plug', load4_icon: activeGroups[3]?.icon || 'mdi:power-plug',
+                load5_icon: activeGroups[4]?.icon || 'mdi:power-plug', load6_icon: activeGroups[5]?.icon || 'mdi:power-plug'
             },
             grid: {
-                colour: AC.import, export_colour: AC.export, grid_name: 'Netz',
-                show_daily_buy: showEnergyDetails && !!d.gridImportEnergyValueAvailable, show_daily_sell: showEnergyDetails && !!d.gridExportEnergyValueAvailable,
-                show_nonessential: false, additional_loads: 0,
-                animation_speed: Math.max(1, Math.round(8 / flowSpeedFactor)), max_power: 12000,
-                auto_scale: false, show_absolute: true
+                colour: AC.import,
+                export_colour: AC.export,
+                grid_name: 'Netz',
+                show_daily_buy: showEnergyDetails && d.gridImportEnergyValueAvailable,
+                show_daily_sell: showEnergyDetails && d.gridExportEnergyValueAvailable,
+                show_nonessential: false,
+                additional_loads: 0,
+                animation_speed: Math.max(1, Math.round(8 / flowSpeedFactor)),
+                max_power: 12000,
+                auto_scale: false,
+                show_absolute: true,
+                invert_grid: false,
+                invert_flow: false
             },
-            entities: {
-                battery_soc_184: 'sensor.symcon_battery_soc', battery_power_190: 'sensor.symcon_battery_power',
-                battery_current_191: 'sensor.symcon_battery_current', battery2_soc_184: 'sensor.symcon_battery2_soc',
-                battery2_power_190: 'sensor.symcon_battery2_power', pv1_power_186: 'sensor.symcon_pv1',
-                pv2_power_187: 'sensor.symcon_pv2', pv3_power_188: 'sensor.symcon_pv3',
-                pv4_power_189: 'sensor.symcon_pv4', pv5_power: 'sensor.symcon_pv5', pv6_power: 'sensor.symcon_pv6',
-                grid_ct_power_172: 'sensor.symcon_grid', grid_connected_status_194: 'sensor.symcon_grid_status',
-                grid_voltage: 'sensor.symcon_grid_voltage', grid_current: 'sensor.symcon_grid_current',
-                grid_frequency: 'sensor.symcon_grid_frequency',
-                essential_power: 'sensor.symcon_home', inverter_power_175: 'sensor.symcon_inverter',
-                inverter_voltage_154: 'sensor.symcon_inverter_voltage', inverter_current_164: 'sensor.symcon_inverter_current',
-                load_frequency_192: 'sensor.symcon_inverter_frequency', inverter_temp_91: 'sensor.symcon_inverter_temperature',
-                aux_power_166: 'sensor.symcon_wallbox', day_aux_energy: 'sensor.symcon_wallbox_energy',
-                day_pv_energy_108: 'sensor.symcon_pv_energy',
-                day_grid_import_76: 'sensor.symcon_grid_import_energy',
-                day_grid_export_77: 'sensor.symcon_grid_export_energy',
-                day_load_energy_84: 'sensor.symcon_load_energy',
-                day_battery_charge_70: 'sensor.symcon_battery_charge_energy',
-                day_battery_discharge_71: 'sensor.symcon_battery_discharge_energy',
-                day_battery2_charge_70: 'sensor.symcon_battery2_charge_energy',
-                day_battery2_discharge_71: 'sensor.symcon_battery2_discharge_energy',
-                essential_load1: 'sensor.symcon_branch1', essential_load1_extra: 'sensor.symcon_branch1_daily',
-                essential_load2: 'sensor.symcon_branch2', essential_load2_extra: 'sensor.symcon_branch2_daily',
-                essential_load3: 'sensor.symcon_branch3', essential_load3_extra: 'sensor.symcon_branch3_daily',
-                essential_load4: 'sensor.symcon_branch4', essential_load4_extra: 'sensor.symcon_branch4_daily',
-                essential_load5: 'sensor.symcon_branch5', essential_load5_extra: 'sensor.symcon_branch5_daily',
-                essential_load6: 'sensor.symcon_branch6', essential_load6_extra: 'sensor.symcon_branch6_daily'
-            }
+            entities
         };
+        return cfg;
     }
 
     function createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups) {
-        const bat1 = batteries[0] || { value: 0, soc: 0 };
-        const bat2 = batteries[1] || { value: 0, soc: 0 };
-        const pvTotal = pvs.reduce((sum, pv) => sum + Number(pv.value || 0), 0);
-        const pvEnergyTotal = pvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
-        const loadEnergyTotal = groups.reduce((sum, group) => sum + Number(group.dailyValue || 0), 0);
+        const activePvs = pvs.filter(pv => pv.hasPower);
+        const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
+        const activeGroups = groups.filter(g => g.hasPower).slice(0, currentTechnicalLayout.startsWith('full') ? 6 : 3);
+        const bat1 = activeBatteries[0] || {};
+        const bat2 = activeBatteries[1] || {};
+        const pvEnergyTotal = activePvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
         const states = {
-            'sensor.symcon_battery_soc': ssState(bat1.soc || 0, '%'),
-            'sensor.symcon_battery_power': ssState((bat1.value || 0), 'W'),
-            'sensor.symcon_battery_current': ssState(0, 'A'),
-            'sensor.symcon_battery2_soc': ssState(bat2.soc || 0, '%'),
-            'sensor.symcon_battery2_power': ssState((bat2.value || 0), 'W'),
-            'sensor.symcon_grid': ssState(grid || 0, 'W'),
+            'sensor.symcon_grid': ssState(d.gridPhaseL1Available ? d.gridPhaseL1 : grid, 'W'),
+            'sensor.symcon_grid_total': ssState(grid, 'W'),
+            'sensor.symcon_grid_l2': ssState(d.gridPhaseL2 || 0, 'W'),
+            'sensor.symcon_grid_l3': ssState(d.gridPhaseL3 || 0, 'W'),
             'sensor.symcon_grid_status': { state: String(d.gridConnectedStatus ?? 'on-grid'), attributes: {} },
-            'sensor.symcon_grid_voltage': ssState(d.gridVoltage || 0, 'V'),
-            'sensor.symcon_grid_current': ssState(d.gridCurrent || 0, 'A'),
             'sensor.symcon_grid_frequency': ssState(d.gridFrequency || 0, 'Hz'),
             'sensor.symcon_home': ssState(haus || 0, 'W'),
-            'sensor.symcon_inverter': ssState(d.inverterPowerAvailable ? d.inverterPower : pvTotal, 'W'),
-            'sensor.symcon_inverter_voltage': ssState(d.inverterVoltage || 0, 'V'),
-            'sensor.symcon_inverter_current': ssState(d.inverterCurrent || 0, 'A'),
-            'sensor.symcon_inverter_frequency': ssState(d.inverterFrequency || 0, 'Hz'),
-            'sensor.symcon_inverter_temperature': ssState(d.inverterTemperature || 0, '°C'),
+            'sensor.symcon_inverter': ssState(d.inverterPower || 0, 'W'),
             'sensor.symcon_wallbox': ssState(wallbox?.value || 0, 'W'),
             'sensor.symcon_wallbox_energy': ssState(wallbox?.energyValue || 0, 'kWh'),
             'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
             'sensor.symcon_grid_import_energy': ssState(d.gridImportEnergyValue || 0, 'kWh'),
             'sensor.symcon_grid_export_energy': ssState(d.gridExportEnergyValue || 0, 'kWh'),
-            'sensor.symcon_load_energy': ssState(loadEnergyTotal, 'kWh'),
+            'sensor.symcon_load_energy': ssState(d.houseEnergy || 0, 'kWh'),
+            'sensor.symcon_battery_soc': ssState(Math.round(Number(bat1.soc || 0)), '%'),
+            'sensor.symcon_battery_power': ssState(Number(bat1.value || 0), 'W'),
+            'sensor.symcon_battery2_soc': ssState(Math.round(Number(bat2.soc || 0)), '%'),
+            'sensor.symcon_battery2_power': ssState(Number(bat2.value || 0), 'W'),
             'sensor.symcon_battery_charge_energy': ssState(bat1.chargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery_discharge_energy': ssState(bat1.dischargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery2_charge_energy': ssState(bat2.chargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery2_discharge_energy': ssState(bat2.dischargeEnergy || 0, 'kWh')
         };
-        for (let i = 0; i < 6; i++) {
-            states[`sensor.symcon_pv${i + 1}`] = ssState(pvs[i]?.value || 0, 'W');
-        }
-        const branchLoads = [];
-        groups.forEach(group => branchLoads.push(group));
-        for (let i = 0; i < 6; i++) {
-            states[`sensor.symcon_branch${i + 1}`] = ssState(branchLoads[i]?.value || 0, 'W');
-            states[`sensor.symcon_branch${i + 1}_daily`] = ssState(branchLoads[i]?.dailyValue || 0, 'kWh');
-        }
+        activePvs.forEach((pv, i) => states[`sensor.symcon_pv${i + 1}`] = ssState(pv.value || 0, 'W'));
+        activeGroups.forEach((group, i) => {
+            states[`sensor.symcon_branch${i + 1}`] = ssState(group.value || 0, 'W');
+            states[`sensor.symcon_branch${i + 1}_daily`] = ssState(group.dailyValue || 0, 'kWh');
+        });
         return {
             states,
             locale: { language: 'de', number_format: 'comma_decimal' },
@@ -2588,181 +2638,17 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
-    async function applySunsynkViewOverrides(card, styleName) {
-        const compact = styleName === 'compact';
+    async function applySunsynkViewOverrides(card) {
+        // Absichtlich keine geometrischen CSS-Eingriffe mehr: Positionen,
+        // Leitungen und Boxen kommen vollständig aus der Originalkarte.
         if (!card) return;
-
-        try {
-            if (card.updateComplete) {
-                await card.updateComplete;
-            }
-            await new Promise(resolve => requestAnimationFrame(resolve));
-        } catch (_) {}
-
-        const root = card.shadowRoot;
-        if (!root) return;
-
-        let style = root.getElementById('symcon-sunsynk-overrides');
-        if (!style) {
-            style = document.createElement('style');
-            style.id = 'symcon-sunsynk-overrides';
-            root.appendChild(style);
-        }
-
-        style.textContent = `
-            :host {
-                width: 100% !important;
-                height: 100% !important;
-            }
-
-            .card,
-            ha-card {
-                width: 100% !important;
-                height: 100% !important;
-                max-width: none !important;
-                background: transparent !important;
-                box-shadow: none !important;
-                border: 0 !important;
-            }
-
-            /* Alle Leistungswerte und Beschriftungen besser lesbar. */
-            .st3 { font-size: ${compact ? 13 : 11}px !important; }
-            .st4 { font-size: ${compact ? 18 : 16}px !important; }
-            .st10 { font-size: ${compact ? 21 : 18}px !important; }
-            .st13 { font-size: ${compact ? 29 : 25}px !important; }
-            .st14 { font-size: ${compact ? 17 : 14}px !important; }
-            .remaining-energy { font-size: ${compact ? 13 : 10}px !important; }
-
-            /* Der mittlere/rechte Hauptwert ist der gesamte Hausverbrauch. */
-            text[id*="essential_power"],
-            [data-entity*="essential_power"] text {
-                font-size: ${compact ? 25 : 21}px !important;
-                font-weight: 700 !important;
-            }
-
-            /* In Kompakt keine versteckten Zusatzlasten oder kWh-Blöcke
-               durch nachträgliches Rendern wieder sichtbar werden lassen. */
-            ${compact ? `
-                [class*="additional-load"],
-                [class*="aux-load"],
-                [class*="nonessential-load"],
-                [class*="non-essential-load"] {
-                    display: none !important;
-                }
-            ` : ''}
-
-            /* Wechselrichter bleibt unabhängig vom Hausverbrauch. */
-            #inverter, [id*="inverter"], [class*="inverter"] {
-                color: ${AC.inverter} !important;
-            }
-            #inverter path, #inverter line, #inverter polyline,
-            [id*="inverter"] path, [id*="inverter"] line, [id*="inverter"] polyline {
-                fill: ${AC.inverter} !important;
-                stroke: ${AC.inverter} !important;
-            }
-
-            /* Zusätzliche Hauszweige: normale Verbraucher in der
-               konfigurierten Verbraucherfarbe. */
-            .essload1-icon, .essload1-icon-full, .essload1-small-icon,
-            .essload2-icon, .essload2-small-icon,
-            .essload3-icon, .essload3-small-icon,
-            .essload4-small-icon, .essload5-small-icon, .essload6-small-icon,
-            [class*="essload"][class*="icon"],
-            [id*="essential_load"], [id*="essload"],
-            [class*="essential-load"], [class*="essload"] {
-                color: ${AC.room} !important;
-                fill: ${AC.room} !important;
-                stroke: ${AC.room} !important;
-            }
-
-            /* Eigener AUX-Zweig der Wallbox. */
-            .aux-icon, .aux-off-icon, [class*="aux-icon"],
-            [id*="aux_power"], [id*="aux-line"], [id*="aux_line"],
-            [class*="aux-line"], [class*="aux_line"],
-            [class*="aux"] path, [class*="aux"] line, [class*="aux"] polyline {
-                color: ${AC.wallbox} !important;
-                fill: ${AC.wallbox} !important;
-                stroke: ${AC.wallbox} !important;
-            }
-        `;
-
-        // Die Originalkarte gibt shutdown_soc bei einem Ersatzwert von
-        // 0.0001 mit mehreren Dezimalstellen aus. Alle Prozentanzeigen werden
-        // daher nach jedem Renderzyklus auf ganze Prozent gerundet.
-        const roundPercentTexts = () => {
-            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
-            const nodes = [];
-            while (walker.nextNode()) nodes.push(walker.currentNode);
-            nodes.forEach(node => {
-                const text = node.nodeValue || '';
-                const rounded = text.replace(/(-?\d+(?:[.,]\d+)?)\s*%/g, (_, raw) => {
-                    const value = Number(String(raw).replace(',', '.'));
-                    return Number.isFinite(value) ? `${Math.round(value)} %` : _;
-                });
-                if (rounded !== text) node.nodeValue = rounded;
-            });
-        };
-        roundPercentTexts();
-        requestAnimationFrame(roundPercentTexts);
-        setTimeout(roundPercentTexts, 100);
-
-        // Die Karte aktualisiert Teile des SVG nachträglich. Der Observer hält
-        // deshalb auch spätere SOC-/Entladegrenzen konsequent bei 0 Dezimalstellen.
-        if (card.__symconPercentObserver) {
-            card.__symconPercentObserver.disconnect();
-        }
-        card.__symconPercentObserver = new MutationObserver(() => roundPercentTexts());
-        card.__symconPercentObserver.observe(root, {
-            subtree: true,
-            childList: true,
-            characterData: true
-        });
+        await card.updateComplete;
     }
 
-    function updateSunsynkWallboxAuxInfo(card, d, wallbox) {
-        if (!card || !card.shadowRoot) return;
-
-        const root = card.shadowRoot;
-        let info = root.getElementById('symcon-wallbox-aux-info');
-
-        if (!d.hasWallbox) {
-            if (info) info.remove();
-            return;
-        }
-
-        if (!info) {
-            info = document.createElement('div');
-            info.id = 'symcon-wallbox-aux-info';
-            root.appendChild(info);
-        }
-
-        const compact = currentTechnicalLayout.replace('-wide', '') === 'compact';
-        const soc = wallbox?.hasSoc ? String(wallbox.socText || '') : '';
-        const energy = wallbox?.hasEnergy ? fmtKwh(wallbox.energyValue || 0) : '';
-        const details = [soc, energy].filter(Boolean).join(' · ');
-
-        const wide = currentTechnicalLayout.endsWith('-wide');
-        const full = currentTechnicalLayout.replace('-wide', '') === 'full';
-        info.style.cssText = `
-            position:absolute;
-            z-index:20;
-            left:${wide ? '77%' : (full ? '73%' : '72%')};
-            top:${wide ? '9%' : (compact ? '12%' : '10%')};
-            transform:translateX(-50%);
-            pointer-events:none;
-            text-align:center;
-            color:${AC.wallbox};
-            font-family:inherit;
-            white-space:nowrap;
-            text-shadow:0 1px 2px rgba(0,0,0,.35);
-        `;
-
-        // Leistung, Name und Tagesenergie zeichnet die Originalkarte selbst.
-        // Wir ergänzen ausschließlich den Fahrzeug-SOC, damit keine zweite Box
-        // über der originalen AUX-Leitung entsteht.
-        info.innerHTML = soc
-            ? `<div style="font-size:${compact ? 14 : 13}px;font-weight:650">Fahrzeug ${soc}</div>`
-            : '';
+    function updateSunsynkWallboxAuxInfo() {
+        // Fahrzeug-Zusatzdaten werden nicht als frei schwebende Box über
+        // die Originalgrafik gelegt. AUX-Name, Leistung und Energie stellt
+        // die Sunsynk-Karte selbst dar.
     }
 
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
@@ -2983,7 +2869,8 @@ class Energiefluss extends IPSModuleStrict
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
 
         // Netzbezug positiv, Rücklieferung negativ.
-        const haus = Math.max(pvTotal + batteryTotal + grid, 0);
+        const calculatedHouse = Math.max(pvTotal + batteryTotal + grid, 0);
+        const haus = d.available?.housePowerConfigured && Number.isFinite(Number(d.housePower)) ? Math.max(Number(d.housePower), 0) : calculatedHouse;
 
         // Neue technische Ansicht.
         currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
@@ -3461,11 +3348,13 @@ HTML;
             'GridExportPower',
             'GridImportEnergy',
             'GridExportEnergy',
-            'GridVoltage',
-            'GridCurrent',
+            'GridPhaseL1',
+            'GridPhaseL2',
+            'GridPhaseL3',
             'GridFrequency',
             'GridConnectedStatus',
             'InverterPower',
+            'HousePower',
             'InverterVoltage',
             'InverterCurrent',
             'InverterFrequency',
@@ -3620,6 +3509,9 @@ HTML;
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
                     'value'                => $value,
+                    'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
+                    'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
+                    'invertFlow'            => (bool) ($source['InvertFlow'] ?? false),
                     'soc'                  => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
                         ? (float) GetValue($socVariableID)
                         : 0.0,
@@ -3684,6 +3576,7 @@ HTML;
                     'name'  => (string) ($group['Name'] ?? ''),
                     'icon'  => (string) ($group['Icon'] ?? 'plug'),
                     'value' => $value,
+                    'hasPower' => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'daily' => $daily,
                     'dailyValue' => $dailyValue,
                     'hasDaily' => $hasDaily,
@@ -3766,16 +3659,28 @@ HTML;
             'pvs'              => $pvs,
             'batteries'        => $batteries,
             'grid'             => $grid,
-            'gridVoltage'      => $this->ReadVar('GridVoltage'),
-            'gridCurrent'      => $this->ReadVar('GridCurrent'),
+            'gridPhaseL1'     => $this->ReadVar('GridPhaseL1'),
+            'gridPhaseL2'     => $this->ReadVar('GridPhaseL2'),
+            'gridPhaseL3'     => $this->ReadVar('GridPhaseL3'),
+            'gridPhaseL1Available' => ($this->ReadPropertyInteger('GridPhaseL1') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridPhaseL1'))),
             'gridFrequency'    => $this->ReadVar('GridFrequency'),
             'gridConnectedStatus' => $gridConnectedStatus,
+            'housePower'       => $this->ReadVar('HousePower'),
             'inverterPower'    => $this->ReadVar('InverterPower'),
             'inverterPowerAvailable' => $inverterPowerAvailable,
             'inverterVoltage'  => $this->ReadVar('InverterVoltage'),
             'inverterCurrent'  => $this->ReadVar('InverterCurrent'),
             'inverterFrequency'=> $this->ReadVar('InverterFrequency'),
             'inverterTemperature' => $this->ReadVar('InverterTemperature'),
+            'available' => [
+                'gridPower' => ($this->ReadPropertyInteger('L1') > 0 && IPS_VariableExists($this->ReadPropertyInteger('L1'))),
+                'gridPhaseL2' => ($this->ReadPropertyInteger('GridPhaseL2') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridPhaseL2'))),
+                'gridPhaseL3' => ($this->ReadPropertyInteger('GridPhaseL3') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridPhaseL3'))),
+                'gridFrequency' => ($this->ReadPropertyInteger('GridFrequency') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridFrequency'))),
+                'gridStatus' => ($this->ReadPropertyInteger('GridConnectedStatus') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridConnectedStatus'))),
+                'inverterPower' => $inverterPowerAvailable,
+                'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
+            ],
             'gridImportEnergy' => $this->ReadVarFormatted('GridImportEnergy'),
             'gridExportEnergy' => $this->ReadVarFormatted('GridExportEnergy'),
             'gridImportEnergyValue' => $hasGridImportEnergy ? (float) GetValue($gridImportEnergyID) : 0.0,
@@ -3804,7 +3709,7 @@ HTML;
                 'batteryAccent'    => $this->ColorToHex($this->ReadPropertyInteger('HouseColorBatteryAccent')),
             ],
             'colors'           => [
-                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('ColorInverter')),
+                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('HouseColorInverter')),
                 'solar'     => $this->ColorToHex($this->ReadPropertyInteger('ColorSolar')),
                 'import'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridImport')),
                 'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
