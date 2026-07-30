@@ -2874,55 +2874,12 @@ class Energiefluss extends IPSModuleStrict
                 `essential_load${index}`, `essential-load${index}`,
                 `load${index}_`, `load-${index}`, `load_${index}`
             ];
+
             while (node && node !== boundary) {
                 const id = String(node.id || '').toLowerCase();
                 const cls = String(node.getAttribute?.('class') || '').toLowerCase();
-                if (needles.some(needle => id.includes(needle) || cls.includes(needle))) return true;
-                node = node.parentNode || node.host || null;
-            }
-            return false;
-        };
-
-        // Nur den Text IN einer gefüllten Wertebox kontrastreich darstellen.
-        // Rahmen, Füllung, Icon, Leitung und Beschriftung unterhalb der Box
-        // bleiben vollständig so, wie sie von der Originalkarte erzeugt werden.
-        const isTextInsideFilledBox = (element, boundary) => {
-            if (!element || typeof element.getBBox !== 'function') return false;
-
-            let textBox;
-            try {
-                textBox = element.getBBox();
-            } catch (_) {
-                return false;
-            }
-
-            const overlaps = (a, b) =>
-                a.x < (b.x + b.width) &&
-                (a.x + a.width) > b.x &&
-                a.y < (b.y + b.height) &&
-                (a.y + a.height) > b.y;
-
-            let node = element.parentNode;
-            while (node && node !== boundary) {
-                const shapes = node.querySelectorAll?.(':scope > rect, :scope > circle, :scope > ellipse') || [];
-                for (const shape of shapes) {
-                    let shapeBox;
-                    try {
-                        shapeBox = shape.getBBox();
-                    } catch (_) {
-                        continue;
-                    }
-
-                    const fill = String(
-                        shape.style?.fill ||
-                        shape.getAttribute?.('fill') ||
-                        getComputedStyle(shape).fill ||
-                        ''
-                    ).toLowerCase();
-
-                    if (fill && fill !== 'none' && fill !== 'transparent' && !fill.includes('rgba(0, 0, 0, 0)') && overlaps(textBox, shapeBox)) {
-                        return true;
-                    }
+                if (needles.some(needle => id.includes(needle) || cls.includes(needle))) {
+                    return true;
                 }
                 node = node.parentNode || node.host || null;
             }
@@ -2930,17 +2887,72 @@ class Energiefluss extends IPSModuleStrict
             return false;
         };
 
+        const isInsideFilledBox = (textElement, boxes) => {
+            try {
+                const textBox = textElement.getBBox?.();
+                if (!textBox) return false;
+
+                const cx = textBox.x + (textBox.width / 2);
+                const cy = textBox.y + (textBox.height / 2);
+
+                return boxes.some(boxElement => {
+                    const box = boxElement.getBBox?.();
+                    if (!box || box.width <= 0 || box.height <= 0) return false;
+
+                    return cx >= box.x && cx <= (box.x + box.width)
+                        && cy >= box.y && cy <= (box.y + box.height);
+                });
+            } catch (_) {
+                return false;
+            }
+        };
+
         for (const currentRoot of roots) {
             for (let i = 1; i <= 6; i++) {
-                currentRoot.querySelectorAll?.('*').forEach(element => {
-                    if (!belongsToAdditionalLoad(element, i, currentRoot)) return;
+                const elements = Array.from(currentRoot.querySelectorAll?.('*') || [])
+                    .filter(element => belongsToAdditionalLoad(element, i, currentRoot));
+
+                if (!elements.length) continue;
+
+                // Die Wertebox bleibt vollständig in der Verbraucherfarbe.
+                // Nur ihre Schrift wird für guten Kontrast weiß dargestellt.
+                const filledBoxes = elements.filter(element => {
+                    const tag = String(element.tagName || '').toLowerCase();
+                    if (!['rect', 'circle', 'ellipse'].includes(tag)) return false;
+
+                    const cls = String(element.getAttribute?.('class') || '').toLowerCase();
+                    return !cls.includes('anim-line');
+                });
+
+                elements.forEach(element => {
                     const tag = String(element.tagName || '').toLowerCase();
 
-                    // Ausschließlich den Inhalt der gefüllten Wertebox ändern:
-                    // dort weiß für guten Kontrast; Beschriftungen außerhalb der
-                    // Box bleiben in Verbraucherfarbe. Die Box selbst wird nicht verändert.
+                    if (['rect', 'circle', 'ellipse'].includes(tag)) {
+                        element.style?.setProperty('stroke', colour, 'important');
+                        element.style?.setProperty('fill', colour, 'important');
+                        element.setAttribute?.('stroke', colour);
+                        element.setAttribute?.('fill', colour);
+                    }
+
+                    if (tag === 'line' || tag === 'polyline') {
+                        element.style?.setProperty('stroke', colour, 'important');
+                        element.setAttribute?.('stroke', colour);
+                    }
+
+                    if (tag === 'path' || tag === 'polygon') {
+                        element.style?.setProperty('stroke', colour, 'important');
+                        element.setAttribute?.('stroke', colour);
+
+                        if (!element.classList?.contains('anim-line')) {
+                            element.style?.setProperty('fill', colour, 'important');
+                            element.setAttribute?.('fill', colour);
+                        }
+                    }
+
                     if (['text', 'tspan', 'span', 'div', 'p'].includes(tag)) {
-                        const textColour = isTextInsideFilledBox(element, currentRoot)
+                        // Beschriftung und kWh bleiben in derselben Verbraucherfarbe.
+                        // Ausschließlich Text innerhalb der gefüllten Wertebox wird weiß.
+                        const textColour = isInsideFilledBox(element, filledBoxes)
                             ? '#ffffff'
                             : colour;
 
@@ -2952,20 +2964,6 @@ class Energiefluss extends IPSModuleStrict
                         element.setAttribute?.('font-weight', '400');
                     }
 
-                    // Leitungen und Icons ebenfalls in derselben Farbe.
-                    if (tag === 'line' || tag === 'polyline') {
-                        element.style?.setProperty('stroke', colour, 'important');
-                        element.setAttribute?.('stroke', colour);
-                    }
-                    if (tag === 'path' || tag === 'polygon') {
-                        element.style?.setProperty('stroke', colour, 'important');
-                        element.setAttribute?.('stroke', colour);
-                        if (!element.classList?.contains('anim-line')) {
-                            element.style?.setProperty('fill', colour, 'important');
-                            element.setAttribute?.('fill', colour);
-                        }
-                    }
-
                     element.style?.setProperty('--state-icon-color', colour, 'important');
                     if (tag === 'ha-icon' || String(element.className || '').toLowerCase().includes('icon')) {
                         element.style?.setProperty('color', colour, 'important');
@@ -2974,15 +2972,15 @@ class Energiefluss extends IPSModuleStrict
             }
         }
 
-        // Zusätzliche CSS-Regel für separat gerenderte Beschriftungen, deren
-        // Elterncontainer keine der obigen IDs trägt. Dadurch bleibt insbesondere
-        // die Schrift unter den Verbrauchern sicher auf normalem Gewicht.
+        // Nur das normale Schriftgewicht absichern. Keine pauschale Textfarbe,
+        // damit der weiße Wert innerhalb der gefüllten Box nicht überschrieben wird.
         let style = root.getElementById('symcon-additional-load-colours');
         if (!style) {
             style = document.createElement('style');
             style.id = 'symcon-additional-load-colours';
             root.appendChild(style);
         }
+
         const selectors = [];
         for (let i = 1; i <= 6; i++) {
             selectors.push(
@@ -2994,14 +2992,13 @@ class Energiefluss extends IPSModuleStrict
                 `[id*="load-${i}"]`, `[class*="load-${i}"]`
             );
         }
-        const all = selectors.join(',');
-        style.textContent = `
-            ${all},
-            ${selectors.map(s => `${s} text, ${s} tspan, ${s} span, ${s} div, ${s} p`).join(',')} {
+
+        style.textContent = selectors
+            .map(selector => `${selector} text, ${selector} tspan, ${selector} span, ${selector} div, ${selector} p`)
+            .join(',') + ` {
                 font-weight: 400 !important;
                 font-variation-settings: "wght" 400 !important;
-            }
-        `;
+            }`;
     }
 
     function updateSunsynkWallboxAuxInfo() {
