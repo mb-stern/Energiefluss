@@ -1054,11 +1054,13 @@ class Energiefluss extends IPSModuleStrict
 
 </style>
 <script src="/icons.js"></script>
-<script type="module"
-        src="/user/Energiefluss/vendor/power-flow-card.js">
+<script>
+    // Muss VOR dem Import der originalen Sunsynk-Datei existieren.
+    // Die Original-Card registriert sich beim Laden über window.customCards.push(...).
+    window.customCards = window.customCards || [];
 </script>
 <script type="module"
-        src="/user/Energiefluss/vendor/sunsynk-power-flow-card.js">
+        src="/user/Energiefluss/vendor/power-flow-card.js">
 </script>
 
 <div id="eflow">
@@ -2314,18 +2316,56 @@ class Energiefluss extends IPSModuleStrict
         return { state: String(Number.isFinite(n) ? n : 0), attributes: { unit_of_measurement: unit } };
     }
 
+    let sunsynkModulePromise = null;
+
     function ensureHaCompatibility() {
         window.customCards = window.customCards || [];
+
+        // Home-Assistant-Icon als kleiner Fallback. Die Sunsynk-Hauptgrafik
+        // besteht aus eigenem SVG; dieser Fallback betrifft Zusatzicons.
         if (!customElements.get('ha-icon')) {
             customElements.define('ha-icon', class extends HTMLElement {
                 static get observedAttributes() { return ['icon']; }
                 connectedCallback() { this.render(); }
                 attributeChangedCallback() { this.render(); }
                 render() {
-                    const icon = (this.getAttribute('icon') || '').split(':').pop() || 'circle';
-                    this.innerHTML = `<i class="fa-solid fa-${escapeHtml(icon)}"></i>`;
+                    const raw = this.getAttribute('icon') || 'mdi:circle-outline';
+                    const icon = raw.split(':').pop() || 'circle-outline';
+                    const faMap = {
+                        'home': 'house', 'home-outline': 'house',
+                        'car': 'car', 'car-electric': 'car',
+                        'ev-station': 'charging-station',
+                        'battery': 'battery-half', 'battery-medium': 'battery-half',
+                        'solar-power': 'solar-panel', 'solar-panel': 'solar-panel',
+                        'transmission-tower': 'tower-broadcast',
+                        'power-plug': 'plug', 'flash': 'bolt'
+                    };
+                    const fa = faMap[icon] || 'circle';
+                    this.innerHTML = `<i class="fa-solid fa-${fa}" aria-hidden="true"></i>`;
                 }
             });
+        }
+    }
+
+    async function loadOriginalSunsynkModule() {
+        ensureHaCompatibility();
+
+        if (customElements.get('sunsynk-power-flow-card')) {
+            return;
+        }
+
+        if (!sunsynkModulePromise) {
+            const moduleUrl = '/user/Energiefluss/vendor/sunsynk-power-flow-card.js';
+            sunsynkModulePromise = import(moduleUrl).catch(err => {
+                sunsynkModulePromise = null;
+                throw new Error(`Originale Sunsynk-JS konnte nicht importiert werden: ${err.message}`);
+            });
+        }
+
+        await sunsynkModulePromise;
+
+        if (!customElements.get('sunsynk-power-flow-card')) {
+            throw new Error('Die JS-Datei wurde geladen, hat aber sunsynk-power-flow-card nicht registriert.');
         }
     }
 
@@ -2429,15 +2469,26 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
-    async function ensureSunsynkCard(d, pvs, batteries, wallbox, groups) {
+    async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
         sunsynkInitPromise = (async () => {
-            ensureHaCompatibility();
-            await customElements.whenDefined('sunsynk-power-flow-card');
+            await loadOriginalSunsynkModule();
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
+
+            // Wie in Lovelace: zuerst Konfiguration und hass setzen,
+            // anschließend das Element in den DOM einhängen.
             card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
+            card.hass = createSunsynkHass(
+                d,
+                grid,
+                haus,
+                pvs,
+                batteries,
+                wallbox,
+                groups
+            );
             host.appendChild(card);
             sunsynkCard = card;
             document.getElementById('sunsynk-loading').style.display = 'none';
@@ -2465,7 +2516,7 @@ class Energiefluss extends IPSModuleStrict
         }
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
-            ensureSunsynkCard(d, pvs, batteries, wallbox, groups).catch(() => {});
+            ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
             return;
         }
         sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
@@ -2941,7 +2992,7 @@ HTML;
         if (!is_dir($targetDir)) {
             if (!@mkdir($targetDir, 0777, true) && !is_dir($targetDir)) {
                 $this->LogMessage(
-                    'Hausansicht: Web-Verzeichnis konnte nicht erstellt werden: ' . $targetDir,
+                    'Visualisierung: Web-Verzeichnis konnte nicht erstellt werden: ' . $targetDir,
                     KL_ERROR
                 );
                 return;
@@ -2960,7 +3011,7 @@ HTML;
 
             if (!is_file($source)) {
                 $this->LogMessage(
-                    'Hausansicht: Datei fehlt im Modulbaum: ' . $source,
+                    'Visualisierung: Datei fehlt im Modulbaum: ' . $source,
                     KL_ERROR
                 );
                 continue;
