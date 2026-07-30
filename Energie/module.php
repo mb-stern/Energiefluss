@@ -2731,22 +2731,16 @@ class Energiefluss extends IPSModuleStrict
 
     function applyInverterPowerDisplay(card, d) {
         if (!card || !card.shadowRoot || !d) return;
+
         const available = entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable;
         if (!available) return;
 
         const value = Number(d.inverterPower || 0);
         const text = `${Math.round(Number.isFinite(value) ? value : 0).toLocaleString('de-DE')} W`;
+        const root = card.shadowRoot;
 
-        // Die Originalkarte rendert die Wechselrichterleistung als SVG-Text.
-        // Je nach Layout/Modell kann dieses Textobjekt fehlen oder die Klasse
-        // st12 (display:none) erhalten. Deshalb zuerst alle vorhandenen Treffer
-        // sichtbar machen und anschließend bei Bedarf aus dem sichtbaren
-        // Strom-Text ein positionsgleiches Leistungsfeld erzeugen.
-        let nodes = Array.from(card.shadowRoot.querySelectorAll(
-            '#inverter_power_175, [id="inverter_power_175"], #symcon_inverter_power'
-        ));
-
-        const makeVisible = node => {
+        // Zuerst das originale Leistungsfeld aktualisieren, falls es vorhanden ist.
+        root.querySelectorAll('#inverter_power_175, [id="inverter_power_175"]').forEach(node => {
             node.removeAttribute('display');
             node.removeAttribute('visibility');
             node.removeAttribute('opacity');
@@ -2755,37 +2749,47 @@ class Energiefluss extends IPSModuleStrict
             node.style?.setProperty('display', 'inline', 'important');
             node.style?.setProperty('visibility', 'visible', 'important');
             node.style?.setProperty('opacity', '1', 'important');
-            node.style?.setProperty('fill', AC.inverter, 'important');
-            node.style?.setProperty('color', AC.inverter, 'important');
             node.textContent = text;
-        };
+        });
 
-        nodes.forEach(makeVisible);
+        // Die Stromwerte sind in der gewünschten Wechselrichterbox bereits sichtbar.
+        // Daher wird die Leistung zuverlässig als eigenes SVG-Textobjekt in genau
+        // denselben Elternknoten eingesetzt. Das ist unabhängig davon, ob das
+        // Upstream-Layout sein originales Leistungsfeld erzeugt oder ausblendet.
+        const currentNode = root.querySelector(
+            '#inverter_current_164, [id="inverter_current_164"]'
+        );
+        if (!currentNode || !currentNode.parentNode) return;
 
-        // Robuster Fallback: Der Phasenstrom ist in derselben Box sichtbar.
-        // Wir klonen dessen SVG-Text und setzen ihn an die von der Originalkarte
-        // verwendete Y-Position der Wechselrichterleistung. Damit landet der Wert
-        // sicher in der vorhandenen Box oberhalb des Wechselrichters.
-        if (!nodes.length) {
-            const currentNode = card.shadowRoot.querySelector(
-                '#inverter_current_164, [id="inverter_current_164"]'
-            );
+        let powerNode = root.getElementById('symcon_inverter_power_fixed');
+        if (!powerNode) {
+            powerNode = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+            powerNode.id = 'symcon_inverter_power_fixed';
 
-            if (currentNode && currentNode.parentNode) {
-                const fallback = currentNode.cloneNode(false);
-                fallback.id = 'symcon_inverter_power';
-                fallback.classList?.remove('st12');
-
-                const currentY = Number(currentNode.getAttribute('y'));
-                // Upstream: Leistung bei y=174/178, Strom bei y=188/199.
-                fallback.setAttribute('y', Number.isFinite(currentY)
-                    ? String(Math.max(0, currentY - 14))
-                    : '174');
-                fallback.textContent = text;
-                currentNode.parentNode.insertBefore(fallback, currentNode);
-                makeVisible(fallback);
-                nodes = [fallback];
+            // Position, Klassen und Ausrichtung direkt vom sichtbaren Amperefeld übernehmen.
+            for (const attr of ['x', 'text-anchor', 'dominant-baseline', 'transform']) {
+                const v = currentNode.getAttribute(attr);
+                if (v !== null) powerNode.setAttribute(attr, v);
             }
+            powerNode.setAttribute('class', currentNode.getAttribute('class') || 'st4 st8');
+            currentNode.parentNode.insertBefore(powerNode, currentNode);
+        }
+
+        const currentY = Number(currentNode.getAttribute('y'));
+        powerNode.setAttribute('y', Number.isFinite(currentY) ? String(currentY - 14) : '174');
+        powerNode.textContent = text;
+        powerNode.removeAttribute('display');
+        powerNode.removeAttribute('visibility');
+        powerNode.classList?.remove('st12');
+        powerNode.style.setProperty('display', 'inline', 'important');
+        powerNode.style.setProperty('visibility', 'visible', 'important');
+        powerNode.style.setProperty('opacity', '1', 'important');
+
+        // Dieselbe Textfarbe wie beim sichtbaren Amperefeld verwenden.
+        const currentColour = getComputedStyle(currentNode).fill || getComputedStyle(currentNode).color;
+        if (currentColour) {
+            powerNode.style.setProperty('fill', currentColour, 'important');
+            powerNode.style.setProperty('color', currentColour, 'important');
         }
     }
 
@@ -2793,77 +2797,86 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot) return;
 
         const colour = AC.room;
-        let style = card.shadowRoot.getElementById('symcon-additional-load-colours');
+        const textColour = '#ffffff';
+        const root = card.shadowRoot;
+        let style = root.getElementById('symcon-additional-load-colours');
         if (!style) {
             style = document.createElement('style');
             style.id = 'symcon-additional-load-colours';
-            card.shadowRoot.appendChild(style);
+            root.appendChild(style);
         }
 
-        // Nur Schrift, Icons und Leitungen einfärben. In der letzten Version
-        // wurden auch die Rechtecke der Wertefelder gefüllt; dadurch lag die
-        // Verbraucherfarbe als Vollfläche über der Schrift und der Wert war
-        // praktisch nicht mehr lesbar.
         const textSelectors = [];
         const iconSelectors = [];
+        const iconShapeSelectors = [];
         const lineSelectors = [];
+
         for (let i = 1; i <= 6; i++) {
             textSelectors.push(
-                `#ess_load${i}`,
+                `#ess-load${i}`,
                 `#ess_load${i}_value`,
-                `#ess_load${i}_extra`,
                 `#ess_load${i}_value_extra`,
-                `[id^="ess_load${i}_"] text`,
-                `[id^="ess_load${i}_"] tspan`,
-                `[id^="ess-load${i}"] text`,
-                `[id^="es-load${i}"] text`
+                `#ess_load${i}_extra`
             );
             iconSelectors.push(
                 `.essload${i}-icon`,
                 `.essload${i}-small-icon`,
-                `.essload${i}-icon-full`,
-                `[class*="essload${i}-"] ha-icon`
+                `.essload${i}-icon-full`
+            );
+            iconShapeSelectors.push(
+                `.essload${i}-icon path`,
+                `.essload${i}-small-icon path`,
+                `.essload${i}-icon-full path`,
+                `[id*="essload${i}"] path`,
+                `[id*="essential_load${i}"] path`
             );
             lineSelectors.push(
+                `#es-load${i}`,
+                `[id="es-load${i}"]`,
+                `[id^="es-load${i}-"]`,
                 `[id^="ess_load${i}_"] line`,
                 `[id^="ess_load${i}_"] polyline`,
-                `[id^="ess_load${i}_"] path.anim-line`,
-                `[id^="ess-load${i}"] line`,
-                `[id^="ess-load${i}"] polyline`,
-                `[id^="ess-load${i}"] path.anim-line`
+                `[id^="ess_load${i}_"] path.anim-line`
             );
         }
 
+        // Verbraucher-Symbol/Box und Leitung erhalten die konfigurierte
+        // Verbraucherfarbe. Die Schrift im farbigen Feld wird weiß gehalten,
+        // damit die Werte lesbar bleiben und nicht wieder verschwinden.
         style.textContent = `
             ${textSelectors.join(',')} {
-                color: ${colour} !important;
-                fill: ${colour} !important;
+                color: ${textColour} !important;
+                fill: ${textColour} !important;
             }
             ${iconSelectors.join(',')} {
                 color: ${colour} !important;
                 --state-icon-color: ${colour} !important;
             }
+            ${iconShapeSelectors.join(',')} {
+                fill: ${colour} !important;
+                stroke: ${colour} !important;
+            }
             ${lineSelectors.join(',')} {
                 color: ${colour} !important;
                 stroke: ${colour} !important;
-                fill: none !important;
             }
         `;
 
-        // Inline-Farben der Originalkarte übersteuern, ohne Hintergründe,
-        // Rechtecke oder Kreise zu füllen.
-        card.shadowRoot.querySelectorAll(textSelectors.join(',')).forEach(element => {
-            element.style?.setProperty('color', colour, 'important');
-            if (element instanceof SVGElement) {
-                element.style.setProperty('fill', colour, 'important');
-            }
+        root.querySelectorAll(textSelectors.join(',')).forEach(element => {
+            element.style?.setProperty('color', textColour, 'important');
+            element.style?.setProperty('fill', textColour, 'important');
         });
-        card.shadowRoot.querySelectorAll(iconSelectors.join(',')).forEach(element => {
+        root.querySelectorAll(iconSelectors.join(',')).forEach(element => {
             element.style?.setProperty('color', colour, 'important');
+            element.style?.setProperty('--state-icon-color', colour, 'important');
         });
-        card.shadowRoot.querySelectorAll(lineSelectors.join(',')).forEach(element => {
+        root.querySelectorAll(iconShapeSelectors.join(',')).forEach(element => {
+            element.style?.setProperty('fill', colour, 'important');
             element.style?.setProperty('stroke', colour, 'important');
-            element.style?.setProperty('fill', 'none', 'important');
+        });
+        root.querySelectorAll(lineSelectors.join(',')).forEach(element => {
+            element.style?.setProperty('stroke', colour, 'important');
+            element.style?.setProperty('color', colour, 'important');
         });
     }
 
