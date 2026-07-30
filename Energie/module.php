@@ -2863,142 +2863,50 @@ class Energiefluss extends IPSModuleStrict
     function applyAdditionalLoadColours(card) {
         if (!card || !card.shadowRoot) return;
 
-        const colour = AC.room;
-        const root = card.shadowRoot;
-        const roots = getOpenShadowRoots(root);
+        const roots = getOpenShadowRoots(card.shadowRoot);
 
-        const belongsToAdditionalLoad = (element, index, boundary) => {
-            let node = element;
-            const needles = [
-                `essload${index}`, `ess-load${index}`, `ess_load${index}`,
-                `essential_load${index}`, `essential-load${index}`,
-                `load${index}_`, `load-${index}`, `load_${index}`
-            ];
-
-            while (node && node !== boundary) {
-                const id = String(node.id || '').toLowerCase();
-                const cls = String(node.getAttribute?.('class') || '').toLowerCase();
-                if (needles.some(needle => id.includes(needle) || cls.includes(needle))) {
-                    return true;
-                }
-                node = node.parentNode || node.host || null;
-            }
-
-            return false;
-        };
-
-        const isInsideFilledBox = (textElement, boxes) => {
-            try {
-                const textBox = textElement.getBBox?.();
-                if (!textBox) return false;
-
-                const cx = textBox.x + (textBox.width / 2);
-                const cy = textBox.y + (textBox.height / 2);
-
-                return boxes.some(boxElement => {
-                    const box = boxElement.getBBox?.();
-                    if (!box || box.width <= 0 || box.height <= 0) return false;
-
-                    return cx >= box.x && cx <= (box.x + box.width)
-                        && cy >= box.y && cy <= (box.y + box.height);
-                });
-            } catch (_) {
-                return false;
-            }
-        };
-
-        for (const currentRoot of roots) {
+        // Die Original-Card verwendet für die Verbraucher ganz konkrete IDs:
+        //   Rahmen:      es-load1 ... es-load6
+        //   Leistung:    ess_load1_value ... ess_load6_value
+        //   Zusatzwert:  ess_load1_value_extra ... ess_load6_value_extra
+        //   Bezeichnung: ess-load1 ... ess-load6
+        //
+        // Wichtig: Die Originalfarben bleiben vollständig erhalten. Wir färben
+        // weder Namen, kWh, Icons noch Leitungen um. Es wird lediglich verhindert,
+        // dass die Werteboxen gefüllt werden, und die Schrift wird normalgewichtig.
+        for (const root of roots) {
             for (let i = 1; i <= 6; i++) {
-                const elements = Array.from(currentRoot.querySelectorAll?.('*') || [])
-                    .filter(element => belongsToAdditionalLoad(element, i, currentRoot));
-
-                if (!elements.length) continue;
-
-                // Die Wertebox bleibt vollständig in der Verbraucherfarbe.
-                // Nur ihre Schrift wird für guten Kontrast weiß dargestellt.
-                const filledBoxes = elements.filter(element => {
-                    const tag = String(element.tagName || '').toLowerCase();
-                    if (!['rect', 'circle', 'ellipse'].includes(tag)) return false;
-
-                    const cls = String(element.getAttribute?.('class') || '').toLowerCase();
-                    return !cls.includes('anim-line');
+                // Es gibt je nach Anzahl/Anordnung teilweise mehrere Elemente mit
+                // derselben ID. Deshalb querySelectorAll statt querySelector.
+                root.querySelectorAll?.(`rect[id="es-load${i}"]`).forEach(box => {
+                    box.setAttribute('fill', 'none');
+                    box.style?.setProperty('fill', 'none', 'important');
                 });
 
-                elements.forEach(element => {
-                    const tag = String(element.tagName || '').toLowerCase();
+                // Nur die Texte des jeweiligen Verbrauchers anfassen, jedoch ihre
+                // von der Original-Card berechnete Farbe ausdrücklich beibehalten.
+                const textSelectors = [
+                    `[id="ess_load${i}_value"]`,
+                    `[id="ess_load${i}_value_extra"]`,
+                    `text[id="ess-load${i}"]`
+                ];
 
-                    if (['rect', 'circle', 'ellipse'].includes(tag)) {
-                        element.style?.setProperty('stroke', colour, 'important');
-                        element.style?.setProperty('fill', colour, 'important');
-                        element.setAttribute?.('stroke', colour);
-                        element.setAttribute?.('fill', colour);
-                    }
+                root.querySelectorAll?.(textSelectors.join(',')).forEach(node => {
+                    node.style?.setProperty('font-weight', '400', 'important');
+                    node.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
+                    node.setAttribute?.('font-weight', '400');
 
-                    if (tag === 'line' || tag === 'polyline') {
-                        element.style?.setProperty('stroke', colour, 'important');
-                        element.setAttribute?.('stroke', colour);
-                    }
-
-                    if (tag === 'path' || tag === 'polygon') {
-                        element.style?.setProperty('stroke', colour, 'important');
-                        element.setAttribute?.('stroke', colour);
-
-                        if (!element.classList?.contains('anim-line')) {
-                            element.style?.setProperty('fill', colour, 'important');
-                            element.setAttribute?.('fill', colour);
-                        }
-                    }
-
-                    if (['text', 'tspan', 'span', 'div', 'p'].includes(tag)) {
-                        // Beschriftung und kWh bleiben in derselben Verbraucherfarbe.
-                        // Ausschließlich Text innerhalb der gefüllten Wertebox wird weiß.
-                        const textColour = isInsideFilledBox(element, filledBoxes)
-                            ? '#ffffff'
-                            : colour;
-
-                        element.style?.setProperty('color', textColour, 'important');
-                        element.style?.setProperty('fill', textColour, 'important');
-                        element.style?.setProperty('font-weight', '400', 'important');
-                        element.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
-                        element.setAttribute?.('fill', textColour);
-                        element.setAttribute?.('font-weight', '400');
-                    }
-
-                    element.style?.setProperty('--state-icon-color', colour, 'important');
-                    if (tag === 'ha-icon' || String(element.className || '').toLowerCase().includes('icon')) {
-                        element.style?.setProperty('color', colour, 'important');
-                    }
+                    // createTextWithPopup kann die ID auf einem umschließenden
+                    // Element tragen. Dann auch das eigentliche SVG-Textobjekt
+                    // normalgewichtig machen, ohne dessen Farbe zu überschreiben.
+                    node.querySelectorAll?.('text, tspan').forEach(text => {
+                        text.style?.setProperty('font-weight', '400', 'important');
+                        text.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
+                        text.setAttribute?.('font-weight', '400');
+                    });
                 });
             }
         }
-
-        // Nur das normale Schriftgewicht absichern. Keine pauschale Textfarbe,
-        // damit der weiße Wert innerhalb der gefüllten Box nicht überschrieben wird.
-        let style = root.getElementById('symcon-additional-load-colours');
-        if (!style) {
-            style = document.createElement('style');
-            style.id = 'symcon-additional-load-colours';
-            root.appendChild(style);
-        }
-
-        const selectors = [];
-        for (let i = 1; i <= 6; i++) {
-            selectors.push(
-                `[id*="essload${i}"]`, `[class*="essload${i}"]`,
-                `[id*="ess-load${i}"]`, `[class*="ess-load${i}"]`,
-                `[id*="ess_load${i}"]`, `[class*="ess_load${i}"]`,
-                `[id*="essential_load${i}"]`, `[class*="essential_load${i}"]`,
-                `[id*="load${i}_"]`, `[class*="load${i}_"]`,
-                `[id*="load-${i}"]`, `[class*="load-${i}"]`
-            );
-        }
-
-        style.textContent = selectors
-            .map(selector => `${selector} text, ${selector} tspan, ${selector} span, ${selector} div, ${selector} p`)
-            .join(',') + ` {
-                font-weight: 400 !important;
-                font-variation-settings: "wght" 400 !important;
-            }`;
     }
 
     function updateSunsynkWallboxAuxInfo() {
