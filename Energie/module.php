@@ -155,7 +155,7 @@ class Energiefluss extends IPSModuleStrict
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'PV & Batterie',
+                    'caption' => 'Solaranlagen',
                     'items'   => [
                         [
                             'type'     => 'List',
@@ -188,6 +188,12 @@ class Energiefluss extends IPSModuleStrict
                                 ],
                             ],
                         ],
+                    ],
+                ],
+                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => 'Batterien',
+                    'items'   => [
                         [
                             'type'     => 'List',
                             'name'     => 'Batteries',
