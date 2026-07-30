@@ -2864,46 +2864,66 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot) return;
 
         const roots = getOpenShadowRoots(card.shadowRoot);
+        const consumerColour = AC.room; // Konfiguration „Weitere Verbraucher“
 
-        // Die Original-Card verwendet für die Verbraucher ganz konkrete IDs:
-        //   Rahmen:      es-load1 ... es-load6
-        //   Leistung:    ess_load1_value ... ess_load6_value
-        //   Zusatzwert:  ess_load1_value_extra ... ess_load6_value_extra
-        //   Bezeichnung: ess-load1 ... ess-load6
-        //
-        // Wichtig: Die Originalfarben bleiben vollständig erhalten. Wir färben
-        // weder Namen, kWh, Icons noch Leitungen um. Es wird lediglich verhindert,
-        // dass die Werteboxen gefüllt werden, und die Schrift wird normalgewichtig.
+        // Die Sunsynk-Card verwendet für Hausverbrauch und zusätzliche
+        // Verbraucher standardmäßig dieselbe load.colour. Der Hausverbrauch
+        // soll jedoch AC.home behalten, während nur load1 ... load6 die
+        // separat konfigurierte Farbe „Weitere Verbraucher“ erhalten.
         for (const root of roots) {
             for (let i = 1; i <= 6; i++) {
-                // Es gibt je nach Anzahl/Anordnung teilweise mehrere Elemente mit
-                // derselben ID. Deshalb querySelectorAll statt querySelector.
-                root.querySelectorAll?.(`rect[id="es-load${i}"]`).forEach(box => {
-                    box.setAttribute('fill', 'none');
-                    box.style?.setProperty('fill', 'none', 'important');
-                });
-
-                // Nur die Texte des jeweiligen Verbrauchers anfassen, jedoch ihre
-                // von der Original-Card berechnete Farbe ausdrücklich beibehalten.
-                const textSelectors = [
+                const selectors = [
+                    `[id="es-load${i}"]`,
+                    `[id="ess-load${i}"]`,
                     `[id="ess_load${i}_value"]`,
                     `[id="ess_load${i}_value_extra"]`,
-                    `text[id="ess-load${i}"]`
+                    `[id^="ess_load${i}_"]`,
+                    `[id^="ess-load${i}-"]`,
+                    `[id^="es-load${i}-"]`
                 ];
 
-                root.querySelectorAll?.(textSelectors.join(',')).forEach(node => {
-                    node.style?.setProperty('font-weight', '400', 'important');
-                    node.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
-                    node.setAttribute?.('font-weight', '400');
+                const nodes = new Set();
+                root.querySelectorAll?.(selectors.join(',')).forEach(node => {
+                    nodes.add(node);
+                    node.querySelectorAll?.('*').forEach(child => nodes.add(child));
+                });
 
-                    // createTextWithPopup kann die ID auf einem umschließenden
-                    // Element tragen. Dann auch das eigentliche SVG-Textobjekt
-                    // normalgewichtig machen, ohne dessen Farbe zu überschreiben.
-                    node.querySelectorAll?.('text, tspan').forEach(text => {
-                        text.style?.setProperty('font-weight', '400', 'important');
-                        text.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
-                        text.setAttribute?.('font-weight', '400');
-                    });
+                nodes.forEach(node => {
+                    const tag = String(node.tagName || '').toLowerCase();
+                    const id = String(node.id || '');
+
+                    // Die Wertebox bleibt ungefüllt; nur ihr Rahmen bekommt
+                    // die Farbe „Weitere Verbraucher“.
+                    if (tag === 'rect' && id === `es-load${i}`) {
+                        node.setAttribute?.('fill', 'none');
+                        node.style?.setProperty('fill', 'none', 'important');
+                        node.setAttribute?.('stroke', consumerColour);
+                        node.style?.setProperty('stroke', consumerColour, 'important');
+                        return;
+                    }
+
+                    // Namen, Leistung und kWh erhalten dieselbe Verbraucherfarbe.
+                    if (tag === 'text' || tag === 'tspan' || id === `ess-load${i}` || id.startsWith(`ess_load${i}_`)) {
+                        node.setAttribute?.('fill', consumerColour);
+                        node.style?.setProperty('fill', consumerColour, 'important');
+                        node.style?.setProperty('color', consumerColour, 'important');
+                        node.style?.setProperty('font-weight', '400', 'important');
+                        node.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
+                        node.setAttribute?.('font-weight', '400');
+                        return;
+                    }
+
+                    // Icons und zugehörige grafische Elemente der zusätzlichen
+                    // Verbraucher ebenfalls einheitlich einfärben.
+                    if (['path', 'polygon', 'polyline', 'line', 'circle', 'ellipse'].includes(tag)) {
+                        node.setAttribute?.('stroke', consumerColour);
+                        node.style?.setProperty('stroke', consumerColour, 'important');
+
+                        if (!node.classList?.contains('anim-line') && tag !== 'line' && tag !== 'polyline') {
+                            node.setAttribute?.('fill', consumerColour);
+                            node.style?.setProperty('fill', consumerColour, 'important');
+                        }
+                    }
                 });
             }
         }
