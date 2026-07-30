@@ -2737,41 +2737,54 @@ class Energiefluss extends IPSModuleStrict
         const value = Number(d.inverterPower || 0);
         const text = `${Math.round(Number.isFinite(value) ? value : 0).toLocaleString('de-DE')} W`;
 
-        // Das Originalelement liegt als SVG-Text mit dieser ID im Inverter-Bereich.
-        // Nicht nur CSS setzen, sondern auch die SVG-Attribute entfernen, mit denen
-        // die Karte das Feld je nach Modell/Layout ausblendet.
-        const nodes = card.shadowRoot.querySelectorAll(
-            '#inverter_power_175, [id="inverter_power_175"]'
-        );
-        nodes.forEach(node => {
+        // Die Originalkarte rendert die Wechselrichterleistung als SVG-Text.
+        // Je nach Layout/Modell kann dieses Textobjekt fehlen oder die Klasse
+        // st12 (display:none) erhalten. Deshalb zuerst alle vorhandenen Treffer
+        // sichtbar machen und anschließend bei Bedarf aus dem sichtbaren
+        // Strom-Text ein positionsgleiches Leistungsfeld erzeugen.
+        let nodes = Array.from(card.shadowRoot.querySelectorAll(
+            '#inverter_power_175, [id="inverter_power_175"], #symcon_inverter_power'
+        ));
+
+        const makeVisible = node => {
             node.removeAttribute('display');
             node.removeAttribute('visibility');
             node.removeAttribute('opacity');
-            node.classList.remove('st12');
-            node.style.setProperty('display', 'inline', 'important');
-            node.style.setProperty('visibility', 'visible', 'important');
-            node.style.setProperty('opacity', '1', 'important');
+            node.removeAttribute('hidden');
+            node.classList?.remove('st12');
+            node.style?.setProperty('display', 'inline', 'important');
+            node.style?.setProperty('visibility', 'visible', 'important');
+            node.style?.setProperty('opacity', '1', 'important');
+            node.style?.setProperty('fill', AC.inverter, 'important');
+            node.style?.setProperty('color', AC.inverter, 'important');
             node.textContent = text;
-        });
+        };
 
-        // Falls das Originalelement in einer bestimmten Version nicht erzeugt wird,
-        // wird der Wert innerhalb des vorhandenen Inverter-SVG ergänzt. Es entsteht
-        // keine zusätzliche Box und die Originalgeometrie bleibt unverändert.
+        nodes.forEach(makeVisible);
+
+        // Robuster Fallback: Der Phasenstrom ist in derselben Box sichtbar.
+        // Wir klonen dessen SVG-Text und setzen ihn an die von der Originalkarte
+        // verwendete Y-Position der Wechselrichterleistung. Damit landet der Wert
+        // sicher in der vorhandenen Box oberhalb des Wechselrichters.
         if (!nodes.length) {
-            const inverterSvg = card.shadowRoot.querySelector('#Inverter');
-            if (inverterSvg && inverterSvg.namespaceURI === 'http://www.w3.org/2000/svg') {
-                let fallback = inverterSvg.querySelector('#symcon_inverter_power');
-                if (!fallback) {
-                    fallback = document.createElementNS('http://www.w3.org/2000/svg', 'text');
-                    fallback.id = 'symcon_inverter_power';
-                    fallback.setAttribute('x', '242');
-                    fallback.setAttribute('y', '184');
-                    fallback.setAttribute('class', 'st4 st8');
-                    fallback.setAttribute('text-anchor', 'middle');
-                    inverterSvg.appendChild(fallback);
-                }
-                fallback.setAttribute('fill', AC.inverter);
+            const currentNode = card.shadowRoot.querySelector(
+                '#inverter_current_164, [id="inverter_current_164"]'
+            );
+
+            if (currentNode && currentNode.parentNode) {
+                const fallback = currentNode.cloneNode(false);
+                fallback.id = 'symcon_inverter_power';
+                fallback.classList?.remove('st12');
+
+                const currentY = Number(currentNode.getAttribute('y'));
+                // Upstream: Leistung bei y=174/178, Strom bei y=188/199.
+                fallback.setAttribute('y', Number.isFinite(currentY)
+                    ? String(Math.max(0, currentY - 14))
+                    : '174');
                 fallback.textContent = text;
+                currentNode.parentNode.insertBefore(fallback, currentNode);
+                makeVisible(fallback);
+                nodes = [fallback];
             }
         }
     }
@@ -2787,51 +2800,70 @@ class Energiefluss extends IPSModuleStrict
             card.shadowRoot.appendChild(style);
         }
 
-        // Exakte IDs und Klassen aus der unveränderten Sunsynk-Karte.
-        // Der Hauptwert "ess_power"/Hausverbrauch wird absichtlich nicht erfasst.
-        const selectors = [];
+        // Nur Schrift, Icons und Leitungen einfärben. In der letzten Version
+        // wurden auch die Rechtecke der Wertefelder gefüllt; dadurch lag die
+        // Verbraucherfarbe als Vollfläche über der Schrift und der Wert war
+        // praktisch nicht mehr lesbar.
+        const textSelectors = [];
+        const iconSelectors = [];
+        const lineSelectors = [];
         for (let i = 1; i <= 6; i++) {
-            selectors.push(
+            textSelectors.push(
                 `#ess_load${i}`,
                 `#ess_load${i}_value`,
                 `#ess_load${i}_extra`,
                 `#ess_load${i}_value_extra`,
-                `#ess-load${i}`,
-                `#es-load${i}`,
+                `[id^="ess_load${i}_"] text`,
+                `[id^="ess_load${i}_"] tspan`,
+                `[id^="ess-load${i}"] text`,
+                `[id^="es-load${i}"] text`
+            );
+            iconSelectors.push(
                 `.essload${i}-icon`,
                 `.essload${i}-small-icon`,
                 `.essload${i}-icon-full`,
-                `[id^="ess_load${i}_"]`,
-                `[id^="ess-load${i}"]`,
-                `[id^="es-load${i}"]`,
-                `[class*="essload${i}-"]`
+                `[class*="essload${i}-"] ha-icon`
+            );
+            lineSelectors.push(
+                `[id^="ess_load${i}_"] line`,
+                `[id^="ess_load${i}_"] polyline`,
+                `[id^="ess_load${i}_"] path.anim-line`,
+                `[id^="ess-load${i}"] line`,
+                `[id^="ess-load${i}"] polyline`,
+                `[id^="ess-load${i}"] path.anim-line`
             );
         }
 
         style.textContent = `
-            ${selectors.join(',')} {
+            ${textSelectors.join(',')} {
                 color: ${colour} !important;
                 fill: ${colour} !important;
+            }
+            ${iconSelectors.join(',')} {
+                color: ${colour} !important;
+                --state-icon-color: ${colour} !important;
+            }
+            ${lineSelectors.join(',')} {
+                color: ${colour} !important;
                 stroke: ${colour} !important;
+                fill: none !important;
             }
         `;
 
-        card.shadowRoot.querySelectorAll(selectors.join(',')).forEach(root => {
-            const all = [root, ...root.querySelectorAll('*')];
-            all.forEach(element => {
-                if (element.style) {
-                    element.style.setProperty('color', colour, 'important');
-                }
-                if (element instanceof SVGElement) {
-                    const tag = element.tagName.toLowerCase();
-                    if (['text', 'tspan', 'path', 'circle', 'rect', 'polygon', 'polyline', 'line'].includes(tag)) {
-                        element.style.setProperty('stroke', colour, 'important');
-                        if (!['line', 'polyline'].includes(tag)) {
-                            element.style.setProperty('fill', colour, 'important');
-                        }
-                    }
-                }
-            });
+        // Inline-Farben der Originalkarte übersteuern, ohne Hintergründe,
+        // Rechtecke oder Kreise zu füllen.
+        card.shadowRoot.querySelectorAll(textSelectors.join(',')).forEach(element => {
+            element.style?.setProperty('color', colour, 'important');
+            if (element instanceof SVGElement) {
+                element.style.setProperty('fill', colour, 'important');
+            }
+        });
+        card.shadowRoot.querySelectorAll(iconSelectors.join(',')).forEach(element => {
+            element.style?.setProperty('color', colour, 'important');
+        });
+        card.shadowRoot.querySelectorAll(lineSelectors.join(',')).forEach(element => {
+            element.style?.setProperty('stroke', colour, 'important');
+            element.style?.setProperty('fill', 'none', 'important');
         });
     }
 
