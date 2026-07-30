@@ -1036,7 +1036,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-home-main {
-        color: #4d9fff;
+        color: var(--ef-house-load, #4d9fff);
     }
 
     #pfc-wallbox-main {
@@ -3212,6 +3212,7 @@ class Energiefluss extends IPSModuleStrict
         document.documentElement.style.setProperty('--ef-battery-discharge', AC.discharge);
         document.documentElement.style.setProperty('--ef-wallbox', AC.wallbox);
         document.documentElement.style.setProperty('--ef-consumer', AC.room);
+        document.documentElement.style.setProperty('--ef-house-load', AC.home);
 
         const solarMain = document.getElementById('pfc-solar-main');
         const solarInfo = document.getElementById('pfc-info-solar');
@@ -3220,6 +3221,7 @@ class Energiefluss extends IPSModuleStrict
         const gridInfo = document.getElementById('pfc-info-grid');
         const wallboxMain = document.getElementById('pfc-wallbox-main');
         const wallboxInfo = document.getElementById('pfc-info-wallbox');
+        const homeMain = document.getElementById('pfc-home-main');
 
         if (solarMain) solarMain.style.color = AC.solar;
         if (solarInfo) solarInfo.style.borderColor = AC.solar;
@@ -3228,6 +3230,7 @@ class Energiefluss extends IPSModuleStrict
         if (gridInfo) gridInfo.style.borderColor = AC.import;
         if (wallboxMain) wallboxMain.style.color = AC.wallbox;
         if (wallboxInfo) wallboxInfo.style.borderColor = AC.wallbox;
+        if (homeMain) homeMain.style.color = AC.home;
     }
 
     function setState(d) {
