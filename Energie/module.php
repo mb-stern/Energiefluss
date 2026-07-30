@@ -2372,14 +2372,16 @@ class Energiefluss extends IPSModuleStrict
     function createSunsynkConfig(d, pvs, batteries, wallbox, groups) {
         const compact = currentTechnicalLayout === 'compact';
         const pvCount = Math.max(1, Math.min(6, pvs.length || 1));
-        const essentialCount = Math.min(6, groups.length);
-        const auxGroups = groups.slice(6, 8);
-        const gridGroups = groups.slice(8, 11);
+        // Kompakt zeigt nur den Gesamt-Hausverbrauch. Einzelverbraucher,
+        // Wallbox und Non-Essential-Lasten erscheinen nur in der Full-Ansicht.
+        const essentialCount = compact ? 0 : Math.min(6, groups.length);
+        const auxGroups = compact ? [] : groups.slice(6, 8);
+        const gridGroups = compact ? [] : groups.slice(8, 11);
         const showEnergyDetails = !compact;
         return {
             cardstyle: compact ? 'compact' : 'full',
             wide: !compact,
-            large_font: compact,
+            large_font: true,
             show_solar: pvs.length > 0,
             show_battery: batteries.length > 0,
             show_grid: true,
@@ -2388,31 +2390,32 @@ class Energiefluss extends IPSModuleStrict
             dynamic_line_width: true,
             max_line_width: 5,
             min_line_width: 2,
-            inverter: { modern: true, model: 'goodwe', autarky: 'power', auto_scale: true, label_autarky: 'Autarkie' },
+            inverter: { modern: true, model: 'goodwe', autarky: 'power', auto_scale: false, label_autarky: 'Autarkie' },
             solar: {
                 colour: AC.solar, show_daily: showEnergyDetails && pvs.some(pv => pv.hasEnergy), mppts: pvCount,
                 animation_speed: Math.max(1, Math.round(9 * flowSpeedFactor)), max_power: 12000,
-                auto_scale: true, display_mode: 1,
+                auto_scale: false, display_mode: 1,
                 pv1_name: pvs[0]?.name || 'PV 1', pv2_name: pvs[1]?.name || 'PV 2',
                 pv3_name: pvs[2]?.name || 'PV 3', pv4_name: pvs[3]?.name || 'PV 4',
                 pv5_name: pvs[4]?.name || 'PV 5', pv6_name: pvs[5]?.name || 'PV 6'
             },
             battery: {
-                count: Math.min(2, Math.max(1, batteries.length)), shutdown_soc: 1, soc_end_of_charge: 100,
+                count: Math.min(2, Math.max(1, batteries.length)), shutdown_soc: 0, soc_end_of_charge: 100,
                 colour: AC.discharge, charge_colour: AC.charge, show_daily: showEnergyDetails && batteries.some(b => b.hasChargeEnergy || b.hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 * flowSpeedFactor)), max_power: 10000,
-                auto_scale: true, dynamic_colour: true, linear_gradient: true, animate: true, show_absolute: true
+                auto_scale: false, dynamic_colour: true, linear_gradient: true, animate: true, show_absolute: true
             },
             battery2: {
-                shutdown_soc: 1, soc_end_of_charge: 100, colour: AC.discharge,
-                charge_colour: AC.charge, show_absolute: true, auto_scale: true,
+                shutdown_soc: 0, soc_end_of_charge: 100, colour: AC.discharge,
+                charge_colour: AC.charge, show_absolute: true, auto_scale: false,
                 dynamic_colour: true, linear_gradient: true, animate: true
             },
             load: {
                 colour: AC.room, off_colour: '#9e9e9e', dynamic_colour: true,
-                show_daily: showEnergyDetails && groups.some(g => g.hasDaily), show_aux: !!d.hasWallbox, show_daily_aux: showEnergyDetails && !!wallbox?.hasEnergy,
+                show_daily: showEnergyDetails && groups.some(g => g.hasDaily), show_aux: !compact && !!d.hasWallbox, show_daily_aux: !compact && showEnergyDetails && !!wallbox?.hasEnergy,
                 animation_speed: Math.max(1, Math.round(4 * flowSpeedFactor)), max_power: 12000,
-                auto_scale: true, additional_loads: essentialCount, aux_loads: auxGroups.length,
+                auto_scale: false, additional_loads: essentialCount, aux_loads: auxGroups.length,
+                essential_name: 'Hausverbrauch',
                 aux_name: wallbox?.name || 'Wallbox',
                 aux_daily_name: 'Wallbox Energie',
                 aux_load1_name: auxGroups[0]?.name || '', aux_load2_name: auxGroups[1]?.name || '',
@@ -2426,7 +2429,7 @@ class Energiefluss extends IPSModuleStrict
                 show_nonessential: gridGroups.length > 0, additional_loads: gridGroups.length,
                 load1_name: gridGroups[0]?.name || '', load2_name: gridGroups[1]?.name || '', load3_name: gridGroups[2]?.name || '',
                 animation_speed: Math.max(1, Math.round(8 * flowSpeedFactor)), max_power: 12000,
-                auto_scale: true, show_absolute: true
+                auto_scale: false, show_absolute: true
             },
             entities: {
                 battery_soc_184: 'sensor.symcon_battery_soc', battery_power_190: 'sensor.symcon_battery_power',
@@ -2506,6 +2509,70 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
+    async function applySunsynkViewOverrides(card, compact) {
+        if (!card) return;
+
+        try {
+            if (card.updateComplete) {
+                await card.updateComplete;
+            }
+            await new Promise(resolve => requestAnimationFrame(resolve));
+        } catch (_) {}
+
+        const root = card.shadowRoot;
+        if (!root) return;
+
+        let style = root.getElementById('symcon-sunsynk-overrides');
+        if (!style) {
+            style = document.createElement('style');
+            style.id = 'symcon-sunsynk-overrides';
+            root.appendChild(style);
+        }
+
+        style.textContent = `
+            :host {
+                width: 100% !important;
+                height: 100% !important;
+            }
+
+            .card,
+            ha-card {
+                width: 100% !important;
+                height: 100% !important;
+                max-width: none !important;
+                background: transparent !important;
+                box-shadow: none !important;
+                border: 0 !important;
+            }
+
+            /* Alle Leistungswerte und Beschriftungen besser lesbar. */
+            .st3 { font-size: ${compact ? 13 : 11}px !important; }
+            .st4 { font-size: ${compact ? 18 : 16}px !important; }
+            .st10 { font-size: ${compact ? 21 : 18}px !important; }
+            .st13 { font-size: ${compact ? 29 : 25}px !important; }
+            .st14 { font-size: ${compact ? 17 : 14}px !important; }
+            .remaining-energy { font-size: ${compact ? 13 : 10}px !important; }
+
+            /* Der mittlere/rechte Hauptwert ist der gesamte Hausverbrauch. */
+            text[id*="essential_power"],
+            [data-entity*="essential_power"] text {
+                font-size: ${compact ? 25 : 21}px !important;
+                font-weight: 700 !important;
+            }
+
+            /* In Kompakt keine versteckten Zusatzlasten oder kWh-Blöcke
+               durch nachträgliches Rendern wieder sichtbar werden lassen. */
+            ${compact ? `
+                [class*="additional-load"],
+                [class*="aux-load"],
+                [class*="nonessential-load"],
+                [class*="non-essential-load"] {
+                    display: none !important;
+                }
+            ` : ''}
+        `;
+    }
+
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
@@ -2528,6 +2595,7 @@ class Energiefluss extends IPSModuleStrict
             );
             host.appendChild(card);
             sunsynkCard = card;
+            await applySunsynkViewOverrides(card, currentTechnicalLayout === 'compact');
             document.getElementById('sunsynk-loading').style.display = 'none';
             if (sunsynkPending) {
                 const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
@@ -2558,6 +2626,7 @@ class Energiefluss extends IPSModuleStrict
         }
         sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
+        applySunsynkViewOverrides(sunsynkCard, currentTechnicalLayout === 'compact');
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
