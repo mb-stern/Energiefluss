@@ -2917,9 +2917,15 @@ class Energiefluss extends IPSModuleStrict
                     if (tag === 'path' || tag === 'polygon') {
                         element.style?.setProperty('stroke', colour, 'important');
                         element.setAttribute?.('stroke', colour);
+
+                        // Die Originalkarte zeichnet einzelne Verbraucherboxen
+                        // ebenfalls als SVG-Pfad/Polygon. Deshalb diese Flächen
+                        // nicht einfärben: sichtbar bleibt nur der farbige Rahmen.
+                        // Icons erhalten ihre Farbe weiterhin über color bzw.
+                        // --state-icon-color.
                         if (!element.classList?.contains('anim-line')) {
-                            element.style?.setProperty('fill', colour, 'important');
-                            element.setAttribute?.('fill', colour);
+                            element.style?.setProperty('fill', 'transparent', 'important');
+                            element.setAttribute?.('fill', 'transparent');
                         }
                     }
 
