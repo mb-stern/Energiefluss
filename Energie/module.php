@@ -36,6 +36,9 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('GridPhaseL2', 0);
         $this->RegisterPropertyInteger('GridPhaseL3', 0);
         $this->RegisterPropertyInteger('GridFrequency', 0);
+        $this->RegisterPropertyInteger('GridVoltageL1', 0);
+        $this->RegisterPropertyInteger('GridVoltageL2', 0);
+        $this->RegisterPropertyInteger('GridVoltageL3', 0);
         $this->RegisterPropertyInteger('GridConnectedStatus', 0);
 
         // Wechselrichter-Messwerte für die originale Sunsynk-Anzeige.
@@ -284,6 +287,9 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'GridPhaseL2', 'caption' => 'Phase L2 Leistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'GridPhaseL3', 'caption' => 'Phase L3 Leistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'GridFrequency', 'caption' => 'Netzfrequenz (Hz)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridVoltageL1', 'caption' => 'Spannung Phase L1 (V)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridVoltageL2', 'caption' => 'Spannung Phase L2 (V)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridVoltageL3', 'caption' => 'Spannung Phase L3 (V)'],
                         ['type' => 'SelectVariable', 'name' => 'GridConnectedStatus', 'caption' => 'Netz verbunden / Status'],
                         ['type' => 'Label', 'caption' => 'Wechselrichter und Haus'],
                         ['type' => 'SelectVariable', 'name' => 'InverterPower', 'caption' => 'Wechselrichterleistung (W, optional)'],
@@ -2455,6 +2461,14 @@ class Energiefluss extends IPSModuleStrict
         const addEntity = (key, entity, available = true) => { if (available) entities[key] = entity; };
 
         addEntity('inverter_power_175', 'sensor.symcon_inverter', entityAvailable(d, 'inverterPower'));
+        // Die Originalkarte verwendet zusätzlich grid_power_169 für die
+        // AC-Seite des Wechselrichters. Ohne diesen Wert bleibt die
+        // Wechselrichterleistung in einzelnen Ansichten leer.
+        addEntity('grid_power_169', 'sensor.symcon_grid_power', hasGrid);
+        addEntity('inverter_voltage_154', 'sensor.symcon_grid_voltage_l1', entityAvailable(d, 'gridVoltageL1'));
+        addEntity('inverter_voltage_L2', 'sensor.symcon_grid_voltage_l2', entityAvailable(d, 'gridVoltageL2'));
+        addEntity('inverter_voltage_L3', 'sensor.symcon_grid_voltage_l3', entityAvailable(d, 'gridVoltageL3'));
+        addEntity('grid_voltage', 'sensor.symcon_grid_voltage_l1', entityAvailable(d, 'gridVoltageL1'));
         addEntity('essential_power', 'sensor.symcon_home', true);
 
         addEntity('grid_ct_power_172', 'sensor.symcon_grid', hasGrid);
@@ -2623,6 +2637,10 @@ class Energiefluss extends IPSModuleStrict
         const pvEnergyTotal = activePvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
         const states = {
             'sensor.symcon_grid': ssState(d.gridPhaseL1Available ? d.gridPhaseL1 : grid, 'W'),
+            'sensor.symcon_grid_power': ssState(grid, 'W'),
+            'sensor.symcon_grid_voltage_l1': ssState(d.gridVoltageL1 || 0, 'V'),
+            'sensor.symcon_grid_voltage_l2': ssState(d.gridVoltageL2 || 0, 'V'),
+            'sensor.symcon_grid_voltage_l3': ssState(d.gridVoltageL3 || 0, 'V'),
             'sensor.symcon_grid_total': ssState(grid, 'W'),
             'sensor.symcon_grid_l2': ssState(d.gridPhaseL2 || 0, 'W'),
             'sensor.symcon_grid_l3': ssState(d.gridPhaseL3 || 0, 'W'),
@@ -2671,6 +2689,35 @@ class Energiefluss extends IPSModuleStrict
         // Leitungen und Boxen kommen vollständig aus der Originalkarte.
         if (!card) return;
         await card.updateComplete;
+    }
+
+
+    function applyAdditionalLoadColours(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const colour = AC.room;
+        const matchesAdditionalLoad = element => {
+            const marker = `${element.id || ''} ${element.getAttribute?.('class') || ''}`;
+            return /(?:essload|essential[_-]?load)[1-6](?!\d)/i.test(marker);
+        };
+
+        card.shadowRoot.querySelectorAll('*').forEach(element => {
+            if (!matchesAdditionalLoad(element)) return;
+            element.style.setProperty('color', colour, 'important');
+
+            // SVG-Linien, Symbole und Beschriftungen der zusätzlichen Lasten.
+            if (element instanceof SVGElement) {
+                const tag = element.tagName.toLowerCase();
+                if (['path', 'line', 'polyline', 'circle', 'rect', 'polygon'].includes(tag)) {
+                    element.style.setProperty('stroke', colour, 'important');
+                    if (tag !== 'line' && tag !== 'polyline') {
+                        element.style.setProperty('fill', colour, 'important');
+                    }
+                } else if (tag === 'text' || tag === 'tspan') {
+                    element.style.setProperty('fill', colour, 'important');
+                }
+            }
+        });
     }
 
     function updateSunsynkWallboxAuxInfo() {
@@ -3380,6 +3427,9 @@ HTML;
             'GridPhaseL2',
             'GridPhaseL3',
             'GridFrequency',
+            'GridVoltageL1',
+            'GridVoltageL2',
+            'GridVoltageL3',
             'GridConnectedStatus',
             'InverterPower',
             'HousePower',
@@ -3705,6 +3755,9 @@ HTML;
             'gridPhaseL3'     => $this->ReadVar('GridPhaseL3'),
             'gridPhaseL1Available' => ($this->ReadPropertyInteger('GridPhaseL1') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridPhaseL1'))),
             'gridFrequency'    => $this->ReadVar('GridFrequency'),
+            'gridVoltageL1'    => $this->ReadVar('GridVoltageL1'),
+            'gridVoltageL2'    => $this->ReadVar('GridVoltageL2'),
+            'gridVoltageL3'    => $this->ReadVar('GridVoltageL3'),
             'gridConnectedStatus' => $gridConnectedStatus,
             'housePower'       => $this->ReadVar('HousePower'),
             'inverterPower'    => $this->ReadVar('InverterPower'),
@@ -3718,6 +3771,9 @@ HTML;
                 'gridPhaseL2' => ($this->ReadPropertyInteger('GridPhaseL2') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridPhaseL2'))),
                 'gridPhaseL3' => ($this->ReadPropertyInteger('GridPhaseL3') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridPhaseL3'))),
                 'gridFrequency' => ($this->ReadPropertyInteger('GridFrequency') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridFrequency'))),
+                'gridVoltageL1' => ($this->ReadPropertyInteger('GridVoltageL1') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridVoltageL1'))),
+                'gridVoltageL2' => ($this->ReadPropertyInteger('GridVoltageL2') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridVoltageL2'))),
+                'gridVoltageL3' => ($this->ReadPropertyInteger('GridVoltageL3') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridVoltageL3'))),
                 'gridStatus' => ($this->ReadPropertyInteger('GridConnectedStatus') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridConnectedStatus'))),
                 'inverterPower' => $inverterPowerAvailable,
                 'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
