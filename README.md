@@ -1,7 +1,7 @@
 # Modul zur Visualisierung des Energieflusses für IP-Symcon
 Folgende Funktionen beinhaltet das Energiefluss Symcon Repository
 
-- __Energiefluss__ ([Dokumentation](Energiefluss))   
+- __Energiefluss__ ([Dokumentation](Energie))   
 
 Ein modernes Visualisierungsmodul für **IP-Symcon**, mit dem sich die Energieflüsse eines Hauses übersichtlich und in Echtzeit darstellen lassen.
 
