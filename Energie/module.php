@@ -43,6 +43,9 @@ class Energiefluss extends IPSModuleStrict
 
         // Wechselrichter-Messwerte für die originale Sunsynk-Anzeige.
         $this->RegisterPropertyInteger('InverterPower', 0);
+        $this->RegisterPropertyInteger('InverterCurrentL1', 0);
+        $this->RegisterPropertyInteger('InverterCurrentL2', 0);
+        $this->RegisterPropertyInteger('InverterCurrentL3', 0);
         $this->RegisterPropertyInteger('HousePower', 0);
         // Alte Eigenschaften bleiben zur Abwärtskompatibilität registriert,
         // werden in der neuen Sunsynk-Konfiguration aber nicht mehr angezeigt.
@@ -292,7 +295,10 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'GridVoltageL3', 'caption' => 'Spannung Phase L3 (V)'],
                         ['type' => 'SelectVariable', 'name' => 'GridConnectedStatus', 'caption' => 'Netz verbunden / Status'],
                         ['type' => 'Label', 'caption' => 'Wechselrichter und Haus'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterPower', 'caption' => 'Wechselrichterleistung (W, optional)'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterPower', 'caption' => 'Wechselrichterleistung gesamt (W)'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterCurrentL1', 'caption' => 'Wechselrichterstrom Phase L1 (A)'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterCurrentL2', 'caption' => 'Wechselrichterstrom Phase L2 (A)'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterCurrentL3', 'caption' => 'Wechselrichterstrom Phase L3 (A)'],
                         ['type' => 'SelectVariable', 'name' => 'HousePower', 'caption' => 'Hausverbrauch (W, optional; sonst berechnet)'],
 
                         ['type' => 'Label', 'caption' => 'Wallbox als AUX-Verbraucher'],
@@ -2455,12 +2461,17 @@ class Energiefluss extends IPSModuleStrict
         const activeGroups = groups.filter(g => g.hasPower).slice(0, full ? 6 : 3);
         const hasGrid = entityAvailable(d, 'gridPower');
         const hasWallbox = !!d.hasWallbox;
-        const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3');
+        const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3')
+            || entityAvailable(d, 'inverterCurrentL2') || entityAvailable(d, 'inverterCurrentL3')
+            || entityAvailable(d, 'gridVoltageL2') || entityAvailable(d, 'gridVoltageL3');
 
         const entities = {};
         const addEntity = (key, entity, available = true) => { if (available) entities[key] = entity; };
 
         addEntity('inverter_power_175', 'sensor.symcon_inverter', entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable);
+        addEntity('inverter_current_164', 'sensor.symcon_inverter_current_l1', entityAvailable(d, 'inverterCurrentL1'));
+        addEntity('inverter_current_L2', 'sensor.symcon_inverter_current_l2', entityAvailable(d, 'inverterCurrentL2'));
+        addEntity('inverter_current_L3', 'sensor.symcon_inverter_current_l3', entityAvailable(d, 'inverterCurrentL3'));
         // Die Originalkarte verwendet zusätzlich grid_power_169 für die
         // AC-Seite des Wechselrichters. Ohne diesen Wert bleibt die
         // Wechselrichterleistung in einzelnen Ansichten leer.
@@ -2648,6 +2659,9 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_grid_frequency': ssState(d.gridFrequency || 0, 'Hz'),
             'sensor.symcon_home': ssState(haus || 0, 'W'),
             'sensor.symcon_inverter': ssState(d.inverterPower || 0, 'W'),
+            'sensor.symcon_inverter_current_l1': ssState(d.inverterCurrentL1 || 0, 'A'),
+            'sensor.symcon_inverter_current_l2': ssState(d.inverterCurrentL2 || 0, 'A'),
+            'sensor.symcon_inverter_current_l3': ssState(d.inverterCurrentL3 || 0, 'A'),
             'sensor.symcon_wallbox': ssState(wallbox?.value || 0, 'W'),
             'sensor.symcon_wallbox_energy': ssState(wallbox?.energyValue || 0, 'kWh'),
             'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
@@ -2723,15 +2737,42 @@ class Energiefluss extends IPSModuleStrict
         const value = Number(d.inverterPower || 0);
         const text = `${Math.round(Number.isFinite(value) ? value : 0).toLocaleString('de-DE')} W`;
 
-        // Die Originalkarte besitzt dieses Text-Element bereits. Bei einigen
-        // Modell-/Layoutkombinationen setzt sie es jedoch fälschlich unsichtbar.
-        const node = card.shadowRoot.getElementById('inverter_power_175')
-            || card.shadowRoot.querySelector('[id="inverter_power_175"]');
-        if (node) {
-            node.style.setProperty('display', '', 'important');
+        // Das Originalelement liegt als SVG-Text mit dieser ID im Inverter-Bereich.
+        // Nicht nur CSS setzen, sondern auch die SVG-Attribute entfernen, mit denen
+        // die Karte das Feld je nach Modell/Layout ausblendet.
+        const nodes = card.shadowRoot.querySelectorAll(
+            '#inverter_power_175, [id="inverter_power_175"]'
+        );
+        nodes.forEach(node => {
+            node.removeAttribute('display');
+            node.removeAttribute('visibility');
+            node.removeAttribute('opacity');
+            node.classList.remove('st12');
+            node.style.setProperty('display', 'inline', 'important');
             node.style.setProperty('visibility', 'visible', 'important');
             node.style.setProperty('opacity', '1', 'important');
             node.textContent = text;
+        });
+
+        // Falls das Originalelement in einer bestimmten Version nicht erzeugt wird,
+        // wird der Wert innerhalb des vorhandenen Inverter-SVG ergänzt. Es entsteht
+        // keine zusätzliche Box und die Originalgeometrie bleibt unverändert.
+        if (!nodes.length) {
+            const inverterSvg = card.shadowRoot.querySelector('#Inverter');
+            if (inverterSvg && inverterSvg.namespaceURI === 'http://www.w3.org/2000/svg') {
+                let fallback = inverterSvg.querySelector('#symcon_inverter_power');
+                if (!fallback) {
+                    fallback = document.createElementNS('http://www.w3.org/2000/svg', 'text');
+                    fallback.id = 'symcon_inverter_power';
+                    fallback.setAttribute('x', '242');
+                    fallback.setAttribute('y', '184');
+                    fallback.setAttribute('class', 'st4 st8');
+                    fallback.setAttribute('text-anchor', 'middle');
+                    inverterSvg.appendChild(fallback);
+                }
+                fallback.setAttribute('fill', AC.inverter);
+                fallback.textContent = text;
+            }
         }
     }
 
@@ -2746,32 +2787,44 @@ class Energiefluss extends IPSModuleStrict
             card.shadowRoot.appendChild(style);
         }
 
-        // Die Originalkarte verwendet je nach Layout unterschiedliche Klassen
-        // wie essload1-icon, essload1-small-icon und essload1-icon-full.
-        // Die Hauptlast/Hausanzeige wird ausdrücklich nicht erfasst.
+        // Exakte IDs und Klassen aus der unveränderten Sunsynk-Karte.
+        // Der Hauptwert "ess_power"/Hausverbrauch wird absichtlich nicht erfasst.
         const selectors = [];
         for (let i = 1; i <= 6; i++) {
             selectors.push(
-                `[class*="essload${i}"]`,
-                `[id*="essload${i}"]`,
-                `[class*="essential-load${i}"]`,
-                `[id*="essential-load${i}"]`,
-                `[class*="essential_load${i}"]`,
-                `[id*="essential_load${i}"]`
+                `#ess_load${i}`,
+                `#ess_load${i}_value`,
+                `#ess_load${i}_extra`,
+                `#ess_load${i}_value_extra`,
+                `#ess-load${i}`,
+                `#es-load${i}`,
+                `.essload${i}-icon`,
+                `.essload${i}-small-icon`,
+                `.essload${i}-icon-full`,
+                `[id^="ess_load${i}_"]`,
+                `[id^="ess-load${i}"]`,
+                `[id^="es-load${i}"]`,
+                `[class*="essload${i}-"]`
             );
         }
-        style.textContent = `${selectors.join(',')} { color: ${colour} !important; fill: ${colour} !important; stroke: ${colour} !important; }`;
 
-        // Inline-Attribute der SVG-Elemente übersteuern, inklusive Kinder der
-        // jeweiligen Lastgruppe. So werden Icon, Text, Kreis und Leitung erfasst.
-        const roots = card.shadowRoot.querySelectorAll(selectors.join(','));
-        roots.forEach(root => {
+        style.textContent = `
+            ${selectors.join(',')} {
+                color: ${colour} !important;
+                fill: ${colour} !important;
+                stroke: ${colour} !important;
+            }
+        `;
+
+        card.shadowRoot.querySelectorAll(selectors.join(',')).forEach(root => {
             const all = [root, ...root.querySelectorAll('*')];
             all.forEach(element => {
-                element.style?.setProperty('color', colour, 'important');
+                if (element.style) {
+                    element.style.setProperty('color', colour, 'important');
+                }
                 if (element instanceof SVGElement) {
                     const tag = element.tagName.toLowerCase();
-                    if (['path', 'line', 'polyline', 'circle', 'rect', 'polygon', 'text', 'tspan'].includes(tag)) {
+                    if (['text', 'tspan', 'path', 'circle', 'rect', 'polygon', 'polyline', 'line'].includes(tag)) {
                         element.style.setProperty('stroke', colour, 'important');
                         if (!['line', 'polyline'].includes(tag)) {
                             element.style.setProperty('fill', colour, 'important');
@@ -3496,6 +3549,9 @@ HTML;
             'GridVoltageL3',
             'GridConnectedStatus',
             'InverterPower',
+            'InverterCurrentL1',
+            'InverterCurrentL2',
+            'InverterCurrentL3',
             'HousePower',
             'InverterVoltage',
             'InverterCurrent',
@@ -3825,6 +3881,9 @@ HTML;
             'gridConnectedStatus' => $gridConnectedStatus,
             'housePower'       => $this->ReadVar('HousePower'),
             'inverterPower'    => $this->ReadVar('InverterPower'),
+            'inverterCurrentL1' => $this->ReadVar('InverterCurrentL1'),
+            'inverterCurrentL2' => $this->ReadVar('InverterCurrentL2'),
+            'inverterCurrentL3' => $this->ReadVar('InverterCurrentL3'),
             'inverterPowerAvailable' => $inverterPowerAvailable,
             'inverterVoltage'  => $this->ReadVar('InverterVoltage'),
             'inverterCurrent'  => $this->ReadVar('InverterCurrent'),
@@ -3840,6 +3899,9 @@ HTML;
                 'gridVoltageL3' => ($this->ReadPropertyInteger('GridVoltageL3') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridVoltageL3'))),
                 'gridStatus' => ($this->ReadPropertyInteger('GridConnectedStatus') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridConnectedStatus'))),
                 'inverterPower' => $inverterPowerAvailable,
+                'inverterCurrentL1' => ($this->ReadPropertyInteger('InverterCurrentL1') > 0 && IPS_VariableExists($this->ReadPropertyInteger('InverterCurrentL1'))),
+                'inverterCurrentL2' => ($this->ReadPropertyInteger('InverterCurrentL2') > 0 && IPS_VariableExists($this->ReadPropertyInteger('InverterCurrentL2'))),
+                'inverterCurrentL3' => ($this->ReadPropertyInteger('InverterCurrentL3') > 0 && IPS_VariableExists($this->ReadPropertyInteger('InverterCurrentL3'))),
                 'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
             ],
             'gridImportEnergy' => $this->ReadVarFormatted('GridImportEnergy'),
