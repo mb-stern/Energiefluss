@@ -670,6 +670,10 @@ class Energiefluss extends IPSModuleStrict
             "battery consumers";
     }
 
+    #sunsynk-host { position:absolute; inset:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
+    #sunsynk-host sunsynk-power-flow-card { display:block; width:100%; height:100%; --ha-card-background:transparent; --card-background-color:transparent; --primary-text-color:var(--w-text); --secondary-text-color:var(--w-text2); }
+    #sunsynk-loading, #sunsynk-error { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--w-text2); font-size:16px; padding:20px; text-align:center; box-sizing:border-box; }
+    #sunsynk-error { display:none; color:#ef5350; }
     .tech-card {
         min-width: 0;
         overflow: hidden;
@@ -1053,6 +1057,9 @@ class Energiefluss extends IPSModuleStrict
 <script type="module"
         src="/user/Energiefluss/vendor/power-flow-card.js">
 </script>
+<script type="module"
+        src="/user/Energiefluss/vendor/sunsynk-power-flow-card.js">
+</script>
 
 <div id="eflow">
     <div id="scale-host">
@@ -1063,13 +1070,10 @@ class Energiefluss extends IPSModuleStrict
                     <!-- Klassische Energieflussansicht -->
                     <div id="stage">
                         <div id="technical-dashboard" class="full">
-                            <section id="tech-summary" class="tech-card"></section>
-                            <section id="tech-pv" class="tech-card"></section>
-                            <section id="tech-grid" class="tech-card"></section>
-                            <section id="tech-center" class="tech-card"></section>
-                            <section id="tech-battery" class="tech-card"></section>
-                            <section id="tech-consumers" class="tech-card"></section>
-                            <section id="tech-wallbox" class="tech-card"></section>
+                            <div id="sunsynk-host">
+                                <div id="sunsynk-loading">Technische Energieflusskarte wird geladen …</div>
+                                <div id="sunsynk-error"></div>
+                            </div>
                         </div>
                         <svg id="svg" style="display:none" width="1080" height="640" viewBox="0 0 1080 640" aria-hidden="true">
                             <g id="lines" fill="none" stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5"></g>
@@ -2300,97 +2304,172 @@ class Energiefluss extends IPSModuleStrict
             .replaceAll("'", '&#039;');
     }
 
-    function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
-        const dashboard = document.getElementById('technical-dashboard');
-        if (!dashboard) return;
+    // ---------- Originale Sunsynk Power Flow Card ----------
+    let sunsynkCard = null;
+    let sunsynkInitPromise = null;
+    let sunsynkPending = null;
 
-        const layout = d.technicalLayout === 'compact' ? 'compact' : 'full';
-        dashboard.className = layout;
+    function ssState(value, unit = 'W') {
+        const n = Number(value);
+        return { state: String(Number.isFinite(n) ? n : 0), attributes: { unit_of_measurement: unit } };
+    }
 
-        const pvTotal = pvs.reduce((sum, pv) => sum + Number(pv.value || 0), 0);
-        const batteryTotal = batteries.reduce((sum, bat) => sum + Number(bat.value || 0), 0);
-        const consumerTotal = groups.reduce((sum, g) => sum + Number(g.value || 0), 0)
-            + (d.hasWallbox ? Math.max(Number(wallbox.value || 0), 0) : 0);
-        const gridColor = grid >= 0 ? AC.import : AC.export;
-        const batteryColor = batteryTotal >= 0 ? AC.discharge : AC.charge;
-
-        const summary = document.getElementById('tech-summary');
-        summary.innerHTML = `<div class="tech-summary-grid">
-            <div class="tech-summary-cell" style="border-color:${AC.solar}"><div class="tech-summary-label">PV</div><div class="tech-summary-value" style="color:${AC.solar}">${fmt(pvTotal)}</div></div>
-            <div class="tech-summary-cell" style="border-color:${AC.home}"><div class="tech-summary-label">Haus</div><div class="tech-summary-value">${fmt(haus)}</div></div>
-            <div class="tech-summary-cell" style="border-color:${gridColor}"><div class="tech-summary-label">Netz</div><div class="tech-summary-value" style="color:${gridColor}">${fmt(Math.abs(grid))}</div></div>
-            <div class="tech-summary-cell" style="border-color:${batteryColor}"><div class="tech-summary-label">Batterie</div><div class="tech-summary-value" style="color:${batteryColor}">${batteries.length ? fmt(Math.abs(batteryTotal)) : '–'}</div></div>
-        </div>`;
-
-        const pvCard = document.getElementById('tech-pv');
-        const pvRows = pvs.map((pv, i) => techRow(
-            pv.name || `PV ${i + 1}`,
-            fmt(pv.value || 0),
-            pv.energy ? escapeHtml(pv.energy) : '',
-            AC.solar
-        )).join('');
-        pvCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-solar-panel"></i> PV-Anlagen</div>
-            <div class="tech-main" style="color:${AC.solar}">${fmt(pvTotal)}</div>
-            <div class="tech-list">${pvRows || '<div class="tech-empty">Keine PV-Anlage konfiguriert</div>'}</div>`;
-
-        const gridCard = document.getElementById('tech-grid');
-        const gridDirection = grid < 0 ? 'Einspeisung ins Netz' : 'Bezug aus dem Netz';
-        const gridEnergy = [
-            d.gridImportEnergy ? `→ ${escapeHtml(d.gridImportEnergy)}` : '',
-            d.gridExportEnergy ? `← ${escapeHtml(d.gridExportEnergy)}` : ''
-        ].filter(Boolean).join('<br>');
-        gridCard.style.borderColor = gridColor;
-        gridCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-bolt"></i> Netz</div>
-            <div class="tech-main" style="color:${gridColor}">${fmt(Math.abs(grid))}</div>
-            <div class="tech-direction" style="color:${gridColor}">${grid < 0 ? '←' : '→'} ${gridDirection}</div>
-            <div class="tech-sub">${gridEnergy}</div>`;
-
-        const center = document.getElementById('tech-center');
-        center.innerHTML = `<div class="tech-flow-hub" style="border-color:${AC.home}">
-            <i class="fa-solid fa-house"></i>
-            <div class="tech-main">${fmt(haus)}</div>
-            <div class="tech-sub">${d.houseEnergyAvailable ? fmtKwh(d.houseEnergy) : 'Hausverbrauch'}</div>
-        </div>`;
-
-        const batteryCard = document.getElementById('tech-battery');
-        const batteryRows = batteries.map((bat, i) => {
-            const details = [
-                `${Math.round(Number(bat.soc || 0))} % SOC`,
-                bat.dischargeEnergyText ? `→ ${escapeHtml(bat.dischargeEnergyText)}` : '',
-                bat.chargeEnergyText ? `← ${escapeHtml(bat.chargeEnergyText)}` : ''
-            ].filter(Boolean).join(' · ');
-            return techRow(bat.name || `Batterie ${i + 1}`, fmt(Math.abs(bat.value || 0)), details,
-                Number(bat.value || 0) >= 0 ? AC.discharge : AC.charge);
-        }).join('');
-        batteryCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-battery-half"></i> Batterie</div>
-            ${batteries.length ? `<div class="tech-main" style="color:${batteryColor}">${fmt(Math.abs(batteryTotal))}</div>` : ''}
-            <div class="tech-list">${batteryRows || '<div class="tech-empty">Keine Batterie konfiguriert</div>'}</div>`;
-
-        const consumerCard = document.getElementById('tech-consumers');
-        const consumerRows = groups.map((g, i) => techRow(
-            g.name || `Verbraucher ${i + 1}`,
-            fmt(g.value || 0),
-            g.daily ? escapeHtml(g.daily) : '',
-            AC.room
-        )).join('');
-        consumerCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-plug"></i> Verbraucher</div>
-            <div class="tech-main" style="color:${AC.room}">${fmt(consumerTotal)}</div>
-            <div class="tech-list">${consumerRows || '<div class="tech-empty">Keine weiteren Verbraucher</div>'}</div>`;
-
-        const wallboxCard = document.getElementById('tech-wallbox');
-        wallboxCard.style.display = d.hasWallbox ? '' : 'none';
-        if (d.hasWallbox) {
-            const wbDetails = [wallbox.hasSoc ? escapeHtml(wallbox.socText) : '', wallbox.energy ? escapeHtml(wallbox.energy) : ''].filter(Boolean).join(' · ');
-            wallboxCard.innerHTML = `<div class="tech-card-title"><i class="fa-solid fa-charging-station"></i> ${escapeHtml(wallbox.name || 'Wallbox')}</div>
-                <div class="tech-main" style="color:${AC.room}">${fmt(Math.max(wallbox.value || 0, 0))}</div>
-                <div class="tech-sub">${wbDetails}</div>`;
+    function ensureHaCompatibility() {
+        window.customCards = window.customCards || [];
+        if (!customElements.get('ha-icon')) {
+            customElements.define('ha-icon', class extends HTMLElement {
+                static get observedAttributes() { return ['icon']; }
+                connectedCallback() { this.render(); }
+                attributeChangedCallback() { this.render(); }
+                render() {
+                    const icon = (this.getAttribute('icon') || '').split(':').pop() || 'circle';
+                    this.innerHTML = `<i class="fa-solid fa-${escapeHtml(icon)}"></i>`;
+                }
+            });
         }
+    }
 
+    function createSunsynkConfig(d, pvs, batteries, wallbox, groups) {
+        const compact = currentTechnicalLayout === 'compact';
+        const pvCount = Math.max(1, Math.min(6, pvs.length || 1));
+        const groupCount = Math.min(6, groups.length);
+        return {
+            cardstyle: compact ? 'compact' : 'full',
+            wide: false,
+            large_font: true,
+            show_solar: pvs.length > 0,
+            show_battery: batteries.length > 0,
+            show_grid: true,
+            decimal_places: 0,
+            decimal_places_energy: 2,
+            dynamic_line_width: true,
+            max_line_width: 5,
+            min_line_width: 2,
+            inverter: { modern: true, model: 'goodwe', autarky: 'power', auto_scale: true, label_autarky: 'Autarkie' },
+            solar: {
+                colour: AC.solar, show_daily: false, mppts: pvCount,
+                animation_speed: Math.max(1, Math.round(9 * flowSpeedFactor)), max_power: 12000,
+                auto_scale: true, display_mode: 1,
+                pv1_name: pvs[0]?.name || 'PV 1', pv2_name: pvs[1]?.name || 'PV 2',
+                pv3_name: pvs[2]?.name || 'PV 3', pv4_name: pvs[3]?.name || 'PV 4',
+                pv5_name: pvs[4]?.name || 'PV 5', pv6_name: pvs[5]?.name || 'PV 6'
+            },
+            battery: {
+                count: Math.min(2, Math.max(1, batteries.length)), shutdown_soc: 1, soc_end_of_charge: 100,
+                colour: AC.discharge, charge_colour: AC.charge, show_daily: false,
+                animation_speed: Math.max(1, Math.round(6 * flowSpeedFactor)), max_power: 10000,
+                auto_scale: true, dynamic_colour: true, linear_gradient: true, animate: true, show_absolute: true
+            },
+            battery2: {
+                shutdown_soc: 1, soc_end_of_charge: 100, colour: AC.discharge,
+                charge_colour: AC.charge, show_absolute: true, auto_scale: true,
+                dynamic_colour: true, linear_gradient: true, animate: true
+            },
+            load: {
+                colour: AC.room, off_colour: '#9e9e9e', dynamic_colour: true,
+                show_daily: false, show_aux: !!d.hasWallbox, show_daily_aux: false,
+                animation_speed: Math.max(1, Math.round(4 * flowSpeedFactor)), max_power: 12000,
+                auto_scale: true, additional_loads: groupCount,
+                aux_name: wallbox?.name || 'Wallbox',
+                load1_name: groups[0]?.name || '', load2_name: groups[1]?.name || '',
+                load3_name: groups[2]?.name || '', load4_name: groups[3]?.name || '',
+                load5_name: groups[4]?.name || '', load6_name: groups[5]?.name || ''
+            },
+            grid: {
+                colour: AC.import, export_colour: AC.export, grid_name: 'Netz',
+                show_daily_buy: false, show_daily_sell: false,
+                animation_speed: Math.max(1, Math.round(8 * flowSpeedFactor)), max_power: 12000,
+                auto_scale: true, show_absolute: true
+            },
+            entities: {
+                battery_soc_184: 'sensor.symcon_battery_soc', battery_power_190: 'sensor.symcon_battery_power',
+                battery_current_191: 'sensor.symcon_battery_current', battery2_soc_184: 'sensor.symcon_battery2_soc',
+                battery2_power_190: 'sensor.symcon_battery2_power', pv1_power_186: 'sensor.symcon_pv1',
+                pv2_power_187: 'sensor.symcon_pv2', pv3_power_188: 'sensor.symcon_pv3',
+                pv4_power_189: 'sensor.symcon_pv4', pv5_power: 'sensor.symcon_pv5', pv6_power: 'sensor.symcon_pv6',
+                grid_ct_power_172: 'sensor.symcon_grid', grid_connected_status_194: 'sensor.symcon_grid_status',
+                essential_power: 'sensor.symcon_home', inverter_power_175: 'sensor.symcon_inverter',
+                aux_power_166: 'sensor.symcon_wallbox', essential_load1: 'sensor.symcon_load1',
+                essential_load2: 'sensor.symcon_load2', essential_load3: 'sensor.symcon_load3',
+                essential_load4: 'sensor.symcon_load4', essential_load5: 'sensor.symcon_load5',
+                essential_load6: 'sensor.symcon_load6'
+            }
+        };
+    }
+
+    function createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups) {
+        const bat1 = batteries[0] || { value: 0, soc: 0 };
+        const bat2 = batteries[1] || { value: 0, soc: 0 };
+        const pvTotal = pvs.reduce((sum, pv) => sum + Number(pv.value || 0), 0);
+        const states = {
+            'sensor.symcon_battery_soc': ssState(bat1.soc || 0, '%'),
+            'sensor.symcon_battery_power': ssState(-(bat1.value || 0), 'W'),
+            'sensor.symcon_battery_current': ssState(0, 'A'),
+            'sensor.symcon_battery2_soc': ssState(bat2.soc || 0, '%'),
+            'sensor.symcon_battery2_power': ssState(-(bat2.value || 0), 'W'),
+            'sensor.symcon_grid': ssState(grid || 0, 'W'),
+            'sensor.symcon_grid_status': { state: 'on-grid', attributes: {} },
+            'sensor.symcon_home': ssState(haus || 0, 'W'),
+            'sensor.symcon_inverter': ssState(pvTotal, 'W'),
+            'sensor.symcon_wallbox': ssState(wallbox?.value || 0, 'W')
+        };
+        for (let i = 0; i < 6; i++) {
+            states[`sensor.symcon_pv${i + 1}`] = ssState(pvs[i]?.value || 0, 'W');
+            states[`sensor.symcon_load${i + 1}`] = ssState(groups[i]?.value || 0, 'W');
+        }
+        return {
+            states,
+            locale: { language: 'de', number_format: 'comma_decimal' },
+            language: 'de',
+            config: { unit_system: { length: 'km', mass: 'kg', temperature: '°C', volume: 'L' } },
+            themes: { darkMode: document.documentElement.getAttribute('data-theme') === 'dark' },
+            localize: key => key,
+            callService: () => Promise.resolve(),
+            navigate: () => {}
+        };
+    }
+
+    async function ensureSunsynkCard(d, pvs, batteries, wallbox, groups) {
+        if (sunsynkCard) return sunsynkCard;
+        if (sunsynkInitPromise) return sunsynkInitPromise;
+        sunsynkInitPromise = (async () => {
+            ensureHaCompatibility();
+            await customElements.whenDefined('sunsynk-power-flow-card');
+            const host = document.getElementById('sunsynk-host');
+            const card = document.createElement('sunsynk-power-flow-card');
+            card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
+            host.appendChild(card);
+            sunsynkCard = card;
+            document.getElementById('sunsynk-loading').style.display = 'none';
+            if (sunsynkPending) {
+                const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
+            }
+            return card;
+        })().catch(err => {
+            console.error('Sunsynk-Karte:', err);
+            const loading = document.getElementById('sunsynk-loading');
+            const error = document.getElementById('sunsynk-error');
+            if (loading) loading.style.display = 'none';
+            if (error) { error.style.display = 'flex'; error.textContent = 'Sunsynk-Karte konnte nicht geladen werden: ' + err.message; }
+            throw err;
+        });
+        return sunsynkInitPromise;
+    }
+
+    function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
+        currentTechnicalLayout = d.technicalLayout === 'compact' ? 'compact' : 'full';
         const layoutButton = document.getElementById('technical-layout-button');
         if (layoutButton) {
-            layoutButton.textContent = layout === 'full' ? '▦' : '▤';
-            layoutButton.title = layout === 'full' ? 'Kompakte Technikansicht' : 'Vollständige Technikansicht';
+            layoutButton.textContent = currentTechnicalLayout === 'full' ? '▦' : '▤';
+            layoutButton.title = currentTechnicalLayout === 'full' ? 'Kompakte Sunsynk-Ansicht' : 'Vollständige Sunsynk-Ansicht';
         }
+        if (!sunsynkCard) {
+            sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
+            ensureSunsynkCard(d, pvs, batteries, wallbox, groups).catch(() => {});
+            return;
+        }
+        sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
+        sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
@@ -2841,6 +2920,7 @@ HTML;
          *
          *   assets/vendor/power-flow-card.js
          *   assets/vendor/lit-core.min.js
+         *   assets/vendor/sunsynk-power-flow-card.js
          *
          * Der /user/-Ordner ist nur die vom Symcon-Webserver erreichbare
          * Laufzeitkopie. Es findet keinerlei Download aus dem Internet statt.
@@ -2871,6 +2951,7 @@ HTML;
         $assets = [
             'power-flow-card.js',
             'lit-core.min.js',
+            'sunsynk-power-flow-card.js',
         ];
 
         foreach ($assets as $asset) {
