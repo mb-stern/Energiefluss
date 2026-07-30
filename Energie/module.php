@@ -32,6 +32,17 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyBoolean('InvertGridPower', false);
         $this->RegisterPropertyInteger('GridImportEnergy', 0);
         $this->RegisterPropertyInteger('GridExportEnergy', 0);
+        $this->RegisterPropertyInteger('GridVoltage', 0);
+        $this->RegisterPropertyInteger('GridCurrent', 0);
+        $this->RegisterPropertyInteger('GridFrequency', 0);
+        $this->RegisterPropertyInteger('GridConnectedStatus', 0);
+
+        // Wechselrichter-Messwerte für die originale Sunsynk-Anzeige.
+        $this->RegisterPropertyInteger('InverterPower', 0);
+        $this->RegisterPropertyInteger('InverterVoltage', 0);
+        $this->RegisterPropertyInteger('InverterCurrent', 0);
+        $this->RegisterPropertyInteger('InverterFrequency', 0);
+        $this->RegisterPropertyInteger('InverterTemperature', 0);
 
         // Wallbox.
         $this->RegisterPropertyString('WallboxName', 'Wallbox');
@@ -51,6 +62,7 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('ColorConsumers', 3123599);
         $this->RegisterPropertyInteger('ColorWallbox', 3123599);
         $this->RegisterPropertyInteger('ColorHouseLoad', 5087231);
+        $this->RegisterPropertyInteger('ColorInverter', 11776947);
 
         // Farben der Haus-Visualisierung.
         // Vorgaben entsprechen den Originalfarben der eingebetteten home.svg.
@@ -129,9 +141,12 @@ class Energiefluss extends IPSModuleStrict
                     'name'    => 'TechnicalLayout',
                     'caption' => 'Technische Ansicht',
                     'options' => [
-                        ['caption' => 'Compact – kompakte Originalansicht', 'value' => 'compact'],
-                        ['caption' => 'Lite – mittlere Originalansicht', 'value' => 'lite'],
-                        ['caption' => 'Full – vollständige Originalansicht', 'value' => 'full'],
+                        ['caption' => 'Compact', 'value' => 'compact'],
+                        ['caption' => 'Compact Wide (16:9)', 'value' => 'compact-wide'],
+                        ['caption' => 'Lite', 'value' => 'lite'],
+                        ['caption' => 'Lite Wide (16:9)', 'value' => 'lite-wide'],
+                        ['caption' => 'Full', 'value' => 'full'],
+                        ['caption' => 'Full Wide (16:9)', 'value' => 'full-wide'],
                     ],
                 ],
                 [
@@ -206,18 +221,6 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Max. Entladezustand fest (%)',
-                                    'name'    => 'MaxDischargeSoC',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => [
-                                        'type'    => 'NumberSpinner',
-                                        'minimum' => 0,
-                                        'maximum' => 100,
-                                        'digits'  => 0,
-                                    ],
-                                ],
-                                [
                                     'caption' => 'Entladeenergie (kWh)',
                                     'name'    => 'DischargeEnergyVariableID',
                                     'width'   => '220px',
@@ -252,6 +255,17 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'GridExportPower', 'caption' => 'Rücklieferung Leistung (W, optional)'],
                         ['type' => 'SelectVariable', 'name' => 'GridImportEnergy', 'caption' => 'Netzbezug gesamt (kWh)'],
                         ['type' => 'SelectVariable', 'name' => 'GridExportEnergy', 'caption' => 'Rücklieferung / Einspeisung gesamt (kWh)'],
+                        ['type' => 'Label', 'caption' => 'Smartmeter / Netz-Messwerte (optional)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridVoltage', 'caption' => 'Smartmeter Spannung (V)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridCurrent', 'caption' => 'Smartmeter Strom (A)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridFrequency', 'caption' => 'Smartmeter Frequenz (Hz)'],
+                        ['type' => 'SelectVariable', 'name' => 'GridConnectedStatus', 'caption' => 'Netz verbunden / Status'],
+                        ['type' => 'Label', 'caption' => 'Wechselrichter-Messwerte (optional)'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterPower', 'caption' => 'Wechselrichterleistung (W)'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterVoltage', 'caption' => 'Wechselrichter Spannung (V)'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterCurrent', 'caption' => 'Wechselrichter Strom (A)'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterFrequency', 'caption' => 'Wechselrichter Frequenz (Hz)'],
+                        ['type' => 'SelectVariable', 'name' => 'InverterTemperature', 'caption' => 'Wechselrichter Temperatur (°C)'],
 
                         ['type' => 'Label', 'caption' => 'Wallbox'],
                         ['type' => 'ValidationTextBox', 'name' => 'WallboxName', 'caption' => 'Name'],
@@ -317,6 +331,7 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorGridExport', 'caption' => 'Netzeinspeisung', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryCharge', 'caption' => 'Batterie laden', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorInverter', 'caption' => 'Wechselrichter (technische Ansicht)', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorHouseLoad', 'caption' => 'Hausverbrauch', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorWallbox', 'caption' => 'Wallbox', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Weitere Verbraucher', 'allowTransparent' => false],
@@ -383,7 +398,7 @@ class Energiefluss extends IPSModuleStrict
     {
         if ($Ident === 'ToggleTechnicalLayout') {
             $requestedLayout = (string) $Value;
-            $newLayout = in_array($requestedLayout, ['compact', 'lite', 'full'], true) ? $requestedLayout : 'lite';
+            $newLayout = in_array($requestedLayout, ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'], true) ? $requestedLayout : 'lite';
 
             if ($newLayout !== $this->ReadPropertyString('TechnicalLayout')) {
                 IPS_SetProperty($this->InstanceID, 'TechnicalLayout', $newLayout);
@@ -1199,7 +1214,8 @@ class Energiefluss extends IPSModuleStrict
         discharge: '#29b6f6',
         charge: '#64b5f6',
         wallbox: '#2FA98F',
-        home: '#4d9fff'
+        home: '#4d9fff',
+        inverter: '#b3b3b3'
     };
 
     let flowSpeedFactor = 1.0;
@@ -2395,7 +2411,9 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function createSunsynkConfig(d, pvs, batteries, wallbox, groups) {
-        const style = ['compact', 'lite', 'full'].includes(currentTechnicalLayout) ? currentTechnicalLayout : 'lite';
+        const requestedLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(currentTechnicalLayout) ? currentTechnicalLayout : 'lite';
+        const wide = requestedLayout.endsWith('-wide');
+        const style = requestedLayout.replace('-wide', '');
         const compact = style === 'compact';
         const full = style === 'full';
         const pvCount = Math.max(1, Math.min(6, pvs.length || 1));
@@ -2408,7 +2426,7 @@ class Energiefluss extends IPSModuleStrict
         const showEnergyDetails = !compact;
         return {
             cardstyle: style,
-            wide: full,
+            wide: wide,
             large_font: true,
             show_solar: pvs.length > 0,
             show_battery: batteries.length > 0,
@@ -2418,7 +2436,7 @@ class Energiefluss extends IPSModuleStrict
             dynamic_line_width: true,
             max_line_width: 5,
             min_line_width: 2,
-            inverter: { modern: true, model: 'goodwe', colour: AC.home, autarky: 'power', auto_scale: false, label_autarky: 'Autarkie', label_ratio: 'Eigenverbrauch' },
+            inverter: { modern: true, model: 'goodwe', colour: AC.inverter, autarky: 'power', auto_scale: false, label_autarky: 'Autarkie', label_ratio: 'Eigenverbrauch' },
             solar: {
                 colour: AC.solar, show_daily: showEnergyDetails && pvs.some(pv => pv.hasEnergy), mppts: pvCount,
                 animation_speed: Math.max(1, Math.round(9 / flowSpeedFactor)), max_power: 12000,
@@ -2491,7 +2509,11 @@ class Energiefluss extends IPSModuleStrict
                 pv2_power_187: 'sensor.symcon_pv2', pv3_power_188: 'sensor.symcon_pv3',
                 pv4_power_189: 'sensor.symcon_pv4', pv5_power: 'sensor.symcon_pv5', pv6_power: 'sensor.symcon_pv6',
                 grid_ct_power_172: 'sensor.symcon_grid', grid_connected_status_194: 'sensor.symcon_grid_status',
+                grid_voltage: 'sensor.symcon_grid_voltage', grid_current: 'sensor.symcon_grid_current',
+                grid_frequency: 'sensor.symcon_grid_frequency',
                 essential_power: 'sensor.symcon_home', inverter_power_175: 'sensor.symcon_inverter',
+                inverter_voltage_154: 'sensor.symcon_inverter_voltage', inverter_current_164: 'sensor.symcon_inverter_current',
+                load_frequency_192: 'sensor.symcon_inverter_frequency', inverter_temp_91: 'sensor.symcon_inverter_temperature',
                 aux_power_166: 'sensor.symcon_wallbox', day_aux_energy: 'sensor.symcon_wallbox_energy',
                 day_pv_energy_108: 'sensor.symcon_pv_energy',
                 day_grid_import_76: 'sensor.symcon_grid_import_energy',
@@ -2524,9 +2546,16 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_battery2_soc': ssState(bat2.soc || 0, '%'),
             'sensor.symcon_battery2_power': ssState((bat2.value || 0), 'W'),
             'sensor.symcon_grid': ssState(grid || 0, 'W'),
-            'sensor.symcon_grid_status': { state: 'on-grid', attributes: {} },
+            'sensor.symcon_grid_status': { state: String(d.gridConnectedStatus ?? 'on-grid'), attributes: {} },
+            'sensor.symcon_grid_voltage': ssState(d.gridVoltage || 0, 'V'),
+            'sensor.symcon_grid_current': ssState(d.gridCurrent || 0, 'A'),
+            'sensor.symcon_grid_frequency': ssState(d.gridFrequency || 0, 'Hz'),
             'sensor.symcon_home': ssState(haus || 0, 'W'),
-            'sensor.symcon_inverter': ssState(pvTotal, 'W'),
+            'sensor.symcon_inverter': ssState(d.inverterPowerAvailable ? d.inverterPower : pvTotal, 'W'),
+            'sensor.symcon_inverter_voltage': ssState(d.inverterVoltage || 0, 'V'),
+            'sensor.symcon_inverter_current': ssState(d.inverterCurrent || 0, 'A'),
+            'sensor.symcon_inverter_frequency': ssState(d.inverterFrequency || 0, 'Hz'),
+            'sensor.symcon_inverter_temperature': ssState(d.inverterTemperature || 0, '°C'),
             'sensor.symcon_wallbox': ssState(wallbox?.value || 0, 'W'),
             'sensor.symcon_wallbox_energy': ssState(wallbox?.energyValue || 0, 'kWh'),
             'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
@@ -2622,6 +2651,16 @@ class Energiefluss extends IPSModuleStrict
                 }
             ` : ''}
 
+            /* Wechselrichter bleibt unabhängig vom Hausverbrauch. */
+            #inverter, [id*="inverter"], [class*="inverter"] {
+                color: ${AC.inverter} !important;
+            }
+            #inverter path, #inverter line, #inverter polyline,
+            [id*="inverter"] path, [id*="inverter"] line, [id*="inverter"] polyline {
+                fill: ${AC.inverter} !important;
+                stroke: ${AC.inverter} !important;
+            }
+
             /* Zusätzliche Hauszweige: normale Verbraucher in der
                konfigurierten Verbraucherfarbe. */
             .essload1-icon, .essload1-icon-full, .essload1-small-icon,
@@ -2697,16 +2736,18 @@ class Energiefluss extends IPSModuleStrict
             root.appendChild(info);
         }
 
-        const compact = currentTechnicalLayout === 'compact';
+        const compact = currentTechnicalLayout.replace('-wide', '') === 'compact';
         const soc = wallbox?.hasSoc ? String(wallbox.socText || '') : '';
         const energy = wallbox?.hasEnergy ? fmtKwh(wallbox.energyValue || 0) : '';
         const details = [soc, energy].filter(Boolean).join(' · ');
 
+        const wide = currentTechnicalLayout.endsWith('-wide');
+        const full = currentTechnicalLayout.replace('-wide', '') === 'full';
         info.style.cssText = `
             position:absolute;
             z-index:20;
-            left:${compact ? '69%' : '72%'};
-            top:${compact ? '16%' : '13%'};
+            left:${wide ? '77%' : (full ? '73%' : '72%')};
+            top:${wide ? '9%' : (compact ? '12%' : '10%')};
             transform:translateX(-50%);
             pointer-events:none;
             text-align:center;
@@ -2716,11 +2757,12 @@ class Energiefluss extends IPSModuleStrict
             text-shadow:0 1px 2px rgba(0,0,0,.35);
         `;
 
-        info.innerHTML = `
-            <div style="font-size:${compact ? 15 : 14}px;font-weight:650">${wallbox?.name || 'Wallbox'}</div>
-            <div style="font-size:${compact ? 21 : 19}px;font-weight:750">${fmt(wallbox?.value || 0)}</div>
-            ${details ? `<div style="font-size:${compact ? 14 : 13}px;font-weight:600">${details}</div>` : ''}
-        `;
+        // Leistung, Name und Tagesenergie zeichnet die Originalkarte selbst.
+        // Wir ergänzen ausschließlich den Fahrzeug-SOC, damit keine zweite Box
+        // über der originalen AUX-Leitung entsteht.
+        info.innerHTML = soc
+            ? `<div style="font-size:${compact ? 14 : 13}px;font-weight:650">Fahrzeug ${soc}</div>`
+            : '';
     }
 
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
@@ -2765,10 +2807,10 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
-        currentTechnicalLayout = ['compact', 'lite', 'full'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
+        currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
         const layoutButton = document.getElementById('technical-layout-button');
         if (layoutButton) {
-            layoutButton.textContent = ({compact: 'C', lite: 'L', full: 'F'})[currentTechnicalLayout] || 'L';
+            layoutButton.textContent = ({compact: 'C', 'compact-wide': 'CW', lite: 'L', 'lite-wide': 'LW', full: 'F', 'full-wide': 'FW'})[currentTechnicalLayout] || 'L';
             layoutButton.title = `Sunsynk-Ansicht: ${currentTechnicalLayout}`;
         }
         if (!sunsynkCard) {
@@ -2838,7 +2880,7 @@ class Energiefluss extends IPSModuleStrict
     const technicalLayoutButton = document.getElementById('technical-layout-button');
     if (technicalLayoutButton) {
         technicalLayoutButton.addEventListener('click', function () {
-            const order = ['compact', 'lite', 'full'];
+            const order = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'];
             const newLayout = order[(Math.max(0, order.indexOf(currentTechnicalLayout)) + 1) % order.length];
             requestAction('ToggleTechnicalLayout', newLayout);
         });
@@ -2894,6 +2936,7 @@ class Energiefluss extends IPSModuleStrict
             AC.room = d.colors.room || AC.room;
             AC.wallbox = d.colors.wallbox || AC.wallbox;
             AC.home = d.colors.home || AC.home;
+            AC.inverter = d.colors.inverter || AC.inverter;
         }
 
         const speedPercent = Number(d && d.flowSpeedPercent);
@@ -2943,7 +2986,7 @@ class Energiefluss extends IPSModuleStrict
         const haus = Math.max(pvTotal + batteryTotal + grid, 0);
 
         // Neue technische Ansicht.
-        currentTechnicalLayout = ['compact', 'lite', 'full'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
+        currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
         renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups);
 
         // Alte SVG-Struktur bleibt intern nur für Abwärtskompatibilität erhalten.
@@ -3418,6 +3461,15 @@ HTML;
             'GridExportPower',
             'GridImportEnergy',
             'GridExportEnergy',
+            'GridVoltage',
+            'GridCurrent',
+            'GridFrequency',
+            'GridConnectedStatus',
+            'InverterPower',
+            'InverterVoltage',
+            'InverterCurrent',
+            'InverterFrequency',
+            'InverterTemperature',
             'WallboxPower',
             'WallboxEnergy',
         ] as $property) {
@@ -3578,7 +3630,7 @@ HTML;
                             (int) round(
                                 ($maxDischargeSoCVariableID > 0 && IPS_VariableExists($maxDischargeSoCVariableID))
                                     ? (float) GetValue($maxDischargeSoCVariableID)
-                                    : (float) ($source['MaxDischargeSoC'] ?? 0)
+                                    : 0.0
                             )
                         )
                     ),
@@ -3701,12 +3753,29 @@ HTML;
                 $batteryChargeEnergyTotal;
         }
 
+        $gridConnectedRaw = $this->ReadPropertyInteger('GridConnectedStatus') > 0
+            ? $this->ReadVar('GridConnectedStatus')
+            : 1.0;
+        $gridConnectedStatus = ((float) $gridConnectedRaw) != 0.0 ? 'on-grid' : 'off-grid';
+        $inverterPowerID = $this->ReadPropertyInteger('InverterPower');
+        $inverterPowerAvailable = $inverterPowerID > 0 && IPS_VariableExists($inverterPowerID);
+
         return [
             'displayMode'      => $this->ReadPropertyString('DisplayMode'),
             'technicalLayout'  => $this->ReadPropertyString('TechnicalLayout'),
             'pvs'              => $pvs,
             'batteries'        => $batteries,
             'grid'             => $grid,
+            'gridVoltage'      => $this->ReadVar('GridVoltage'),
+            'gridCurrent'      => $this->ReadVar('GridCurrent'),
+            'gridFrequency'    => $this->ReadVar('GridFrequency'),
+            'gridConnectedStatus' => $gridConnectedStatus,
+            'inverterPower'    => $this->ReadVar('InverterPower'),
+            'inverterPowerAvailable' => $inverterPowerAvailable,
+            'inverterVoltage'  => $this->ReadVar('InverterVoltage'),
+            'inverterCurrent'  => $this->ReadVar('InverterCurrent'),
+            'inverterFrequency'=> $this->ReadVar('InverterFrequency'),
+            'inverterTemperature' => $this->ReadVar('InverterTemperature'),
             'gridImportEnergy' => $this->ReadVarFormatted('GridImportEnergy'),
             'gridExportEnergy' => $this->ReadVarFormatted('GridExportEnergy'),
             'gridImportEnergyValue' => $hasGridImportEnergy ? (float) GetValue($gridImportEnergyID) : 0.0,
@@ -3735,6 +3804,7 @@ HTML;
                 'batteryAccent'    => $this->ColorToHex($this->ReadPropertyInteger('HouseColorBatteryAccent')),
             ],
             'colors'           => [
+                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('ColorInverter')),
                 'solar'     => $this->ColorToHex($this->ReadPropertyInteger('ColorSolar')),
                 'import'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridImport')),
                 'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
