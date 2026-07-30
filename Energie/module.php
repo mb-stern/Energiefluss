@@ -199,7 +199,14 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Max. Entladezustand (%)',
+                                    'caption' => 'Max. Entladezustand Variable',
+                                    'name'    => 'MaxDischargeSoCVariableID',
+                                    'width'   => '240px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Max. Entladezustand fest (%)',
                                     'name'    => 'MaxDischargeSoC',
                                     'width'   => '190px',
                                     'add'     => 0,
@@ -2392,8 +2399,9 @@ class Energiefluss extends IPSModuleStrict
         const compact = style === 'compact';
         const full = style === 'full';
         const pvCount = Math.max(1, Math.min(6, pvs.length || 1));
+        // Die Wallbox wird als eigener AUX-Zweig dargestellt und gehört
+        // deshalb nicht mehr zu den nachgeschalteten Hausverbrauchern.
         const essentialLoads = [];
-        if (d.hasWallbox) essentialLoads.push({name: wallbox?.name || 'Wallbox', value: Number(wallbox?.value || 0), dailyValue: Number(wallbox?.energyValue || 0), hasDaily: !!wallbox?.hasEnergy, icon: 'mdi:ev-station', isWallbox: true});
         groups.forEach(group => essentialLoads.push({...group, icon: group.icon || 'mdi:power-plug', isWallbox: false}));
         const shownLoads = essentialLoads.slice(0, full ? 6 : 3);
         const essentialCount = shownLoads.length;
@@ -2429,7 +2437,8 @@ class Energiefluss extends IPSModuleStrict
                 soc_decimal_places: 0,
                 colour: AC.discharge, charge_colour: AC.charge, show_daily: showEnergyDetails && batteries.some(b => b.hasChargeEnergy || b.hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)), max_power: 10000,
-                auto_scale: false, dynamic_colour: true, linear_gradient: true, animate: true, show_absolute: true
+                auto_scale: false, dynamic_colour: true, linear_gradient: true, animate: true, show_absolute: true,
+                invert_power: false, invert_flow: false
             },
             battery2: {
                 shutdown_soc: Math.max(0.0001, Math.min(100, Number(batteries[1]?.maxDischargeSoc ?? 0))),
@@ -2438,11 +2447,22 @@ class Energiefluss extends IPSModuleStrict
                 soc_decimal_places: 0,
                 colour: AC.discharge,
                 charge_colour: AC.charge, show_absolute: true, auto_scale: false,
-                dynamic_colour: true, linear_gradient: true, animate: true
+                dynamic_colour: true, linear_gradient: true, animate: true,
+                invert_power: false, invert_flow: false
             },
             load: {
-                colour: AC.home, off_colour: '#9e9e9e', dynamic_colour: false, dynamic_icon: false,
-                show_daily: showEnergyDetails && groups.some(g => g.hasDaily), show_aux: false, show_daily_aux: false,
+                colour: AC.room, off_colour: '#9e9e9e', dynamic_colour: false, dynamic_icon: false,
+                show_daily: showEnergyDetails && groups.some(g => g.hasDaily),
+                show_aux: !!d.hasWallbox,
+                show_daily_aux: showEnergyDetails && !!wallbox?.hasEnergy,
+                aux_name: wallbox?.name || 'Wallbox',
+                aux_daily_name: 'Ladeenergie',
+                aux_type: 'default',
+                aux_colour: AC.wallbox,
+                aux_off_colour: AC.wallbox,
+                aux_dynamic_colour: false,
+                show_absolute_aux: true,
+                invert_aux: false,
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)), max_power: 12000,
                 auto_scale: false, additional_loads: essentialCount, aux_loads: 0,
                 essential_name: 'Hausverbrauch',
@@ -2495,10 +2515,10 @@ class Energiefluss extends IPSModuleStrict
         const loadEnergyTotal = groups.reduce((sum, group) => sum + Number(group.dailyValue || 0), 0);
         const states = {
             'sensor.symcon_battery_soc': ssState(bat1.soc || 0, '%'),
-            'sensor.symcon_battery_power': ssState(-(bat1.value || 0), 'W'),
+            'sensor.symcon_battery_power': ssState((bat1.value || 0), 'W'),
             'sensor.symcon_battery_current': ssState(0, 'A'),
             'sensor.symcon_battery2_soc': ssState(bat2.soc || 0, '%'),
-            'sensor.symcon_battery2_power': ssState(-(bat2.value || 0), 'W'),
+            'sensor.symcon_battery2_power': ssState((bat2.value || 0), 'W'),
             'sensor.symcon_grid': ssState(grid || 0, 'W'),
             'sensor.symcon_grid_status': { state: 'on-grid', attributes: {} },
             'sensor.symcon_home': ssState(haus || 0, 'W'),
@@ -2518,7 +2538,6 @@ class Energiefluss extends IPSModuleStrict
             states[`sensor.symcon_pv${i + 1}`] = ssState(pvs[i]?.value || 0, 'W');
         }
         const branchLoads = [];
-        if (d.hasWallbox) branchLoads.push({value: Number(wallbox?.value || 0), dailyValue: Number(wallbox?.energyValue || 0)});
         groups.forEach(group => branchLoads.push(group));
         for (let i = 0; i < 6; i++) {
             states[`sensor.symcon_branch${i + 1}`] = ssState(branchLoads[i]?.value || 0, 'W');
@@ -2598,6 +2617,87 @@ class Energiefluss extends IPSModuleStrict
                     display: none !important;
                 }
             ` : ''}
+
+            /* Zusätzliche Hauszweige: normale Verbraucher in der
+               konfigurierten Verbraucherfarbe. */
+            .essload1-icon, .essload1-icon-full, .essload1-small-icon,
+            .essload2-icon, .essload2-small-icon,
+            .essload3-icon, .essload3-small-icon,
+            .essload4-small-icon, .essload5-small-icon, .essload6-small-icon {
+                color: ${AC.room} !important;
+                fill: ${AC.room} !important;
+            }
+
+            /* Eigener AUX-Zweig der Wallbox. */
+            .aux-icon, .aux-off-icon, [class*="aux-icon"],
+            [id*="aux_power"], [id*="aux-line"], [class*="aux-line"] {
+                color: ${AC.wallbox} !important;
+                fill: ${AC.wallbox} !important;
+                stroke: ${AC.wallbox} !important;
+            }
+        `;
+
+        // Die Originalkarte gibt shutdown_soc bei einem Ersatzwert von
+        // 0.0001 mit mehreren Dezimalstellen aus. Alle Prozentanzeigen werden
+        // daher nach jedem Renderzyklus auf ganze Prozent gerundet.
+        const roundPercentTexts = () => {
+            const walker = document.createTreeWalker(root, NodeFilter.SHOW_TEXT);
+            const nodes = [];
+            while (walker.nextNode()) nodes.push(walker.currentNode);
+            nodes.forEach(node => {
+                const text = node.nodeValue || '';
+                const rounded = text.replace(/(-?\d+(?:[.,]\d+)?)\s*%/g, (_, raw) => {
+                    const value = Number(String(raw).replace(',', '.'));
+                    return Number.isFinite(value) ? `${Math.round(value)} %` : _;
+                });
+                if (rounded !== text) node.nodeValue = rounded;
+            });
+        };
+        roundPercentTexts();
+        requestAnimationFrame(roundPercentTexts);
+        setTimeout(roundPercentTexts, 100);
+    }
+
+    function updateSunsynkWallboxAuxInfo(card, d, wallbox) {
+        if (!card || !card.shadowRoot) return;
+
+        const root = card.shadowRoot;
+        let info = root.getElementById('symcon-wallbox-aux-info');
+
+        if (!d.hasWallbox) {
+            if (info) info.remove();
+            return;
+        }
+
+        if (!info) {
+            info = document.createElement('div');
+            info.id = 'symcon-wallbox-aux-info';
+            root.appendChild(info);
+        }
+
+        const compact = currentTechnicalLayout === 'compact';
+        const soc = wallbox?.hasSoc ? String(wallbox.socText || '') : '';
+        const energy = wallbox?.hasEnergy ? fmtKwh(wallbox.energyValue || 0) : '';
+        const details = [soc, energy].filter(Boolean).join(' · ');
+
+        info.style.cssText = `
+            position:absolute;
+            z-index:20;
+            left:${compact ? '69%' : '72%'};
+            top:${compact ? '16%' : '13%'};
+            transform:translateX(-50%);
+            pointer-events:none;
+            text-align:center;
+            color:${AC.wallbox};
+            font-family:inherit;
+            white-space:nowrap;
+            text-shadow:0 1px 2px rgba(0,0,0,.35);
+        `;
+
+        info.innerHTML = `
+            <div style="font-size:${compact ? 15 : 14}px;font-weight:650">${wallbox?.name || 'Wallbox'}</div>
+            <div style="font-size:${compact ? 21 : 19}px;font-weight:750">${fmt(wallbox?.value || 0)}</div>
+            ${details ? `<div style="font-size:${compact ? 14 : 13}px;font-weight:600">${details}</div>` : ''}
         `;
     }
 
@@ -2611,6 +2711,7 @@ class Energiefluss extends IPSModuleStrict
 
             // Wie in Lovelace: zuerst Konfiguration und hass setzen,
             // anschließend das Element in den DOM einhängen.
+            window.__symconHasWallbox = !!d.hasWallbox;
             card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
             card.hass = createSunsynkHass(
                 d,
@@ -2624,6 +2725,7 @@ class Energiefluss extends IPSModuleStrict
             host.appendChild(card);
             sunsynkCard = card;
             await applySunsynkViewOverrides(card, currentTechnicalLayout);
+            updateSunsynkWallboxAuxInfo(card, d, wallbox);
             document.getElementById('sunsynk-loading').style.display = 'none';
             if (sunsynkPending) {
                 const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
@@ -2652,9 +2754,11 @@ class Energiefluss extends IPSModuleStrict
             ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
             return;
         }
+        window.__symconHasWallbox = !!d.hasWallbox;
         sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
         applySunsynkViewOverrides(sunsynkCard, currentTechnicalLayout);
+        updateSunsynkWallboxAuxInfo(sunsynkCard, d, wallbox);
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
@@ -3329,7 +3433,8 @@ HTML;
                     'EnergyVariableID',
                     'ChargeEnergyVariableID',
                     'DischargeEnergyVariableID',
-                    'SoCVariableID'
+                    'SoCVariableID',
+                    'MaxDischargeSoCVariableID'
                 ] as $key) {
                     $variableID = (int) ($battery[$key] ?? 0);
                     if ($variableID > 0) {
@@ -3421,6 +3526,7 @@ HTML;
                 $chargeEnergyVariableID = (int) ($source['ChargeEnergyVariableID'] ?? 0);
                 $dischargeEnergyVariableID = (int) ($source['DischargeEnergyVariableID'] ?? 0);
                 $socVariableID = (int) ($source['SoCVariableID'] ?? 0);
+                $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
 
                 $value = (float) GetValue($variableID);
                 if ((bool) ($source['InvertFlow'] ?? false)) {
@@ -3445,7 +3551,14 @@ HTML;
                         : 0.0,
                     'maxDischargeSoc'      => max(
                         0,
-                        min(100, (int) ($source['MaxDischargeSoC'] ?? 0))
+                        min(
+                            100,
+                            (int) round(
+                                ($maxDischargeSoCVariableID > 0 && IPS_VariableExists($maxDischargeSoCVariableID))
+                                    ? (float) GetValue($maxDischargeSoCVariableID)
+                                    : (float) ($source['MaxDischargeSoC'] ?? 0)
+                            )
+                        )
                     ),
                     'chargeEnergy'         => $hasChargeEnergy
                         ? (float) GetValue($chargeEnergyVariableID)
