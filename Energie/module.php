@@ -1,3 +1,293 @@
+ChatGPT Plus
+
+
+
+
+gestern 6:22
+
+Eingefügter Text(91).txt
+Dokument
+Könntest du mir ein Tolles Readmea.md machen, welche ich per copy/paste einfügen kann
+
+
+Eingefügter Text(92).txt
+Dokument
+Bau mir das bitte ein statt der akteullen Energiefluss übersicht, mit umschaltmöglichkeir der ANsicht, möglichst im Konfigurationsansicht und im html. Bitte von diesem ausgehen 
+
+
+sunsynk-power-flow-card.js
+JavaScript
+Ich denke wir müssen das Java ins modul einbauen wie die card sonst sieht das nie gelich sud
+
+Wir machen uns erst mal an die kompakte ansicht. Grundsätzlich nicht schlecht, aber dort sehe ich sechs verbraucher und in der Full ansich nicht. ich möchte hier eher nur der Hausverbrauche. ich möchte überall den Wattverbrauch. Ich möchte alle werte grösseres chrift. Dann steht bei beiden ansichten bei der Batterei zwei Prozentwerte, was ist das der zwite Wert. in der dateilansicht habe ich ein Bild von eine mHasu mit Sonne beim Hauptverbraucehr. Was ist der hauptverbraucher? Und waruum sind normale verbrausher der Wallbox nachgeschaltetn. Dann die Daten der Battrei stehe ein bissch im Shcilf. Ordne das bitts so an wie auf den Bildern für Detail und kompakt
+
+Generiertes Bild: # Model Set Context
+
+Nothing yet.
+
+
+Bearbeiten
+
+
+
+
+Eingefügter Text(93).txt
+Dokument
+Fehlen immer noc hin der Grafik. Und bei der batterie kann ich AMpere und SPannung nicht koinfiguriren
+
+
+Eingefügter Text(94).txt
+Dokument
+nach wie vor nicht. Keine ANzeige der Wechslerichterleistung in der Box oaberhaob des Wechslerichters. Dort kann auch noch der Strom der Pahsen des Wechslerichters konfigureirt werden. Bitte dies im Konfigurationsformular vorsehen. Und nach wie vor bekomme ndie Verbraucher keien anderer Farabe als dre Hausverbrauch, obwohl offenbar vorgesehen
+
+
+Eingefügter Text(95).txt
+Dokument
+mach es nun bitt reichtig
+
+
+Eingefügter Text(96).txt
+Dokument
+schau dir naochmlasdas an, da war es wirklich fast richtig ausser dass die Textboxen der Verbraucher komplett ausgeefüllt waren
+
+heute 18:10
+
+Eingefügter Text(97).txt
+Dokument
+würdest du mir die Flussrichtung der Netzleistung umdrehen bei beiden visus
+
+
+Eingefügter Text(98).txt
+Dokument
+Wir starten nochamls hier. ICh möchte Aux weg, aber der HAuverbrauch mus bleiben wie er ist. Dort soll aber die Wallbox als grösser dargestellter verbrauer ersichtlich sein und in der full vesion möchte ich 6 verbraucehr 
+
+Generiertes Bild: Energiefluss-Dashboard mit Hausansicht und Technikübersicht
+
+
+Bearbeiten
+
+
+
+Eingefügter Text(99).txt
+Dokument
+Jetzt hast du die Farbe der Verbuaacher geänert .diu kanst die Wallbox in der selben farbe machen wie di d verbraucher einfach gross darstellen
+
+
+Analysiert
+from pathlib import Path
+import re
+import subprocess
+
+source = Path("/mnt/data/module_energiefluss_sunsynk_v42_wr_leistung_ohne_zusatzfeld.php")
+target = Path("/mnt/data/module_energiefluss_sunsynk_v43_wr_originalfeld_sauber.php")
+
+text = source.read_text(encoding="utf-8")
+
+# 1) Sicherstellen, dass inverter_power_175 ausschließlich auf die konfigurierte WR-Leistung zeigt.
+old = """        addEntity('inverter_power_175', 'sensor.symcon_inverter', entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable);
+"""
+new = """        // Originales Sunsynk-Feld für die gesamte AC-Wechselrichterleistung.
+        // Dieser Sensor stammt ausschließlich aus der in Symcon konfigurierten
+        // Eigenschaft „Wechselrichterleistung gesamt“.
+        addEntity(
+            'inverter_power_175',
+            'sensor.symcon_inverter',
+            entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable
+        );
+"""
+if text.count(old) != 1:
+    raise RuntimeError(f"inverter_power_175: erwartet 1 Fundstelle, gefunden {text.count(old)}")
+text = text.replace(old, new, 1)
+
+# 2) Sämtliche nachträglichen SVG-Manipulationen für die WR-Leistung entfernen.
+text = text.replace("        applyInverterPowerDisplay(card, d);\n", "")
+text = text.replace("                applyInverterPowerDisplay(card, card.__symconLastData || d);\n", "")
+text = text.replace("                    applyInverterPowerDisplay(card, card.__symconLastData || null);\n", "")
+
+pattern = re.compile(
+    r"""    function applyInverterPowerDisplay\(card, d\) \{.*?\n    \}\n\n    function applyAdditionalLoadWattColourByGeometry""",
+    re.S
+)
+text, count = pattern.subn(
+    "    function applyAdditionalLoadWattColourByGeometry",
+    text
+)
+if count != 1:
+    raise RuntimeError(f"applyInverterPowerDisplay-Funktion: erwartet 1, gefunden {count}")
+
+# 3) Kommentare in applySunsynkViewOverrides anpassen.
+text = text.replace(
+"""        // Keine Geometrie verändern. Wir korrigieren ausschließlich Werte
+        // und Farben in den bereits von der Originalkarte erzeugten Elementen.
+""",
+"""        // Keine Geometrie und keine Wechselrichterwerte nachträglich verändern.
+        // Die WR-Leistung wird ausschließlich über inverter_power_175 von der
+        // Originalkarte dargestellt. Hier werden nur Verbraucherfarben korrigiert.
+"""
+)
+
+text = text.replace(
+"""        // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
+        // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
+        // stellen sicher, dass das Leistungsfeld anschließend gesetzt wird.
+""",
+"""        // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
+        // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
+        // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
+"""
+)
+
+target.write_text(text, encoding="utf-8")
+
+result = subprocess.run(
+    ["php", "-l", str(target)],
+    capture_output=True,
+    text=True,
+    check=False
+)
+
+print(result.stdout.strip() or result.stderr.strip())
+print(target)
+STDOUT/STDERR
+No syntax errors detected in /mnt/data/module_energiefluss_sunsynk_v43_wr_originalfeld_sauber.php
+/mnt/data/module_energiefluss_sunsynk_v43_wr_originalfeld_sauber.php
+Jetzt ist die Wechselrichteranzeige sauber zurückgebaut:
+
+Alle nachträglichen Positions- und SVG-Patches für die WR-Leistung wurden entfernt.
+
+Es wird kein zusätzliches Feld mehr erzeugt.
+
+Die Originalkarte erhält die konfigurierte „Wechselrichterleistung gesamt“ ausschließlich über:
+
+inverter_power_175: sensor.symcon_inverter
+Die Amperewerte bleiben über ihre eigenen Sensoren bestehen.
+
+Verbraucherfarben bleiben unverändert.
+
+Das entspricht auch der Zuordnung der Originalkarte: inverter_power_175 ist die gesamte Wechselrichterleistung. 
+
+module_energiefluss_sunsynk_v43_wr_originalfeld_sauber.php
+
+PHP-Syntaxprüfung: keine Fehler. 
+
+
+module_energiefluss_sunsynk_v43_wr_originalfeld_sauber.php
+Code
+
+
+nichts immer 0
+
+26s nachgedacht
+Dann ist jetzt klar: Die Zuordnung in der Sunsynk-Karte ist nicht mehr das Hauptproblem.
+Wenn dort 0 W erscheint, kommt im JavaScript für d.inverterPower offenbar bereits 0 an.
+
+Die Kette ist aktuell korrekt aufgebaut:
+
+'InverterPower' → BuildPayload()
+d.inverterPower → sensor.symcon_inverter
+sensor.symcon_inverter → inverter_power_175
+Das bedeutet: Entweder liefert die in „Wechselrichterleistung gesamt“ ausgewählte IP-Symcon-Variable tatsächlich 0, oder das Modul kann die ausgewählte Variable nicht korrekt lesen.
+
+Am sinnvollsten ist jetzt ein kurzer Diagnoseschritt: Ich ergänze vorübergehend eine Anzeige beziehungsweise ein Log mit
+
+InverterPower-ID
+Rohwert aus GetValue()
+Wert im Payload
+Dann wissen wir sofort, ob der Fehler auf der PHP-/Symcon-Seite oder erst in der Sunsynk-Karte entsteht. Weiter am SVG zu raten bringt nichts.
+
+
+
+Eingefügter Text(100).txt
+Dokument
+Das bedeutet: Entweder liefert die in „Wechselrichterleistung gesamt“ ausgewählte IP-Symcon-Variable tatsächlich 0, oder das Modul kann die ausgewählte Variable nicht korrekt lesen. das stimmt ich hatte dei falsche Vraible jetz ist es so jetz ist aber noc hei ndichte gEdränge bei diesen Strömen und Frequnz und Laistung ind er Large  und comapct ansicht
+
+1m 0s nachgedacht
+
+Analysiert
+from pathlib import Path
+import subprocess
+
+source = Path("/mnt/data/Eingefügter Text(100).txt")
+target = Path("/mnt/data/module_energiefluss_sunsynk_v44_abstaende_messwerte_compact_lite.php")
+
+text = source.read_text(encoding="utf-8")
+
+old = """            large_font: true,
+"""
+new = """            // Die große Entity-Schrift führt in Compact und Lite bei
+            // dreiphasigen Strömen, Spannung, Frequenz und WR-Leistung zu
+            // Überlagerungen. Deshalb nur in der Full-Ansicht verwenden.
+            large_font: full,
+"""
+
+count = text.count(old)
+if count != 1:
+    raise RuntimeError(
+        f"large_font: erwartet 1 Fundstelle, gefunden {count}"
+    )
+
+text = text.replace(old, new, 1)
+target.write_text(text, encoding="utf-8")
+
+result = subprocess.run(
+    ["php", "-l", str(target)],
+    capture_output=True,
+    text=True,
+    check=False
+)
+
+print(result.stdout.strip() or result.stderr.strip())
+print(target)
+STDOUT/STDERR
+No syntax errors detected in /mnt/data/module_energiefluss_sunsynk_v44_abstaende_messwerte_compact_lite.php
+/mnt/data/module_energiefluss_sunsynk_v44_abstaende_messwerte_compact_lite.php
+Genau, das Gedränge kam von:
+
+large_font: true
+Damit vergrößert die Sunsynk-Karte auch die technischen Detailwerte wie:
+
+Wechselrichterströme L1–L3
+
+Spannungen
+
+Frequenz
+
+Wechselrichterleistung
+
+In Compact und Lite reicht der Platz dafür nicht sauber aus.
+
+Ich habe es jetzt so geändert:
+
+large_font: full
+Damit gilt:
+
+Compact: normale technische Schrift
+
+Compact Wide: normale technische Schrift
+
+Lite: normale technische Schrift
+
+Lite Wide: normale technische Schrift
+
+Full und Full Wide: große Schrift
+
+Alle Werte bleiben erhalten, werden in Compact und Lite aber nicht mehr so dicht zusammengedrängt. Grundlage war deine aktuelle Datei. 
+
+
+module_energiefluss_sunsynk_v44_abstaende_messwerte_compact_lite.php
+
+PHP-Syntaxprüfung: keine Fehler. 
+
+
+module_energiefluss_sunsynk_v44_abstaende_messwerte_compact_lite.php
+Code
+
+
+Bibliothek
+/
+module_energiefluss_sunsynk_v44_abstaende_messwerte_compact_lite.php
+
+
 <?php
 
 /*
@@ -2553,7 +2843,10 @@ class Energiefluss extends IPSModuleStrict
         const cfg = {
             cardstyle: style,
             wide,
-            large_font: true,
+            // Die große Entity-Schrift führt in Compact und Lite bei
+            // dreiphasigen Strömen, Spannung, Frequenz und WR-Leistung zu
+            // Überlagerungen. Deshalb nur in der Full-Ansicht verwenden.
+            large_font: full,
             show_solar: activePvs.length > 0,
             show_battery: activeBatteries.length > 0,
             show_grid: hasGrid,
