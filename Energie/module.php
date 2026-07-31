@@ -361,6 +361,19 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
+                                    'caption' => 'Kapazität (kWh)',
+                                    'name'    => 'CapacityKWh',
+                                    'width'   => '105px',
+                                    'add'     => 0.0,
+                                    'edit'    => [
+                                        'type'          => 'NumberSpinner',
+                                        'minimum'       => 0,
+                                        'maximum'       => 10000,
+                                        'digits'        => 2,
+                                        'suffix'        => ' kWh',
+                                    ],
+                                ],
+                                [
                                     'caption' => 'Entladeenergie (kWh)',
                                     'name'    => 'DischargeEnergyVariableID',
                                     'width'   => '170px',
@@ -2168,6 +2181,78 @@ class Energiefluss extends IPSModuleStrict
         homeInfo.style.top = Math.max(0, top) + 'px';
     }
 
+    function formatBatteryDuration(hours) {
+        const value = Number(hours);
+
+        if (!Number.isFinite(value) || value <= 0) {
+            return '';
+        }
+
+        const totalMinutes = Math.max(1, Math.round(value * 60));
+        const days = Math.floor(totalMinutes / 1440);
+        const remainingAfterDays = totalMinutes % 1440;
+        const hrs = Math.floor(remainingAfterDays / 60);
+        const mins = remainingAfterDays % 60;
+
+        const parts = [];
+
+        if (days > 0) parts.push(`${days} d`);
+        if (hrs > 0) parts.push(`${hrs} h`);
+        if (mins > 0 || parts.length === 0) parts.push(`${mins} min`);
+
+        return parts.join(' ');
+    }
+
+    function batteryTimeEstimate(bat) {
+        if (!bat || !bat.hasSoc) {
+            return '';
+        }
+
+        const capacity = Number(bat.capacityKWh || 0);
+        const soc = Number(bat.soc || 0);
+        const powerW = Number(bat.value || 0);
+
+        if (
+            !Number.isFinite(capacity) ||
+            capacity <= 0 ||
+            !Number.isFinite(soc) ||
+            !Number.isFinite(powerW) ||
+            Math.abs(powerW) < 50
+        ) {
+            return '';
+        }
+
+        const powerKW = Math.abs(powerW) / 1000;
+
+        // Modulkonvention:
+        // positiv = Batterie entlädt
+        // negativ = Batterie lädt
+        if (powerW > 0) {
+            const shutdownSoc = Math.max(
+                0,
+                Math.min(100, Number(bat.maxDischargeSoc || 0))
+            );
+
+            const usablePercent = Math.max(0, soc - shutdownSoc);
+            const remainingKWh = capacity * usablePercent / 100;
+
+            if (remainingKWh <= 0) {
+                return 'Entladegrenze erreicht';
+            }
+
+            return `Leer in ${formatBatteryDuration(remainingKWh / powerKW)}`;
+        }
+
+        const missingPercent = Math.max(0, 100 - soc);
+        const missingKWh = capacity * missingPercent / 100;
+
+        if (missingKWh <= 0) {
+            return 'Voll geladen';
+        }
+
+        return `Voll in ${formatBatteryDuration(missingKWh / powerKW)}`;
+    }
+
     function updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox) {
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -2260,8 +2345,10 @@ class Energiefluss extends IPSModuleStrict
             if (batterySub) {
                 if (window.matchMedia('(max-width: 600px)').matches) {
                     const mainSoc = Number(mainBat.soc || 0);
-                    batterySub.textContent =
-                        `${Math.round(Number.isFinite(mainSoc) ? mainSoc : 0)} % SOC`;
+                    const estimate = batteryTimeEstimate(mainBat);
+                    batterySub.innerHTML =
+                        `${Math.round(Number.isFinite(mainSoc) ? mainSoc : 0)} % SOC` +
+                        (estimate ? `<br>${estimate}` : '');
                 } else {
                     batterySub.innerHTML = batteries.map((bat, i) => {
                         const name = bat.name || ('Batterie ' + (i + 1));
@@ -2279,7 +2366,12 @@ class Energiefluss extends IPSModuleStrict
                             ? `<br>${energyParts.join(' · ')}`
                             : '';
 
-                        return `${name}: ${Math.round(bat.soc || 0)} % · ${mode}${energy}`;
+                        const estimate = batteryTimeEstimate(bat);
+                        const time = estimate
+                            ? `<br>${estimate}`
+                            : '';
+
+                        return `${name}: ${Math.round(bat.soc || 0)} % · ${mode}${time}${energy}`;
                     }).join('<br>');
                 }
             }
@@ -4409,6 +4501,10 @@ HTML;
                                     : 0.0
                             )
                         )
+                    ),
+                    'capacityKWh'          => max(
+                        0.0,
+                        (float) ($source['CapacityKWh'] ?? 0.0)
                     ),
                     'chargeEnergy'         => $hasChargeEnergy
                         ? (float) GetValue($chargeEnergyVariableID)
