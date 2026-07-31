@@ -2458,28 +2458,9 @@ class Energiefluss extends IPSModuleStrict
 
         const activePvs = pvs.filter(pv => pv.hasPower);
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
+        const activeGroups = groups.filter(g => g.hasPower).slice(0, full ? 6 : 3);
         const hasGrid = entityAvailable(d, 'gridPower');
         const hasWallbox = !!d.hasWallbox;
-
-        // Die Wallbox wird als erster zusätzlicher Verbraucher behandelt.
-        // Dadurch nimmt sie in Compact/Lite den hervorgehobenen großen Platz
-        // ein, während der zentrale Hausverbrauch unverändert bleibt.
-        // Full/Full Wide zeigen insgesamt bis zu sechs Verbraucher inklusive
-        // Wallbox.
-        const wallboxLoad = hasWallbox ? [{
-            name: wallbox?.name || 'Wallbox',
-            value: Number(wallbox?.value || 0),
-            hasPower: true,
-            dailyValue: Number(wallbox?.energyValue || 0),
-            hasDaily: !!wallbox?.hasEnergy,
-            icon: 'mdi:ev-station',
-            isWallbox: true
-        }] : [];
-
-        const activeGroups = [
-            ...wallboxLoad,
-            ...groups.filter(g => g.hasPower)
-        ].slice(0, full ? 6 : 3);
         const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3')
             || entityAvailable(d, 'inverterCurrentL2') || entityAvailable(d, 'inverterCurrentL3')
             || entityAvailable(d, 'gridVoltageL2') || entityAvailable(d, 'gridVoltageL3');
@@ -2532,6 +2513,11 @@ class Energiefluss extends IPSModuleStrict
             addEntity('battery2_voltage_183', 'sensor.symcon_battery2_voltage', activeBatteries[1].hasVoltage);
             addEntity('day_battery2_charge_70', 'sensor.symcon_battery2_charge_energy', activeBatteries[1].hasChargeEnergy);
             addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
+        }
+
+        if (hasWallbox) {
+            addEntity('aux_power_166', 'sensor.symcon_wallbox');
+            addEntity('day_aux_energy', 'sensor.symcon_wallbox_energy', wallbox.hasEnergy);
         }
 
         activeGroups.forEach((group, i) => {
@@ -2616,10 +2602,16 @@ class Energiefluss extends IPSModuleStrict
                 dynamic_colour: false,
                 dynamic_icon: false,
                 show_daily: showEnergyDetails && d.houseEnergyAvailable,
-                // AUX ist vollständig deaktiviert. Die Wallbox läuft als
-                // erster zusätzlicher Verbraucher.
-                show_aux: false,
-                show_daily_aux: false,
+                show_aux: hasWallbox,
+                show_daily_aux: showEnergyDetails && hasWallbox && wallbox.hasEnergy,
+                aux_name: wallbox?.name || 'Wallbox',
+                aux_daily_name: 'Ladeenergie',
+                aux_type: 'default',
+                aux_colour: AC.wallbox,
+                aux_off_colour: AC.wallbox,
+                aux_dynamic_colour: false,
+                show_absolute_aux: true,
+                invert_aux: false,
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
                 max_power: 12000,
                 auto_scale: false,
@@ -2656,22 +2648,7 @@ class Energiefluss extends IPSModuleStrict
     function createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups) {
         const activePvs = pvs.filter(pv => pv.hasPower);
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
-        const hasWallbox = !!d.hasWallbox;
-
-        const wallboxLoad = hasWallbox ? [{
-            name: wallbox?.name || 'Wallbox',
-            value: Number(wallbox?.value || 0),
-            hasPower: true,
-            dailyValue: Number(wallbox?.energyValue || 0),
-            hasDaily: !!wallbox?.hasEnergy,
-            icon: 'mdi:ev-station',
-            isWallbox: true
-        }] : [];
-
-        const activeGroups = [
-            ...wallboxLoad,
-            ...groups.filter(g => g.hasPower)
-        ].slice(0, currentTechnicalLayout.startsWith('full') ? 6 : 3);
+        const activeGroups = groups.filter(g => g.hasPower).slice(0, currentTechnicalLayout.startsWith('full') ? 6 : 3);
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
         const pvEnergyTotal = activePvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
@@ -2928,29 +2905,19 @@ class Energiefluss extends IPSModuleStrict
             });
 
             wattNodes.forEach(node => {
-                const nodeId = String(node.id || '');
-                const wattColour = (
-                    window.__symconHasWallbox &&
-                    (
-                        nodeId === 'ess_load1_value' ||
-                        nodeId.startsWith('ess_load1_') ||
-                        nodeId.startsWith('ess-load1-')
-                    )
-                ) ? AC.wallbox : consumerColour;
-
-                node.setAttribute?.('fill', wattColour);
-                node.setAttribute?.('color', wattColour);
+                node.setAttribute?.('fill', consumerColour);
+                node.setAttribute?.('color', consumerColour);
                 node.setAttribute?.('font-weight', '400');
-                node.style?.setProperty('fill', wattColour, 'important');
-                node.style?.setProperty('color', wattColour, 'important');
+                node.style?.setProperty('fill', consumerColour, 'important');
+                node.style?.setProperty('color', consumerColour, 'important');
                 node.style?.setProperty('font-weight', '400', 'important');
                 node.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
 
                 // Manche Varianten schreiben die sichtbare Farbe auf ein inneres tspan.
                 node.querySelectorAll?.('tspan').forEach(tspan => {
-                    tspan.setAttribute?.('fill', wattColour);
-                    tspan.style?.setProperty('fill', wattColour, 'important');
-                    tspan.style?.setProperty('color', wattColour, 'important');
+                    tspan.setAttribute?.('fill', consumerColour);
+                    tspan.style?.setProperty('fill', consumerColour, 'important');
+                    tspan.style?.setProperty('color', consumerColour, 'important');
                     tspan.style?.setProperty('font-weight', '400', 'important');
                 });
             });
@@ -2962,7 +2929,6 @@ class Energiefluss extends IPSModuleStrict
 
         const roots = getOpenShadowRoots(card.shadowRoot);
         const consumerColour = AC.room; // Konfiguration „Weitere Verbraucher“
-        const wallboxIsFirstLoad = !!window.__symconHasWallbox;
 
         // Die Sunsynk-Card verwendet für Hausverbrauch und zusätzliche
         // Verbraucher standardmäßig dieselbe load.colour. Der Hausverbrauch
@@ -2993,10 +2959,6 @@ class Energiefluss extends IPSModuleStrict
             }
 
             for (let i = 1; i <= 6; i++) {
-                const itemColour = (i === 1 && wallboxIsFirstLoad)
-                    ? AC.wallbox
-                    : itemColour;
-
                 const selectors = [
                     `[id="es-load${i}"]`,
                     `[id="ess-load${i}"]`,
@@ -3022,16 +2984,16 @@ class Energiefluss extends IPSModuleStrict
                     if (tag === 'rect' && id === `es-load${i}`) {
                         node.setAttribute?.('fill', 'none');
                         node.style?.setProperty('fill', 'none', 'important');
-                        node.setAttribute?.('stroke', itemColour);
-                        node.style?.setProperty('stroke', itemColour, 'important');
+                        node.setAttribute?.('stroke', consumerColour);
+                        node.style?.setProperty('stroke', consumerColour, 'important');
                         return;
                     }
 
                     // Namen, Leistung und kWh erhalten dieselbe Verbraucherfarbe.
                     if (tag === 'text' || tag === 'tspan' || id === `ess-load${i}` || id.startsWith(`ess_load${i}_`)) {
-                        node.setAttribute?.('fill', itemColour);
-                        node.style?.setProperty('fill', itemColour, 'important');
-                        node.style?.setProperty('color', itemColour, 'important');
+                        node.setAttribute?.('fill', consumerColour);
+                        node.style?.setProperty('fill', consumerColour, 'important');
+                        node.style?.setProperty('color', consumerColour, 'important');
                         node.style?.setProperty('font-weight', '400', 'important');
                         node.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
                         node.setAttribute?.('font-weight', '400');
@@ -3041,12 +3003,12 @@ class Energiefluss extends IPSModuleStrict
                     // Icons und zugehörige grafische Elemente der zusätzlichen
                     // Verbraucher ebenfalls einheitlich einfärben.
                     if (['path', 'polygon', 'polyline', 'line', 'circle', 'ellipse'].includes(tag)) {
-                        node.setAttribute?.('stroke', itemColour);
-                        node.style?.setProperty('stroke', itemColour, 'important');
+                        node.setAttribute?.('stroke', consumerColour);
+                        node.style?.setProperty('stroke', consumerColour, 'important');
 
                         if (!node.classList?.contains('anim-line') && tag !== 'line' && tag !== 'polyline') {
-                            node.setAttribute?.('fill', itemColour);
-                            node.style?.setProperty('fill', itemColour, 'important');
+                            node.setAttribute?.('fill', consumerColour);
+                            node.style?.setProperty('fill', consumerColour, 'important');
                         }
                     }
                 });
