@@ -2763,6 +2763,7 @@ class Energiefluss extends IPSModuleStrict
 
         applyAdditionalLoadColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
+        showInverterPowerAboveVoltages(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
         // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
@@ -2770,6 +2771,10 @@ class Energiefluss extends IPSModuleStrict
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
                 applyAdditionalLoadWattColourByGeometry(card);
+                showInverterPowerAboveVoltages(
+                    card,
+                    card.__symconLastData || d
+                );
             }, delay);
         });
 
@@ -2784,6 +2789,10 @@ class Energiefluss extends IPSModuleStrict
                     scheduled = false;
                     applyAdditionalLoadColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
+                    showInverterPowerAboveVoltages(
+                        card,
+                        card.__symconLastData || d
+                    );
                 });
             });
             card.__symconVisualObserver.observe(card.shadowRoot, {
@@ -2823,6 +2832,108 @@ class Energiefluss extends IPSModuleStrict
         };
         visit(root);
         return roots;
+    }
+
+    function showInverterPowerAboveVoltages(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const available =
+            entityAvailable(d, 'inverterPower') ||
+            d.inverterPowerAvailable === true;
+
+        if (!available) return;
+
+        const rawValue = Number(d.inverterPower);
+        const value = Number.isFinite(rawValue) ? rawValue : 0;
+        const valueText =
+            `${Math.round(value).toLocaleString('de-DE')} W`;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            const voltageSelectors = [
+                '#inverter_voltage_154',
+                '[id="inverter_voltage_154"]',
+                '#inverter-voltage-154',
+                '[id*="inverter_voltage_154"]',
+                '[id*="inverter-voltage-154"]'
+            ];
+
+            const voltageContainer =
+                root.querySelector?.(voltageSelectors.join(',')) || null;
+
+            if (!voltageContainer) {
+                continue;
+            }
+
+            let voltageText = voltageContainer;
+            const tag = String(voltageText.tagName || '').toLowerCase();
+
+            if (tag !== 'text' && tag !== 'tspan') {
+                voltageText = Array.from(
+                    voltageContainer.querySelectorAll?.('text, tspan') || []
+                ).find(node =>
+                    /V$/i.test(String(node.textContent || '').trim())
+                ) || null;
+            }
+
+            if (!voltageText) {
+                continue;
+            }
+
+            const template =
+                String(voltageText.tagName || '').toLowerCase() === 'tspan'
+                    ? (voltageText.closest?.('text') || voltageText)
+                    : voltageText;
+
+            const parent = template.parentNode;
+            if (!parent) {
+                continue;
+            }
+
+            let powerNode =
+                parent.querySelector?.('#symcon_inverter_power_overlay') ||
+                null;
+
+            if (!powerNode) {
+                powerNode = template.cloneNode(true);
+                powerNode.id = 'symcon_inverter_power_overlay';
+                parent.insertBefore(powerNode, template);
+            }
+
+            powerNode.textContent = valueText;
+            powerNode.removeAttribute?.('display');
+            powerNode.removeAttribute?.('visibility');
+            powerNode.removeAttribute?.('opacity');
+            powerNode.removeAttribute?.('hidden');
+            powerNode.style?.setProperty('display', 'inline', 'important');
+            powerNode.style?.setProperty('visibility', 'visible', 'important');
+            powerNode.style?.setProperty('opacity', '1', 'important');
+
+            // Direkt oberhalb der ersten Spannungszeile positionieren.
+            // Die vorhandenen Spannungs- und Stromwerte werden nicht verändert.
+            const x = Number(template.getAttribute?.('x'));
+            const y = Number(template.getAttribute?.('y'));
+
+            if (Number.isFinite(x)) {
+                powerNode.setAttribute('x', String(x));
+            }
+
+            if (Number.isFinite(y)) {
+                powerNode.setAttribute('y', String(y - 16));
+                powerNode.removeAttribute?.('transform');
+            } else {
+                const originalTransform =
+                    template.getAttribute?.('transform') || '';
+
+                powerNode.setAttribute(
+                    'transform',
+                    `${originalTransform} translate(0 -16)`.trim()
+                );
+            }
+
+            return;
+        }
     }
 
     function applyAdditionalLoadWattColourByGeometry(card) {
