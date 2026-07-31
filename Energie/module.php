@@ -2758,7 +2758,6 @@ class Energiefluss extends IPSModuleStrict
 
         applyAdditionalLoadColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
-        moveInverterPowerHigher(card);
         applyInverterPowerDisplay(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
@@ -2767,7 +2766,6 @@ class Energiefluss extends IPSModuleStrict
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
                 applyAdditionalLoadWattColourByGeometry(card);
-                moveInverterPowerHigher(card);
                 applyInverterPowerDisplay(card, card.__symconLastData || d);
             }, delay);
         });
@@ -2783,8 +2781,6 @@ class Energiefluss extends IPSModuleStrict
                     scheduled = false;
                     applyAdditionalLoadColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
-                    moveInverterPowerHigher(card);
-                moveInverterPowerHigher(card);
                     applyInverterPowerDisplay(card, card.__symconLastData || null);
                 });
             });
@@ -2910,50 +2906,6 @@ class Energiefluss extends IPSModuleStrict
         } else {
             const oldTransform = template.getAttribute?.('transform') || '';
             powerNode.setAttribute('transform', `${oldTransform} translate(0 -16)`.trim());
-        }
-    }
-
-    function moveInverterPowerHigher(card) {
-        if (!card || !card.shadowRoot) return;
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        for (const root of roots) {
-            const nodes = root.querySelectorAll?.(
-                '#inverter_power_175, [id="inverter_power_175"], ' +
-                '#inverter-power-175, [id*="inverter_power"], [id*="inverter-power"]'
-            ) || [];
-
-            nodes.forEach(node => {
-                // Nur das vorhandene Originalfeld verschieben.
-                // Kein zusätzliches Textelement erzeugen.
-                if (node.id === 'symcon_inverter_power_fixed') {
-                    node.remove();
-                    return;
-                }
-
-                if (!full) {
-                    node.style?.setProperty(
-                        'transform',
-                        'translateY(-14px)',
-                        'important'
-                    );
-                } else {
-                    node.style?.removeProperty('transform');
-                }
-
-                node.style?.setProperty(
-                    'transform-box',
-                    'fill-box',
-                    'important'
-                );
-
-                node.style?.setProperty(
-                    'transform-origin',
-                    'center',
-                    'important'
-                );
-            });
         }
     }
 
