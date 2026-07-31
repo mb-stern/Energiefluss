@@ -3315,7 +3315,18 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
-        updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox);
+        const housePvs = Array.isArray(d.housePvs) && d.housePvs.length
+            ? d.housePvs
+            : pvs;
+
+        updatePowerFlowCard(
+            d,
+            grid,
+            haus,
+            housePvs,
+            batteries,
+            wallbox
+        );
     }
 
     let currentDisplayMode = '__INITIAL_DISPLAY_MODE__';
@@ -4087,6 +4098,7 @@ HTML;
         $grid = $gridBase - $gridExportPower;
 
         $pvs = [];
+        $housePvs = [];
         $batteries = [];
 
         // PV-Anlagen mit standardmäßig zwei konfigurierbaren Strings.
@@ -4244,6 +4256,100 @@ HTML;
                 ];
             }
         }
+
+        // PV-Gesamtanlagen für die Hausgrafik.
+        // Dort werden nicht die einzelnen Strings dargestellt, sondern wie
+        // bisher genau eine Position pro konfigurierte Solaranlage.
+        if (is_array($decodedPVs)) {
+            foreach ($decodedPVs as $source) {
+                $plantName = trim((string) ($source['Name'] ?? ''));
+                $plantPowerVariableID = (int) ($source['VariableID'] ?? 0);
+                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
+
+                $hasPlantPower =
+                    $plantPowerVariableID > 0 &&
+                    IPS_VariableExists($plantPowerVariableID);
+
+                $hasEnergy =
+                    $energyVariableID > 0 &&
+                    IPS_VariableExists($energyVariableID);
+
+                // Wenn eine Gesamtleistungsvariable konfiguriert ist, wird
+                // exakt diese verwendet. Andernfalls werden die aktiven
+                // String-Leistungen der Anlage addiert.
+                $plantPower = 0.0;
+
+                if ($hasPlantPower) {
+                    $plantPower = (float) GetValue($plantPowerVariableID);
+                } else {
+                    $stringCount = max(
+                        1,
+                        min(2, (int) ($source['StringCount'] ?? 2))
+                    );
+
+                    for ($stringNo = 1; $stringNo <= $stringCount; $stringNo++) {
+                        $stringPowerID = (int) (
+                            $source[
+                                'String' . $stringNo . 'PowerVariableID'
+                            ] ?? 0
+                        );
+
+                        if (
+                            $stringPowerID > 0 &&
+                            IPS_VariableExists($stringPowerID)
+                        ) {
+                            $plantPower += (float) GetValue($stringPowerID);
+                        }
+                    }
+                }
+
+                // Nur Anlagen übernehmen, für die eine Gesamtleistung oder
+                // wenigstens eine gültige Stringleistung vorhanden ist.
+                if (!$hasPlantPower && $plantPower === 0.0) {
+                    $hasAnyStringPower = false;
+                    $stringCount = max(
+                        1,
+                        min(2, (int) ($source['StringCount'] ?? 2))
+                    );
+
+                    for ($stringNo = 1; $stringNo <= $stringCount; $stringNo++) {
+                        $stringPowerID = (int) (
+                            $source[
+                                'String' . $stringNo . 'PowerVariableID'
+                            ] ?? 0
+                        );
+
+                        if (
+                            $stringPowerID > 0 &&
+                            IPS_VariableExists($stringPowerID)
+                        ) {
+                            $hasAnyStringPower = true;
+                            break;
+                        }
+                    }
+
+                    if (!$hasAnyStringPower) {
+                        continue;
+                    }
+                }
+
+                $housePvs[] = [
+                    'name'        => $plantName !== ''
+                        ? $plantName
+                        : 'PV ' . (count($housePvs) + 1),
+                    'value'       => $plantPower,
+                    'hasPower'    => true,
+                    'energy'      => $hasEnergy
+                        ? GetValueFormatted($energyVariableID)
+                        : '',
+                    'energyValue' => $hasEnergy
+                        ? (float) GetValue($energyVariableID)
+                        : 0.0,
+                    'hasEnergy'   => $hasEnergy,
+                ];
+            }
+        }
+
 
         // Batterien.
         $decodedBatteries = json_decode($this->ReadPropertyString('Batteries'), true);
@@ -4435,6 +4541,7 @@ HTML;
             'displayMode'      => $this->ReadPropertyString('DisplayMode'),
             'technicalLayout'  => $this->ReadPropertyString('TechnicalLayout'),
             'pvs'              => $pvs,
+            'housePvs'         => $housePvs,
             'batteries'        => $batteries,
             'grid'             => $grid,
             'gridPhaseL1'     => $this->ReadVar('GridPhaseL1'),
