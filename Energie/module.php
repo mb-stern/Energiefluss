@@ -2823,193 +2823,86 @@ class Energiefluss extends IPSModuleStrict
     function applyInverterPowerDisplay(card, d) {
         if (!card || !d) return;
 
-        const available =
-            entityAvailable(d, 'inverterPower') ||
-            d.inverterPowerAvailable === true;
-
+        const available = entityAvailable(d, 'inverterPower') || d.inverterPowerAvailable === true;
         if (!available) return;
 
-        const rawValue = Number(d.inverterPower);
-        const value = Number.isFinite(rawValue) ? rawValue : 0;
-        const valueText =
-            `${Math.round(value).toLocaleString('de-DE')} W`;
+        const value = Number(d.inverterPower);
+        const text = `${Math.round(Number.isFinite(value) ? value : 0).toLocaleString('de-DE')} W`;
+        const searchRoot = card.shadowRoot || card;
+        const roots = getOpenShadowRoots(searchRoot);
 
-        const roots = getOpenShadowRoots(card.shadowRoot || card);
-
+        // Zuerst ein eventuell vorhandenes originales Leistungsfeld verwenden.
+        const powerSelectors = [
+            '#inverter_power_175', '[id="inverter_power_175"]',
+            '#inverter-power-175', '[id*="inverter_power"]', '[id*="inverter-power"]'
+        ];
         for (const root of roots) {
-            // Phase 3 ist eindeutig konfiguriert und liegt direkt oberhalb
-            // des gesuchten Leistungswertes.
-            const phase3Selectors = [
-                '#inverter_current_L3',
-                '[id="inverter_current_L3"]',
-                '#inverter-current-L3',
-                '[id*="inverter_current_L3"]',
-                '[id*="inverter-current-L3"]'
-            ];
-
-            let phase3Node =
-                root.querySelector?.(phase3Selectors.join(',')) || null;
-
-            // Fallback, falls die Karten-Version die ID nicht am sichtbaren
-            // Textknoten, sondern an einer umschließenden Gruppe setzt.
-            if (phase3Node) {
-                const visibleChild = Array.from(
-                    phase3Node.querySelectorAll?.('text, tspan') || []
-                ).find(node =>
-                    /A$/i.test(String(node.textContent || '').trim())
-                );
-
-                if (visibleChild) {
-                    phase3Node = visibleChild;
-                }
-            }
-
-            if (!phase3Node) {
-                continue;
-            }
-
-            let phase3Box;
-
-            try {
-                phase3Box = phase3Node.getBBox();
-            } catch (_) {
-                continue;
-            }
-
-            const phase3CenterX =
-                phase3Box.x + phase3Box.width / 2;
-            const phase3Bottom =
-                phase3Box.y + phase3Box.height;
-
-            const visiblePowerNodes = Array.from(
-                root.querySelectorAll?.('svg text, svg tspan') || []
-            ).filter(node => {
-                const shown =
-                    String(node.textContent || '').trim();
-
-                if (!/^[-+]?\d[\d.,\s]*\s*(?:W|kW)$/i.test(shown)) {
-                    return false;
-                }
-
-                const style = getComputedStyle(node);
-
-                if (
-                    style.display === 'none' ||
-                    style.visibility === 'hidden' ||
-                    style.opacity === '0'
-                ) {
-                    return false;
-                }
-
-                try {
-                    const box = node.getBBox();
-                    const centerX = box.x + box.width / 2;
-                    const top = box.y;
-
-                    // Der gesuchte Wert steht direkt unter Phase 3.
-                    return (
-                        Math.abs(centerX - phase3CenterX) <= 90 &&
-                        top >= phase3Bottom - 4 &&
-                        top <= phase3Bottom + 55
-                    );
-                } catch (_) {
-                    return false;
-                }
-            });
-
-            let powerNode = visiblePowerNodes.sort((a, b) => {
-                try {
-                    return a.getBBox().y - b.getBBox().y;
-                } catch (_) {
-                    return 0;
-                }
-            })[0] || null;
-
-            if (powerNode) {
-                powerNode.textContent = valueText;
-                powerNode.removeAttribute?.('display');
-                powerNode.removeAttribute?.('visibility');
-                powerNode.removeAttribute?.('opacity');
-                powerNode.removeAttribute?.('hidden');
-                powerNode.style?.setProperty(
-                    'display',
-                    'inline',
-                    'important'
-                );
-                powerNode.style?.setProperty(
-                    'visibility',
-                    'visible',
-                    'important'
-                );
-                powerNode.style?.setProperty(
-                    'opacity',
-                    '1',
-                    'important'
-                );
-
-                return;
-            }
-
-            // Falls kein vorhandener Watttext gefunden wird, direkt unter
-            // Phase 3 ein neues Feld erzeugen.
-            const template =
-                String(phase3Node.tagName || '').toLowerCase() === 'tspan'
-                    ? (phase3Node.closest?.('text') || phase3Node)
-                    : phase3Node;
-
-            const parent = template.parentNode;
-            if (!parent) {
-                continue;
-            }
-
-            powerNode =
-                parent.querySelector?.(
-                    '#symcon_inverter_power_fixed'
-                ) || null;
-
-            if (!powerNode) {
-                powerNode = template.cloneNode(true);
-                powerNode.id = 'symcon_inverter_power_fixed';
-                parent.appendChild(powerNode);
-            }
-
-            powerNode.textContent = valueText;
-            powerNode.style?.setProperty(
-                'display',
-                'inline',
-                'important'
-            );
-            powerNode.style?.setProperty(
-                'visibility',
-                'visible',
-                'important'
-            );
-            powerNode.style?.setProperty(
-                'opacity',
-                '1',
-                'important'
-            );
-
-            const x = Number(template.getAttribute?.('x'));
-            const y = Number(template.getAttribute?.('y'));
-
-            if (Number.isFinite(x)) {
-                powerNode.setAttribute('x', String(x));
-            }
-
-            if (Number.isFinite(y)) {
-                powerNode.setAttribute('y', String(y + 16));
-            } else {
-                const transform =
-                    template.getAttribute?.('transform') || '';
-
-                powerNode.setAttribute(
-                    'transform',
-                    `${transform} translate(0 16)`.trim()
-                );
-            }
-
+            const node = root.querySelector?.(powerSelectors.join(','));
+            if (!node) continue;
+            node.removeAttribute?.('display');
+            node.removeAttribute?.('visibility');
+            node.removeAttribute?.('opacity');
+            node.removeAttribute?.('hidden');
+            node.style?.setProperty('display', 'inline', 'important');
+            node.style?.setProperty('visibility', 'visible', 'important');
+            node.style?.setProperty('opacity', '1', 'important');
+            node.textContent = text;
             return;
+        }
+
+        // Die GoodWe-Darstellung erzeugt das Leistungsfeld teilweise nicht,
+        // obwohl die Amperewerte vorhanden sind. Dann wird das sichtbare
+        // Ampere-Textelement derselben WR-Box als positionsgetreue Vorlage
+        // verwendet. Die Suche erfolgt zusätzlich über den angezeigten Inhalt,
+        // weil die SVG-IDs zwischen den Card-Versionen abweichen.
+        let currentNode = null;
+        for (const root of roots) {
+            currentNode = root.querySelector?.(
+                '#inverter_current_164, [id="inverter_current_164"], [id*="inverter_current"], [id*="inverter-current"]'
+            );
+            if (currentNode) break;
+
+            const candidates = root.querySelectorAll?.('svg text, svg tspan') || [];
+            currentNode = Array.from(candidates).find(node => {
+                const shown = String(node.textContent || '').trim();
+                if (!/^-?[\d.,]+\s*A$/i.test(shown)) return false;
+                const style = getComputedStyle(node);
+                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+            }) || null;
+            if (currentNode) break;
+        }
+        if (!currentNode) return;
+
+        // Bei einem tspan das umschließende text-Element verwenden.
+        const template = String(currentNode.tagName || '').toLowerCase() === 'tspan'
+            ? (currentNode.closest?.('text') || currentNode)
+            : currentNode;
+        const parent = template.parentNode;
+        if (!parent) return;
+
+        let powerNode = parent.querySelector?.('#symcon_inverter_power_fixed');
+        if (!powerNode) {
+            powerNode = template.cloneNode(true);
+            powerNode.id = 'symcon_inverter_power_fixed';
+            parent.insertBefore(powerNode, template);
+        }
+
+        powerNode.textContent = text;
+        powerNode.removeAttribute?.('display');
+        powerNode.removeAttribute?.('visibility');
+        powerNode.removeAttribute?.('opacity');
+        powerNode.removeAttribute?.('hidden');
+        powerNode.style?.setProperty('display', 'inline', 'important');
+        powerNode.style?.setProperty('visibility', 'visible', 'important');
+        powerNode.style?.setProperty('opacity', '1', 'important');
+
+        // Exakt oberhalb der Amperezeile innerhalb derselben Box platzieren.
+        const y = Number(template.getAttribute?.('y'));
+        if (Number.isFinite(y)) {
+            powerNode.setAttribute('y', String(y - 16));
+        } else {
+            const oldTransform = template.getAttribute?.('transform') || '';
+            powerNode.setAttribute('transform', `${oldTransform} translate(0 -16)`.trim());
         }
     }
 
