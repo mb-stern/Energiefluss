@@ -171,50 +171,268 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'     => 'List',
                             'name'     => 'Producers',
-                            'caption'  => 'PV-Anlagen',
+                            'caption'  => 'PV-Anlagen mit Strings',
                             'rowCount' => 3,
                             'add'      => true,
                             'delete'   => true,
                             'columns'  => [
+
                                 [
-                                    'caption' => 'Name',
+                                    'caption' => 'Anlage',
                                     'name'    => 'Name',
-                                    'width'   => '200px',
+                                    'width'   => '170px',
                                     'add'     => '',
                                     'edit'    => ['type' => 'ValidationTextBox'],
                                 ],
                                 [
-                                    'caption' => 'Leistung',
-                                    'name'    => 'VariableID',
-                                    'width'   => '320px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
+                                    'caption' => 'Anzahl Strings',
+                                    'name'    => 'StringCount',
+                                    'width'   => '120px',
+                                    'add'     => 1,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 1,
+                                        'maximum' => 6,
+                                    ],
+                                ],
+
+                                [
+                                    'caption' => 'String 1 Name',
+                                    'name'    => 'String1Name',
+                                    'width'   => '150px',
+                                    'add'     => '',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
                                 ],
                                 [
-                                    'caption' => 'Energie (optional)',
-                                    'name'    => 'EnergyVariableID',
-                                    'width'   => '230px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'String-Spannung (V)',
-                                    'name'    => 'VoltageVariableID',
+                                    'caption' => 'S1 Leistung',
+                                    'name'    => 'String1PowerVariableID',
                                     'width'   => '210px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'String-Strom (A)',
-                                    'name'    => 'CurrentVariableID',
-                                    'width'   => '210px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'Maximalleistung (W)',
-                                    'name'    => 'MaxPower',
+                                    'caption' => 'S1 Spannung',
+                                    'name'    => 'String1VoltageVariableID',
                                     'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S1 Strom',
+                                    'name'    => 'String1CurrentVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S1 Max. (W)',
+                                    'name'    => 'String1MaxPower',
+                                    'width'   => '150px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 1000000,
+                                        'suffix'  => ' W',
+                                    ],
+                                ],
+
+                                [
+                                    'caption' => 'String 2 Name',
+                                    'name'    => 'String2Name',
+                                    'width'   => '150px',
+                                    'add'     => '',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                ],
+                                [
+                                    'caption' => 'S2 Leistung',
+                                    'name'    => 'String2PowerVariableID',
+                                    'width'   => '210px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S2 Spannung',
+                                    'name'    => 'String2VoltageVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S2 Strom',
+                                    'name'    => 'String2CurrentVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S2 Max. (W)',
+                                    'name'    => 'String2MaxPower',
+                                    'width'   => '150px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 1000000,
+                                        'suffix'  => ' W',
+                                    ],
+                                ],
+
+                                [
+                                    'caption' => 'String 3 Name',
+                                    'name'    => 'String3Name',
+                                    'width'   => '150px',
+                                    'add'     => '',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                ],
+                                [
+                                    'caption' => 'S3 Leistung',
+                                    'name'    => 'String3PowerVariableID',
+                                    'width'   => '210px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S3 Spannung',
+                                    'name'    => 'String3VoltageVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S3 Strom',
+                                    'name'    => 'String3CurrentVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S3 Max. (W)',
+                                    'name'    => 'String3MaxPower',
+                                    'width'   => '150px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 1000000,
+                                        'suffix'  => ' W',
+                                    ],
+                                ],
+
+                                [
+                                    'caption' => 'String 4 Name',
+                                    'name'    => 'String4Name',
+                                    'width'   => '150px',
+                                    'add'     => '',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                ],
+                                [
+                                    'caption' => 'S4 Leistung',
+                                    'name'    => 'String4PowerVariableID',
+                                    'width'   => '210px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S4 Spannung',
+                                    'name'    => 'String4VoltageVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S4 Strom',
+                                    'name'    => 'String4CurrentVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S4 Max. (W)',
+                                    'name'    => 'String4MaxPower',
+                                    'width'   => '150px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 1000000,
+                                        'suffix'  => ' W',
+                                    ],
+                                ],
+
+                                [
+                                    'caption' => 'String 5 Name',
+                                    'name'    => 'String5Name',
+                                    'width'   => '150px',
+                                    'add'     => '',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                ],
+                                [
+                                    'caption' => 'S5 Leistung',
+                                    'name'    => 'String5PowerVariableID',
+                                    'width'   => '210px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S5 Spannung',
+                                    'name'    => 'String5VoltageVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S5 Strom',
+                                    'name'    => 'String5CurrentVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S5 Max. (W)',
+                                    'name'    => 'String5MaxPower',
+                                    'width'   => '150px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 1000000,
+                                        'suffix'  => ' W',
+                                    ],
+                                ],
+
+                                [
+                                    'caption' => 'String 6 Name',
+                                    'name'    => 'String6Name',
+                                    'width'   => '150px',
+                                    'add'     => '',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                ],
+                                [
+                                    'caption' => 'S6 Leistung',
+                                    'name'    => 'String6PowerVariableID',
+                                    'width'   => '210px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S6 Spannung',
+                                    'name'    => 'String6VoltageVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S6 Strom',
+                                    'name'    => 'String6CurrentVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S6 Max. (W)',
+                                    'name'    => 'String6MaxPower',
+                                    'width'   => '150px',
                                     'add'     => 0,
                                     'edit'    => [
                                         'type'    => 'NumberSpinner',
@@ -3918,15 +4136,18 @@ HTML;
         $producers = json_decode($this->ReadPropertyString('Producers'), true);
         if (is_array($producers)) {
             foreach ($producers as $producer) {
-                foreach ([
-                    'VariableID',
-                    'EnergyVariableID',
-                    'VoltageVariableID',
-                    'CurrentVariableID'
-                ] as $key) {
-                    $variableID = (int) ($producer[$key] ?? 0);
-                    if ($variableID > 0) {
-                        $ids[] = $variableID;
+                $stringCount = max(1, min(6, (int) ($producer['StringCount'] ?? 1)));
+
+                for ($stringNo = 1; $stringNo <= $stringCount; $stringNo++) {
+                    foreach ([
+                        'String' . $stringNo . 'PowerVariableID',
+                        'String' . $stringNo . 'VoltageVariableID',
+                        'String' . $stringNo . 'CurrentVariableID'
+                    ] as $key) {
+                        $variableID = (int) ($producer[$key] ?? 0);
+                        if ($variableID > 0) {
+                            $ids[] = $variableID;
+                        }
                     }
                 }
             }
@@ -4007,50 +4228,83 @@ HTML;
         $pvs = [];
         $batteries = [];
 
-        // PV-Anlagen.
+        // PV-Anlagen mit ihren Strings.
+        // Jede Listenzeile ist eine Anlage. Die konfigurierten Strings werden
+        // für die Sunsynk-Karte fortlaufend als PV1 bis PV6 ausgegeben.
         $decodedPVs = json_decode($this->ReadPropertyString('Producers'), true);
         if (is_array($decodedPVs)) {
-            foreach ($decodedPVs as $source) {
-                $variableID = (int) ($source['VariableID'] ?? 0);
-                if ($variableID <= 0 || !IPS_VariableExists($variableID)) {
-                    continue;
+            foreach ($decodedPVs as $plant) {
+                $plantName = trim((string) ($plant['Name'] ?? ''));
+                $stringCount = max(1, min(6, (int) ($plant['StringCount'] ?? 1)));
+
+                for ($stringNo = 1; $stringNo <= $stringCount; $stringNo++) {
+                    if (count($pvs) >= 6) {
+                        break 2;
+                    }
+
+                    $powerVariableID = (int) (
+                        $plant['String' . $stringNo . 'PowerVariableID'] ?? 0
+                    );
+
+                    if (
+                        $powerVariableID <= 0 ||
+                        !IPS_VariableExists($powerVariableID)
+                    ) {
+                        continue;
+                    }
+
+                    $voltageVariableID = (int) (
+                        $plant['String' . $stringNo . 'VoltageVariableID'] ?? 0
+                    );
+                    $currentVariableID = (int) (
+                        $plant['String' . $stringNo . 'CurrentVariableID'] ?? 0
+                    );
+
+                    $hasVoltage =
+                        $voltageVariableID > 0 &&
+                        IPS_VariableExists($voltageVariableID);
+
+                    $hasCurrent =
+                        $currentVariableID > 0 &&
+                        IPS_VariableExists($currentVariableID);
+
+                    $configuredStringName = trim((string) (
+                        $plant['String' . $stringNo . 'Name'] ?? ''
+                    ));
+
+                    $stringName = $configuredStringName !== ''
+                        ? $configuredStringName
+                        : (
+                            $plantName !== ''
+                                ? $plantName . ' String ' . $stringNo
+                                : 'PV ' . (count($pvs) + 1)
+                        );
+
+                    $pvs[] = [
+                        'name'        => $stringName,
+                        'plantName'   => $plantName,
+                        'stringNo'    => $stringNo,
+                        'value'       => (float) GetValue($powerVariableID),
+                        'hasPower'    => true,
+                        'energy'      => '',
+                        'energyValue' => 0.0,
+                        'hasEnergy'   => false,
+                        'voltage'     => $hasVoltage
+                            ? (float) GetValue($voltageVariableID)
+                            : 0.0,
+                        'hasVoltage'  => $hasVoltage,
+                        'current'     => $hasCurrent
+                            ? (float) GetValue($currentVariableID)
+                            : 0.0,
+                        'hasCurrent'  => $hasCurrent,
+                        'maxPower'    => max(
+                            0,
+                            (int) (
+                                $plant['String' . $stringNo . 'MaxPower'] ?? 0
+                            )
+                        ),
+                    ];
                 }
-
-                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
-                $voltageVariableID = (int) ($source['VoltageVariableID'] ?? 0);
-                $currentVariableID = (int) ($source['CurrentVariableID'] ?? 0);
-
-                $hasEnergy =
-                    $energyVariableID > 0 &&
-                    IPS_VariableExists($energyVariableID);
-
-                $hasVoltage =
-                    $voltageVariableID > 0 &&
-                    IPS_VariableExists($voltageVariableID);
-
-                $hasCurrent =
-                    $currentVariableID > 0 &&
-                    IPS_VariableExists($currentVariableID);
-
-                $pvs[] = [
-                    'name'        => trim((string) ($source['Name'] ?? '')) !== ''
-                        ? (string) $source['Name']
-                        : 'PV ' . (count($pvs) + 1),
-                    'value'       => (float) GetValue($variableID),
-                    'hasPower'    => true,
-                    'energy'      => $hasEnergy ? GetValueFormatted($energyVariableID) : '',
-                    'energyValue' => $hasEnergy ? (float) GetValue($energyVariableID) : 0.0,
-                    'hasEnergy'   => $hasEnergy,
-                    'voltage'     => $hasVoltage
-                        ? (float) GetValue($voltageVariableID)
-                        : 0.0,
-                    'hasVoltage'  => $hasVoltage,
-                    'current'     => $hasCurrent
-                        ? (float) GetValue($currentVariableID)
-                        : 0.0,
-                    'hasCurrent'  => $hasCurrent,
-                    'maxPower'    => max(0, (int) ($source['MaxPower'] ?? 0)),
-                ];
             }
         }
 
@@ -4186,14 +4440,7 @@ HTML;
             IPS_VariableExists($gridExportEnergyID);
 
         $pvEnergyTotal = 0.0;
-        $hasPvEnergy = count($pvs) > 0;
-        foreach ($pvs as $pv) {
-            if (!($pv['hasEnergy'] ?? false)) {
-                $hasPvEnergy = false;
-                break;
-            }
-            $pvEnergyTotal += (float) ($pv['energyValue'] ?? 0.0);
-        }
+        $hasPvEnergy = false;
 
         $batteryChargeEnergyTotal = 0.0;
         $batteryDischargeEnergyTotal = 0.0;
