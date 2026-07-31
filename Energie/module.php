@@ -2831,30 +2831,32 @@ class Energiefluss extends IPSModuleStrict
         const searchRoot = card.shadowRoot || card;
         const roots = getOpenShadowRoots(searchRoot);
 
-        // Zuerst ein eventuell vorhandenes originales Leistungsfeld verwenden.
+        // Das originale Feld mit inverter_power im Namen ist bei der
+        // GoodWe-Darstellung nicht zuverlässig die AC-Wechselrichterleistung.
+        // Je nach Card-Version zeigt es dort die PV-/Solarleistung an.
+        // Deshalb dieses Originalfeld nicht mehr als Datenquelle verwenden,
+        // sondern ausblenden und die konfigurierte WR-Gesamtleistung gezielt
+        // bei den sichtbaren Phasenströmen einfügen.
         const powerSelectors = [
-            '#inverter_power_175', '[id="inverter_power_175"]',
-            '#inverter-power-175', '[id*="inverter_power"]', '[id*="inverter-power"]'
+            '#inverter_power_175',
+            '[id="inverter_power_175"]',
+            '#inverter-power-175',
+            '[id*="inverter_power"]',
+            '[id*="inverter-power"]'
         ];
+
         for (const root of roots) {
-            const node = root.querySelector?.(powerSelectors.join(','));
-            if (!node) continue;
-            node.removeAttribute?.('display');
-            node.removeAttribute?.('visibility');
-            node.removeAttribute?.('opacity');
-            node.removeAttribute?.('hidden');
-            node.style?.setProperty('display', 'inline', 'important');
-            node.style?.setProperty('visibility', 'visible', 'important');
-            node.style?.setProperty('opacity', '1', 'important');
-            node.textContent = text;
-            return;
+            root.querySelectorAll?.(powerSelectors.join(',')).forEach(node => {
+                // Unser eigenes Feld niemals ausblenden.
+                if (node.id === 'symcon_inverter_power_fixed') return;
+                node.style?.setProperty('display', 'none', 'important');
+                node.style?.setProperty('visibility', 'hidden', 'important');
+            });
         }
 
-        // Die GoodWe-Darstellung erzeugt das Leistungsfeld teilweise nicht,
-        // obwohl die Amperewerte vorhanden sind. Dann wird das sichtbare
-        // Ampere-Textelement derselben WR-Box als positionsgetreue Vorlage
-        // verwendet. Die Suche erfolgt zusätzlich über den angezeigten Inhalt,
-        // weil die SVG-IDs zwischen den Card-Versionen abweichen.
+        // Die konfigurierte WR-Leistung wird aus dem tatsächlich sichtbaren
+        // Ampere-Textelement derselben Box abgeleitet und direkt darüber
+        // positioniert. So stammt der Wert sicher aus InverterPower.
         let currentNode = null;
         for (const root of roots) {
             currentNode = root.querySelector?.(
