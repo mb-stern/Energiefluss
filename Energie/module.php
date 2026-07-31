@@ -2209,12 +2209,16 @@ class Energiefluss extends IPSModuleStrict
         }
 
         const capacity = Number(bat.capacityKWh || 0);
+
+        // Ohne konfigurierte Kapazität keinerlei Restzeitanzeige.
+        if (!Number.isFinite(capacity) || capacity <= 0) {
+            return '';
+        }
+
         const soc = Number(bat.soc || 0);
         const powerW = Number(bat.value || 0);
 
         if (
-            !Number.isFinite(capacity) ||
-            capacity <= 0 ||
             !Number.isFinite(soc) ||
             !Number.isFinite(powerW) ||
             Math.abs(powerW) < 50
@@ -2826,6 +2830,14 @@ class Energiefluss extends IPSModuleStrict
             },
             battery: {
                 count: Math.min(2, Math.max(1, activeBatteries.length)),
+
+                // Die Originalkarte erwartet die Batteriekapazität in Wh.
+                // Bei 0 wird die Restzeitanzeige von der Karte ausgeblendet.
+                energy: Math.max(
+                    0,
+                    Number(activeBatteries[0]?.capacityKWh || 0) * 1000
+                ),
+
                 shutdown_soc: Number(activeBatteries[0]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[0]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
@@ -2843,6 +2855,12 @@ class Energiefluss extends IPSModuleStrict
                 invert_flow: false
             },
             battery2: {
+                // Auch Batterie 2: Kapazität in Wh. 0 blendet die Zeit aus.
+                energy: Math.max(
+                    0,
+                    Number(activeBatteries[1]?.capacityKWh || 0) * 1000
+                ),
+
                 shutdown_soc: Number(activeBatteries[1]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[1]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
