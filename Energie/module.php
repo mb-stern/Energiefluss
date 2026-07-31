@@ -1,3 +1,747 @@
+ChatGPT Plus
+
+
+
+
+gestern 6:22
+
+Eingefügter Text(91).txt
+Dokument
+Könntest du mir ein Tolles Readmea.md machen, welche ich per copy/paste einfügen kann
+
+
+Eingefügter Text(92).txt
+Dokument
+Bau mir das bitte ein statt der akteullen Energiefluss übersicht, mit umschaltmöglichkeir der ANsicht, möglichst im Konfigurationsansicht und im html. Bitte von diesem ausgehen 
+
+
+sunsynk-power-flow-card.js
+JavaScript
+Ich denke wir müssen das Java ins modul einbauen wie die card sonst sieht das nie gelich sud
+
+Wir machen uns erst mal an die kompakte ansicht. Grundsätzlich nicht schlecht, aber dort sehe ich sechs verbraucher und in der Full ansich nicht. ich möchte hier eher nur der Hausverbrauche. ich möchte überall den Wattverbrauch. Ich möchte alle werte grösseres chrift. Dann steht bei beiden ansichten bei der Batterei zwei Prozentwerte, was ist das der zwite Wert. in der dateilansicht habe ich ein Bild von eine mHasu mit Sonne beim Hauptverbraucehr. Was ist der hauptverbraucher? Und waruum sind normale verbrausher der Wallbox nachgeschaltetn. Dann die Daten der Battrei stehe ein bissch im Shcilf. Ordne das bitts so an wie auf den Bildern für Detail und kompakt
+
+Generiertes Bild: # Model Set Context
+
+Nothing yet.
+
+
+Bearbeiten
+
+
+
+
+Eingefügter Text(93).txt
+Dokument
+Fehlen immer noc hin der Grafik. Und bei der batterie kann ich AMpere und SPannung nicht koinfiguriren
+
+
+Eingefügter Text(94).txt
+Dokument
+nach wie vor nicht. Keine ANzeige der Wechslerichterleistung in der Box oaberhaob des Wechslerichters. Dort kann auch noch der Strom der Pahsen des Wechslerichters konfigureirt werden. Bitte dies im Konfigurationsformular vorsehen. Und nach wie vor bekomme ndie Verbraucher keien anderer Farabe als dre Hausverbrauch, obwohl offenbar vorgesehen
+
+
+Eingefügter Text(95).txt
+Dokument
+mach es nun bitt reichtig
+
+
+Eingefügter Text(96).txt
+Dokument
+schau dir naochmlasdas an, da war es wirklich fast richtig ausser dass die Textboxen der Verbraucher komplett ausgeefüllt waren
+
+heute 18:10
+
+Eingefügter Text(97).txt
+Dokument
+würdest du mir die Flussrichtung der Netzleistung umdrehen bei beiden visus
+
+
+Eingefügter Text(98).txt
+Dokument
+Wir starten nochamls hier. ICh möchte Aux weg, aber der HAuverbrauch mus bleiben wie er ist. Dort soll aber die Wallbox als grösser dargestellter verbrauer ersichtlich sein und in der full vesion möchte ich 6 verbraucehr 
+
+Generiertes Bild: Energiefluss-Dashboard mit Hausansicht und Technikübersicht
+
+
+Bearbeiten
+
+
+
+Eingefügter Text(99).txt
+Dokument
+Jetzt hast du die Farbe der Verbuaacher geänert .diu kanst die Wallbox in der selben farbe machen wie di d verbraucher einfach gross darstellen
+
+
+Eingefügter Text(100).txt
+Dokument
+Das bedeutet: Entweder liefert die in „Wechselrichterleistung gesamt“ ausgewählte IP-Symcon-Variable tatsächlich 0, oder das Modul kann die ausgewählte Variable nicht korrekt lesen. das stimmt ich hatte dei falsche Vraible jetz ist es so jetz ist aber noc hei ndichte gEdränge bei diesen Strömen und Frequnz und Laistung ind er Large  und comapct ansicht
+
+e423dca5-175f-499e-8fbd-479d5ad052a2.png
+
+Generiertes Bild: We need title in de-CH. Need concise 5 words. Scene is inverter dashboard. Maybe "Wechselrichter-Dashboard mit Energiefluss". 3 words. Sentence case, German capitalization. Maybe "Wechselrichter-Dashboard mit grünem Energiefluss" but orange too. "Energiefluss im Wechselrichter-Dashboard" 4 words. Good.
+
+
+Bearbeiten
+
+
+
+Analysefehler
+from pathlib import Path
+import subprocess
+
+source = Path("/mnt/data/module_energiefluss_sunsynk_v52_wr_leistung_4px_tiefer.php")
+target = Path("/mnt/data/module_energiefluss_sunsynk_v53_wr_overlay_nicht_in_full.php")
+
+text = source.read_text(encoding="utf-8")
+
+old = """    function showInverterPowerAboveVoltages(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const available =
+"""
+new = """    function showInverterPowerAboveVoltages(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+        const isFullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        // In Full/Full Wide keinerlei Zusatzanzeige einblenden.
+        // Ein eventuell aus einer vorherigen Ansicht vorhandenes Overlay
+        // wird beim Wechsel auf Full sofort entfernt.
+        if (isFullLayout) {
+            for (const root of roots) {
+                root.querySelectorAll?.(
+                    '#symcon_inverter_power_overlay'
+                ).forEach(node => node.remove());
+            }
+            return;
+        }
+
+        const available =
+"""
+
+if text.count(old) != 1:
+    raise RuntimeError(
+        f"Funktionsanfang: erwartet 1 Fundstelle, gefunden {text.count(old)}"
+    )
+text = text.replace(old, new, 1)
+
+old = """        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+"""
+new = """        for (const root of roots) {
+"""
+
+if text.count(old) != 1:
+    raise RuntimeError(
+        f"Doppelte roots-Deklaration: erwartet 1 Fundstelle, gefunden {text.count(old)}"
+    )
+text = text.replace(old, new, 1)
+
+target.write_text(text, encoding="utf-8")
+
+result = subprocess.run(
+    ["php", "-l", str(target)],
+    capture_output=True,
+    text=True,
+    check=False
+)
+
+print(result.stdout.strip() or result.stderr.strip())
+print(target)
+---------------------------------------------------------------------------
+RuntimeError                              Traceback (most recent call last)
+Cell In[19], line 51
+     47 new = """        for (const root of roots) {
+     48 """
+     49 
+     50 if text.count(old) != 1:
+---> 51     raise RuntimeError(
+     52         f"Doppelte roots-Deklaration: erwartet 1 Fundstelle, gefunden {text.count(old)}"
+     53     )
+     54 text = text.replace(old, new, 1)
+
+RuntimeError: Doppelte roots-Deklaration: erwartet 1 Fundstelle, gefunden 2
+
+Analysiert
+from pathlib import Path
+import subprocess
+
+source = Path("/mnt/data/module_energiefluss_sunsynk_v52_wr_leistung_4px_tiefer.php")
+target = Path("/mnt/data/module_energiefluss_sunsynk_v53_wr_overlay_nicht_in_full.php")
+
+text = source.read_text(encoding="utf-8")
+
+old_start = """    function showInverterPowerAboveVoltages(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const available =
+"""
+new_start = """    function showInverterPowerAboveVoltages(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+        const isFullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        // In Full/Full Wide darf diese zusätzliche Anzeige nicht erscheinen.
+        // Ein aus Compact/Lite vorhandenes Overlay wird beim Umschalten entfernt.
+        if (isFullLayout) {
+            for (const root of roots) {
+                root.querySelectorAll?.(
+                    '#symcon_inverter_power_overlay'
+                ).forEach(node => node.remove());
+            }
+            return;
+        }
+
+        const available =
+"""
+
+if text.count(old_start) != 1:
+    raise RuntimeError(
+        f"Funktionsanfang: erwartet 1 Fundstelle, gefunden {text.count(old_start)}"
+    )
+text = text.replace(old_start, new_start, 1)
+
+func_start = text.index("    function showInverterPowerAboveVoltages(card, d) {")
+func_end = text.index("\n    function applyAdditionalLoadWattColourByGeometry", func_start)
+func = text[func_start:func_end]
+
+duplicate = """        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+"""
+if duplicate not in func:
+    raise RuntimeError("Doppelte roots-Deklaration innerhalb der Funktion nicht gefunden")
+
+func = func.replace(duplicate, """        for (const root of roots) {
+""", 1)
+text = text[:func_start] + func + text[func_end:]
+
+target.write_text(text, encoding="utf-8")
+
+result = subprocess.run(
+    ["php", "-l", str(target)],
+    capture_output=True,
+    text=True,
+    check=False
+)
+
+print(result.stdout.strip() or result.stderr.strip())
+print(target)
+STDOUT/STDERR
+No syntax errors detected in /mnt/data/module_energiefluss_sunsynk_v53_wr_overlay_nicht_in_full.php
+/mnt/data/module_energiefluss_sunsynk_v53_wr_overlay_nicht_in_full.php
+Jetzt ist die zusätzliche Wechselrichterleistung in Full und Full Wide wieder vollständig entfernt.
+
+Sie wird nur noch eingeblendet in:
+
+Compact
+
+Compact Wide
+
+Lite
+
+Lite Wide
+
+Beim Wechsel auf Full wird ein bereits vorhandenes Zusatzfeld sofort gelöscht. Die originale Full-Ansicht und die Smartmeter-Daten bleiben unangetastet.
+
+module_energiefluss_sunsynk_v53_wr_overlay_nicht_in_full.php
+
+PHP-Syntaxprüfung: keine Fehler. 
+
+
+module_energiefluss_sunsynk_v53_wr_overlay_nicht_in_full.php
+Code
+
+
+Scheinbar kann man bie der SOlaranlage obern neben er Sonne noch ide AUsaentempertur einblendne, könnte ich das ahben und uach konfigureirein
+
+29s nachgedacht
+
+Analysefehler
+from pathlib import Path
+import subprocess
+
+source = Path("/mnt/data/module_energiefluss_sunsynk_v53_wr_overlay_nicht_in_full.php")
+target = Path("/mnt/data/module_energiefluss_sunsynk_v54_aussentemperatur_solar.php")
+
+text = source.read_text(encoding="utf-8")
+
+repls = [
+(
+"""        // Dynamische Anlagen.
+        $this->RegisterPropertyString('Producers', '[]');
+        $this->RegisterPropertyString('Batteries', '[]');
+""",
+"""        // Dynamische Anlagen.
+        $this->RegisterPropertyString('Producers', '[]');
+        $this->RegisterPropertyString('Batteries', '[]');
+        $this->RegisterPropertyInteger('OutsideTemperature', 0);
+""",
+"Property"
+),
+(
+"""                    'items'   => [
+                        [
+                            'type'     => 'List',
+""",
+"""                    'items'   => [
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'OutsideTemperature',
+                            'caption' => 'Außentemperatur (optional, Anzeige bei der Sonne)',
+                        ],
+                        [
+                            'type'     => 'List',
+""",
+"Formular"
+),
+(
+"""            'WallboxEnergy',
+        ] as $property) {
+""",
+"""            'WallboxEnergy',
+            'OutsideTemperature',
+        ] as $property) {
+""",
+"CollectVariableIDs"
+),
+(
+"""        if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+""",
+"""        if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+        addEntity(
+            'environment_temp',
+            'sensor.symcon_outside_temperature',
+            entityAvailable(d, 'outsideTemperature')
+        );
+""",
+"Entity"
+),
+(
+"""            'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
+""",
+"""            'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
+            'sensor.symcon_outside_temperature': ssState(
+                d.outsideTemperature || 0,
+                '°C'
+            ),
+""",
+"Hass"
+),
+(
+"""            'inverterPowerAvailable' => $inverterPowerAvailable,
+""",
+"""            'inverterPowerAvailable' => $inverterPowerAvailable,
+            'outsideTemperature' => $this->ReadVar('OutsideTemperature'),
+""",
+"Payload Wert"
+),
+(
+"""                'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
+""",
+"""                'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
+                'outsideTemperature' => (
+                    $this->ReadPropertyInteger('OutsideTemperature') > 0
+                    && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
+                ),
+""",
+"Payload available"
+),
+]
+
+for old,new,label in repls:
+    c=text.count(old)
+    if c!=1:
+        raise RuntimeError(f"{label}: erwartet 1, gefunden {c}")
+    text=text.replace(old,new,1)
+
+target.write_text(text,encoding="utf-8")
+res=subprocess.run(["php","-l",str(target)],capture_output=True,text=True)
+print(res.stdout.strip() or res.stderr.strip())
+print(target)
+---------------------------------------------------------------------------
+RuntimeError                              Traceback (most recent call last)
+Cell In[21], line 95
+     91 
+     92 for old,new,label in repls:
+     93     c=text.count(old)
+     94     if c!=1:
+---> 95         raise RuntimeError(f"{label}: erwartet 1, gefunden {c}")
+     96     text=text.replace(old,new,1)
+     97 
+     98 target.write_text(text,encoding="utf-8")
+
+RuntimeError: Formular: erwartet 1, gefunden 3
+
+Analysiert
+from pathlib import Path
+import subprocess
+
+source = Path("/mnt/data/module_energiefluss_sunsynk_v53_wr_overlay_nicht_in_full.php")
+target = Path("/mnt/data/module_energiefluss_sunsynk_v54_aussentemperatur_solar.php")
+text = source.read_text(encoding="utf-8")
+
+def replace_once(old, new, label):
+    global text
+    c = text.count(old)
+    if c != 1:
+        raise RuntimeError(f"{label}: erwartet 1, gefunden {c}")
+    text = text.replace(old, new, 1)
+
+replace_once(
+"""        // Dynamische Anlagen.
+        $this->RegisterPropertyString('Producers', '[]');
+        $this->RegisterPropertyString('Batteries', '[]');
+""",
+"""        // Dynamische Anlagen.
+        $this->RegisterPropertyString('Producers', '[]');
+        $this->RegisterPropertyString('Batteries', '[]');
+        $this->RegisterPropertyInteger('OutsideTemperature', 0);
+""",
+"Property"
+)
+
+replace_once(
+"""                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => 'Solaranlagen',
+                    'items'   => [
+                        [
+                            'type'     => 'List',
+""",
+"""                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => 'Solaranlagen',
+                    'items'   => [
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'OutsideTemperature',
+                            'caption' => 'Außentemperatur (optional, Anzeige bei der Sonne)',
+                        ],
+                        [
+                            'type'     => 'List',
+""",
+"Formular"
+)
+
+replace_once(
+"""            'WallboxEnergy',
+        ] as $property) {
+""",
+"""            'WallboxEnergy',
+            'OutsideTemperature',
+        ] as $property) {
+""",
+"Collect"
+)
+
+replace_once(
+"""        if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+""",
+"""        if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+        addEntity(
+            'environment_temp',
+            'sensor.symcon_outside_temperature',
+            entityAvailable(d, 'outsideTemperature')
+        );
+""",
+"Entity"
+)
+
+replace_once(
+"""            'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
+""",
+"""            'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
+            'sensor.symcon_outside_temperature': ssState(
+                d.outsideTemperature || 0,
+                '°C'
+            ),
+""",
+"Hass"
+)
+
+replace_once(
+"""            'inverterPowerAvailable' => $inverterPowerAvailable,
+""",
+"""            'inverterPowerAvailable' => $inverterPowerAvailable,
+            'outsideTemperature' => $this->ReadVar('OutsideTemperature'),
+""",
+"Payload Wert"
+)
+
+replace_once(
+"""                'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
+""",
+"""                'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
+                'outsideTemperature' => (
+                    $this->ReadPropertyInteger('OutsideTemperature') > 0
+                    && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
+                ),
+""",
+"Payload available"
+)
+
+target.write_text(text, encoding="utf-8")
+res = subprocess.run(["php", "-l", str(target)], capture_output=True, text=True)
+print(res.stdout.strip() or res.stderr.strip())
+print(target)
+STDOUT/STDERR
+No syntax errors detected in /mnt/data/module_energiefluss_sunsynk_v54_aussentemperatur_solar.php
+/mnt/data/module_energiefluss_sunsynk_v54_aussentemperatur_solar.php
+Ja, das ist möglich. Die Sunsynk-Karte unterstützt dafür die Entity environment_temp; sie wird unterhalb beziehungsweise neben dem Sonnensymbol angezeigt. 
+
+Ich habe ergänzt:
+
+neue Variable „Außentemperatur“ im Abschnitt Solaranlagen
+
+automatische Registrierung für Aktualisierungen
+
+Übergabe als sensor.symcon_outside_temperature
+
+Einheit °C
+
+Anzeige nur, wenn tatsächlich eine Variable ausgewählt ist
+
+module_energiefluss_sunsynk_v54_aussentemperatur_solar.php
+
+PHP-Syntaxprüfung: keine Fehler. 
+
+
+module_energiefluss_sunsynk_v54_aussentemperatur_solar.php
+Code
+
+
+Und dann scheint  noch die Spannung und der Storm der Stirngs und die Bezeichnung der Strings möglich
+
+
+Analysiert
+from pathlib import Path
+import subprocess
+
+source = Path("/mnt/data/module_energiefluss_sunsynk_v54_aussentemperatur_solar.php")
+target = Path("/mnt/data/module_energiefluss_sunsynk_v55_pv_strings_spannung_strom_name.php")
+
+text = source.read_text(encoding="utf-8")
+
+def replace_once(old: str, new: str, label: str) -> None:
+    global text
+    count = text.count(old)
+    if count != 1:
+        raise RuntimeError(f"{label}: erwartet 1 Fundstelle, gefunden {count}")
+    text = text.replace(old, new, 1)
+
+# 1) Konfigurationsformular: Spannung und Strom je PV-Anlage.
+replace_once(
+"""                                [
+                                    'caption' => 'Energie (optional)',
+                                    'name'    => 'EnergyVariableID',
+                                    'width'   => '260px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Maximalleistung (W)',
+""",
+"""                                [
+                                    'caption' => 'Energie (optional)',
+                                    'name'    => 'EnergyVariableID',
+                                    'width'   => '230px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'String-Spannung (V)',
+                                    'name'    => 'VoltageVariableID',
+                                    'width'   => '210px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'String-Strom (A)',
+                                    'name'    => 'CurrentVariableID',
+                                    'width'   => '210px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Maximalleistung (W)',
+""",
+"PV-Spalten"
+)
+
+# 2) Referenzen/VM_UPDATE registrieren.
+replace_once(
+"""                foreach (['VariableID', 'EnergyVariableID'] as $key) {
+""",
+"""                foreach ([
+                    'VariableID',
+                    'EnergyVariableID',
+                    'VoltageVariableID',
+                    'CurrentVariableID'
+                ] as $key) {
+""",
+"PV-Variablen sammeln"
+)
+
+# 3) Payload um Spannung/Strom erweitern.
+replace_once(
+"""                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
+
+                $hasEnergy = $energyVariableID > 0 && IPS_VariableExists($energyVariableID);
+
+                $pvs[] = [
+""",
+"""                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
+                $voltageVariableID = (int) ($source['VoltageVariableID'] ?? 0);
+                $currentVariableID = (int) ($source['CurrentVariableID'] ?? 0);
+
+                $hasEnergy =
+                    $energyVariableID > 0 &&
+                    IPS_VariableExists($energyVariableID);
+
+                $hasVoltage =
+                    $voltageVariableID > 0 &&
+                    IPS_VariableExists($voltageVariableID);
+
+                $hasCurrent =
+                    $currentVariableID > 0 &&
+                    IPS_VariableExists($currentVariableID);
+
+                $pvs[] = [
+""",
+"PV-Payload Vorbereitung"
+)
+
+replace_once(
+"""                    'energyValue' => $hasEnergy ? (float) GetValue($energyVariableID) : 0.0,
+                    'hasEnergy'   => $hasEnergy,
+                    'maxPower'    => max(0, (int) ($source['MaxPower'] ?? 0)),
+""",
+"""                    'energyValue' => $hasEnergy ? (float) GetValue($energyVariableID) : 0.0,
+                    'hasEnergy'   => $hasEnergy,
+                    'voltage'     => $hasVoltage
+                        ? (float) GetValue($voltageVariableID)
+                        : 0.0,
+                    'hasVoltage'  => $hasVoltage,
+                    'current'     => $hasCurrent
+                        ? (float) GetValue($currentVariableID)
+                        : 0.0,
+                    'hasCurrent'  => $hasCurrent,
+                    'maxPower'    => max(0, (int) ($source['MaxPower'] ?? 0)),
+""",
+"PV-Payload Werte"
+)
+
+# 4) Sunsynk-Entities je String dynamisch ergänzen.
+replace_once(
+"""        activePvs.forEach((pv, i) => addEntity(i < 4 ? `pv${i + 1}_power_${186 + i}` : `pv${i + 1}_power`, `sensor.symcon_pv${i + 1}`));
+        if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+""",
+"""        activePvs.forEach((pv, i) => {
+            const stringNo = i + 1;
+
+            addEntity(
+                i < 4
+                    ? `pv${stringNo}_power_${186 + i}`
+                    : `pv${stringNo}_power`,
+                `sensor.symcon_pv${stringNo}`
+            );
+
+            // Die Originalkarte verwendet für die String-Messwerte fortlaufende
+            // Registerbezeichnungen: PV1 = 109/110, PV2 = 111/112 usw.
+            addEntity(
+                `pv${stringNo}_voltage_${109 + (i * 2)}`,
+                `sensor.symcon_pv${stringNo}_voltage`,
+                pv.hasVoltage
+            );
+            addEntity(
+                `pv${stringNo}_current_${110 + (i * 2)}`,
+                `sensor.symcon_pv${stringNo}_current`,
+                pv.hasCurrent
+            );
+        });
+
+        if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+""",
+"Sunsynk String-Entities"
+)
+
+# 5) Virtuelle Hass-Sensoren anlegen.
+replace_once(
+"""        activePvs.forEach((pv, i) => states[`sensor.symcon_pv${i + 1}`] = ssState(pv.value || 0, 'W'));
+""",
+"""        activePvs.forEach((pv, i) => {
+            const stringNo = i + 1;
+
+            states[`sensor.symcon_pv${stringNo}`] =
+                ssState(pv.value || 0, 'W');
+
+            states[`sensor.symcon_pv${stringNo}_voltage`] =
+                ssState(pv.voltage || 0, 'V');
+
+            states[`sensor.symcon_pv${stringNo}_current`] =
+                ssState(pv.current || 0, 'A');
+        });
+""",
+"Hass String-Sensoren"
+)
+
+target.write_text(text, encoding="utf-8")
+
+result = subprocess.run(
+    ["php", "-l", str(target)],
+    capture_output=True,
+    text=True,
+    check=False
+)
+
+print(result.stdout.strip() or result.stderr.strip())
+print(target)
+STDOUT/STDERR
+No syntax errors detected in /mnt/data/module_energiefluss_sunsynk_v55_pv_strings_spannung_strom_name.php
+/mnt/data/module_energiefluss_sunsynk_v55_pv_strings_spannung_strom_name.php
+Ja, das unterstützt die Sunsynk-Karte ebenfalls. Für die PV-Strings können neben der Leistung auch Spannung, Strom und eine eigene Bezeichnung angezeigt werden. Die Originalkarte verwendet dafür unter anderem pv1_voltage_109, pv1_current_110, pv2_voltage_111 und pv2_current_112. 
+
+Ich habe die Konfiguration jeder Solaranlage erweitert um:
+
+Name beziehungsweise String-Bezeichnung
+
+Leistung
+
+Energie
+
+String-Spannung
+
+String-Strom
+
+Maximalleistung
+
+Der bereits vorhandene Name wird weiterhin als pv1_name, pv2_name usw. verwendet. Spannung und Strom werden nur übergeben, wenn eine entsprechende Variable ausgewählt ist.
+
+Unterstützt werden bis zu sechs konfigurierte PV-Anlagen beziehungsweise Strings.
+
+module_energiefluss_sunsynk_v55_pv_strings_spannung_strom_name.php
+
+PHP-Syntaxprüfung: keine Fehler. 
+
+
+module_energiefluss_sunsynk_v55_pv_strings_spannung_strom_name.php
+Code
+
+
+Bibliothek
+/
+module_energiefluss_sunsynk_v55_pv_strings_spannung_strom_name.php
+
+
 <?php
 
 /*
@@ -171,268 +915,50 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'     => 'List',
                             'name'     => 'Producers',
-                            'caption'  => 'PV-Anlagen mit Strings',
+                            'caption'  => 'PV-Anlagen',
                             'rowCount' => 3,
                             'add'      => true,
                             'delete'   => true,
                             'columns'  => [
-
                                 [
-                                    'caption' => 'Anlage',
+                                    'caption' => 'Name',
                                     'name'    => 'Name',
-                                    'width'   => '170px',
+                                    'width'   => '200px',
                                     'add'     => '',
                                     'edit'    => ['type' => 'ValidationTextBox'],
                                 ],
                                 [
-                                    'caption' => 'Anzahl Strings',
-                                    'name'    => 'StringCount',
-                                    'width'   => '120px',
-                                    'add'     => 1,
-                                    'edit'    => [
-                                        'type'    => 'NumberSpinner',
-                                        'minimum' => 1,
-                                        'maximum' => 6,
-                                    ],
-                                ],
-
-                                [
-                                    'caption' => 'String 1 Name',
-                                    'name'    => 'String1Name',
-                                    'width'   => '150px',
-                                    'add'     => '',
-                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                    'caption' => 'Leistung',
+                                    'name'    => 'VariableID',
+                                    'width'   => '320px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'S1 Leistung',
-                                    'name'    => 'String1PowerVariableID',
+                                    'caption' => 'Energie (optional)',
+                                    'name'    => 'EnergyVariableID',
+                                    'width'   => '230px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'String-Spannung (V)',
+                                    'name'    => 'VoltageVariableID',
                                     'width'   => '210px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'S1 Spannung',
-                                    'name'    => 'String1VoltageVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S1 Strom',
-                                    'name'    => 'String1CurrentVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S1 Max. (W)',
-                                    'name'    => 'String1MaxPower',
-                                    'width'   => '150px',
-                                    'add'     => 0,
-                                    'edit'    => [
-                                        'type'    => 'NumberSpinner',
-                                        'minimum' => 0,
-                                        'maximum' => 1000000,
-                                        'suffix'  => ' W',
-                                    ],
-                                ],
-
-                                [
-                                    'caption' => 'String 2 Name',
-                                    'name'    => 'String2Name',
-                                    'width'   => '150px',
-                                    'add'     => '',
-                                    'edit'    => ['type' => 'ValidationTextBox'],
-                                ],
-                                [
-                                    'caption' => 'S2 Leistung',
-                                    'name'    => 'String2PowerVariableID',
+                                    'caption' => 'String-Strom (A)',
+                                    'name'    => 'CurrentVariableID',
                                     'width'   => '210px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'S2 Spannung',
-                                    'name'    => 'String2VoltageVariableID',
+                                    'caption' => 'Maximalleistung (W)',
+                                    'name'    => 'MaxPower',
                                     'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S2 Strom',
-                                    'name'    => 'String2CurrentVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S2 Max. (W)',
-                                    'name'    => 'String2MaxPower',
-                                    'width'   => '150px',
-                                    'add'     => 0,
-                                    'edit'    => [
-                                        'type'    => 'NumberSpinner',
-                                        'minimum' => 0,
-                                        'maximum' => 1000000,
-                                        'suffix'  => ' W',
-                                    ],
-                                ],
-
-                                [
-                                    'caption' => 'String 3 Name',
-                                    'name'    => 'String3Name',
-                                    'width'   => '150px',
-                                    'add'     => '',
-                                    'edit'    => ['type' => 'ValidationTextBox'],
-                                ],
-                                [
-                                    'caption' => 'S3 Leistung',
-                                    'name'    => 'String3PowerVariableID',
-                                    'width'   => '210px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S3 Spannung',
-                                    'name'    => 'String3VoltageVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S3 Strom',
-                                    'name'    => 'String3CurrentVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S3 Max. (W)',
-                                    'name'    => 'String3MaxPower',
-                                    'width'   => '150px',
-                                    'add'     => 0,
-                                    'edit'    => [
-                                        'type'    => 'NumberSpinner',
-                                        'minimum' => 0,
-                                        'maximum' => 1000000,
-                                        'suffix'  => ' W',
-                                    ],
-                                ],
-
-                                [
-                                    'caption' => 'String 4 Name',
-                                    'name'    => 'String4Name',
-                                    'width'   => '150px',
-                                    'add'     => '',
-                                    'edit'    => ['type' => 'ValidationTextBox'],
-                                ],
-                                [
-                                    'caption' => 'S4 Leistung',
-                                    'name'    => 'String4PowerVariableID',
-                                    'width'   => '210px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S4 Spannung',
-                                    'name'    => 'String4VoltageVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S4 Strom',
-                                    'name'    => 'String4CurrentVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S4 Max. (W)',
-                                    'name'    => 'String4MaxPower',
-                                    'width'   => '150px',
-                                    'add'     => 0,
-                                    'edit'    => [
-                                        'type'    => 'NumberSpinner',
-                                        'minimum' => 0,
-                                        'maximum' => 1000000,
-                                        'suffix'  => ' W',
-                                    ],
-                                ],
-
-                                [
-                                    'caption' => 'String 5 Name',
-                                    'name'    => 'String5Name',
-                                    'width'   => '150px',
-                                    'add'     => '',
-                                    'edit'    => ['type' => 'ValidationTextBox'],
-                                ],
-                                [
-                                    'caption' => 'S5 Leistung',
-                                    'name'    => 'String5PowerVariableID',
-                                    'width'   => '210px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S5 Spannung',
-                                    'name'    => 'String5VoltageVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S5 Strom',
-                                    'name'    => 'String5CurrentVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S5 Max. (W)',
-                                    'name'    => 'String5MaxPower',
-                                    'width'   => '150px',
-                                    'add'     => 0,
-                                    'edit'    => [
-                                        'type'    => 'NumberSpinner',
-                                        'minimum' => 0,
-                                        'maximum' => 1000000,
-                                        'suffix'  => ' W',
-                                    ],
-                                ],
-
-                                [
-                                    'caption' => 'String 6 Name',
-                                    'name'    => 'String6Name',
-                                    'width'   => '150px',
-                                    'add'     => '',
-                                    'edit'    => ['type' => 'ValidationTextBox'],
-                                ],
-                                [
-                                    'caption' => 'S6 Leistung',
-                                    'name'    => 'String6PowerVariableID',
-                                    'width'   => '210px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S6 Spannung',
-                                    'name'    => 'String6VoltageVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S6 Strom',
-                                    'name'    => 'String6CurrentVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'S6 Max. (W)',
-                                    'name'    => 'String6MaxPower',
-                                    'width'   => '150px',
                                     'add'     => 0,
                                     'edit'    => [
                                         'type'    => 'NumberSpinner',
@@ -4136,18 +4662,15 @@ HTML;
         $producers = json_decode($this->ReadPropertyString('Producers'), true);
         if (is_array($producers)) {
             foreach ($producers as $producer) {
-                $stringCount = max(1, min(6, (int) ($producer['StringCount'] ?? 1)));
-
-                for ($stringNo = 1; $stringNo <= $stringCount; $stringNo++) {
-                    foreach ([
-                        'String' . $stringNo . 'PowerVariableID',
-                        'String' . $stringNo . 'VoltageVariableID',
-                        'String' . $stringNo . 'CurrentVariableID'
-                    ] as $key) {
-                        $variableID = (int) ($producer[$key] ?? 0);
-                        if ($variableID > 0) {
-                            $ids[] = $variableID;
-                        }
+                foreach ([
+                    'VariableID',
+                    'EnergyVariableID',
+                    'VoltageVariableID',
+                    'CurrentVariableID'
+                ] as $key) {
+                    $variableID = (int) ($producer[$key] ?? 0);
+                    if ($variableID > 0) {
+                        $ids[] = $variableID;
                     }
                 }
             }
@@ -4228,83 +4751,50 @@ HTML;
         $pvs = [];
         $batteries = [];
 
-        // PV-Anlagen mit ihren Strings.
-        // Jede Listenzeile ist eine Anlage. Die konfigurierten Strings werden
-        // für die Sunsynk-Karte fortlaufend als PV1 bis PV6 ausgegeben.
+        // PV-Anlagen.
         $decodedPVs = json_decode($this->ReadPropertyString('Producers'), true);
         if (is_array($decodedPVs)) {
-            foreach ($decodedPVs as $plant) {
-                $plantName = trim((string) ($plant['Name'] ?? ''));
-                $stringCount = max(1, min(6, (int) ($plant['StringCount'] ?? 1)));
-
-                for ($stringNo = 1; $stringNo <= $stringCount; $stringNo++) {
-                    if (count($pvs) >= 6) {
-                        break 2;
-                    }
-
-                    $powerVariableID = (int) (
-                        $plant['String' . $stringNo . 'PowerVariableID'] ?? 0
-                    );
-
-                    if (
-                        $powerVariableID <= 0 ||
-                        !IPS_VariableExists($powerVariableID)
-                    ) {
-                        continue;
-                    }
-
-                    $voltageVariableID = (int) (
-                        $plant['String' . $stringNo . 'VoltageVariableID'] ?? 0
-                    );
-                    $currentVariableID = (int) (
-                        $plant['String' . $stringNo . 'CurrentVariableID'] ?? 0
-                    );
-
-                    $hasVoltage =
-                        $voltageVariableID > 0 &&
-                        IPS_VariableExists($voltageVariableID);
-
-                    $hasCurrent =
-                        $currentVariableID > 0 &&
-                        IPS_VariableExists($currentVariableID);
-
-                    $configuredStringName = trim((string) (
-                        $plant['String' . $stringNo . 'Name'] ?? ''
-                    ));
-
-                    $stringName = $configuredStringName !== ''
-                        ? $configuredStringName
-                        : (
-                            $plantName !== ''
-                                ? $plantName . ' String ' . $stringNo
-                                : 'PV ' . (count($pvs) + 1)
-                        );
-
-                    $pvs[] = [
-                        'name'        => $stringName,
-                        'plantName'   => $plantName,
-                        'stringNo'    => $stringNo,
-                        'value'       => (float) GetValue($powerVariableID),
-                        'hasPower'    => true,
-                        'energy'      => '',
-                        'energyValue' => 0.0,
-                        'hasEnergy'   => false,
-                        'voltage'     => $hasVoltage
-                            ? (float) GetValue($voltageVariableID)
-                            : 0.0,
-                        'hasVoltage'  => $hasVoltage,
-                        'current'     => $hasCurrent
-                            ? (float) GetValue($currentVariableID)
-                            : 0.0,
-                        'hasCurrent'  => $hasCurrent,
-                        'maxPower'    => max(
-                            0,
-                            (int) (
-                                $plant['String' . $stringNo . 'MaxPower'] ?? 0
-                            )
-                        ),
-                    ];
+            foreach ($decodedPVs as $source) {
+                $variableID = (int) ($source['VariableID'] ?? 0);
+                if ($variableID <= 0 || !IPS_VariableExists($variableID)) {
+                    continue;
                 }
+
+                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
+                $voltageVariableID = (int) ($source['VoltageVariableID'] ?? 0);
+                $currentVariableID = (int) ($source['CurrentVariableID'] ?? 0);
+
+                $hasEnergy =
+                    $energyVariableID > 0 &&
+                    IPS_VariableExists($energyVariableID);
+
+                $hasVoltage =
+                    $voltageVariableID > 0 &&
+                    IPS_VariableExists($voltageVariableID);
+
+                $hasCurrent =
+                    $currentVariableID > 0 &&
+                    IPS_VariableExists($currentVariableID);
+
+                $pvs[] = [
+                    'name'        => trim((string) ($source['Name'] ?? '')) !== ''
+                        ? (string) $source['Name']
+                        : 'PV ' . (count($pvs) + 1),
+                    'value'       => (float) GetValue($variableID),
+                    'hasPower'    => true,
+                    'energy'      => $hasEnergy ? GetValueFormatted($energyVariableID) : '',
+                    'energyValue' => $hasEnergy ? (float) GetValue($energyVariableID) : 0.0,
+                    'hasEnergy'   => $hasEnergy,
+                    'voltage'     => $hasVoltage
+                        ? (float) GetValue($voltageVariableID)
+                        : 0.0,
+                    'hasVoltage'  => $hasVoltage,
+                    'current'     => $hasCurrent
+                        ? (float) GetValue($currentVariableID)
+                        : 0.0,
+                    'hasCurrent'  => $hasCurrent,
+                    'maxPower'    => max(0, (int) ($source['MaxPower'] ?? 0)),
+                ];
             }
         }
 
@@ -4440,7 +4930,14 @@ HTML;
             IPS_VariableExists($gridExportEnergyID);
 
         $pvEnergyTotal = 0.0;
-        $hasPvEnergy = false;
+        $hasPvEnergy = count($pvs) > 0;
+        foreach ($pvs as $pv) {
+            if (!($pv['hasEnergy'] ?? false)) {
+                $hasPvEnergy = false;
+                break;
+            }
+            $pvEnergyTotal += (float) ($pv['energyValue'] ?? 0.0);
+        }
 
         $batteryChargeEnergyTotal = 0.0;
         $batteryDischargeEnergyTotal = 0.0;
