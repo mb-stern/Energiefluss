@@ -2472,17 +2472,15 @@ class Energiefluss extends IPSModuleStrict
         addEntity('inverter_current_164', 'sensor.symcon_inverter_current_l1', entityAvailable(d, 'inverterCurrentL1'));
         addEntity('inverter_current_L2', 'sensor.symcon_inverter_current_l2', entityAvailable(d, 'inverterCurrentL2'));
         addEntity('inverter_current_L3', 'sensor.symcon_inverter_current_l3', entityAvailable(d, 'inverterCurrentL3'));
-        // Die Box oberhalb des Wechselrichters verwendet je nach Layout/Modell
-        // nicht inverter_power_175, sondern grid_power_169. Deshalb erhält
-        // grid_power_169 bei konfigurierter WR-Gesamtleistung denselben Sensor.
-        // Nur wenn keine WR-Leistung konfiguriert ist, bleibt der Netzsensor
-        // der Rückfallwert.
+        // grid_power_169 ist die AC-/Smartmeter-Leistung zwischen Netz und
+        // Wechselrichter. Hier darf nicht die Wechselrichter-Gesamtleistung
+        // verwendet werden, sonst zeigt die Smartmeter-Box einen viel zu hohen
+        // Wert und die Punkte laufen nach der WR-Leistung statt nach dem
+        // tatsächlichen Netzbezug bzw. der Rücklieferung.
         addEntity(
             'grid_power_169',
-            (entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable)
-                ? 'sensor.symcon_inverter'
-                : 'sensor.symcon_grid_power',
-            (entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable) || hasGrid
+            'sensor.symcon_grid_power',
+            hasGrid
         );
         addEntity('inverter_voltage_154', 'sensor.symcon_grid_voltage_l1', entityAvailable(d, 'gridVoltageL1'));
         addEntity('inverter_voltage_L2', 'sensor.symcon_grid_voltage_l2', entityAvailable(d, 'gridVoltageL2'));
