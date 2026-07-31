@@ -2782,7 +2782,6 @@ class Energiefluss extends IPSModuleStrict
                     applyAdditionalLoadColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                     moveInverterPowerHigher(card);
-                moveInverterPowerHigher(card);
                 });
             });
             card.__symconVisualObserver.observe(card.shadowRoot, {
@@ -2840,56 +2839,34 @@ class Energiefluss extends IPSModuleStrict
             ) || [];
 
             matches.forEach(match => {
-                // Je nach Karten-Version liegt die ID entweder direkt auf dem
-                // Text oder auf einer umschließenden SVG-Gruppe.
-                const nodes = [];
+                let valueNode = null;
+                const tag = String(match.tagName || '').toLowerCase();
 
-                if (
-                    String(match.tagName || '').toLowerCase() === 'text' ||
-                    String(match.tagName || '').toLowerCase() === 'tspan'
-                ) {
-                    nodes.push(match);
+                // Liegt die ID direkt auf einem sichtbaren Textknoten?
+                if (tag === 'text' || tag === 'tspan') {
+                    valueNode = match;
                 } else {
-                    match.querySelectorAll?.('text, tspan').forEach(node => {
-                        nodes.push(node);
-                    });
+                    // Liegt die ID auf einer Gruppe, nur den darin enthaltenen
+                    // Leistungswert wählen – nicht die Amperewerte mitverschieben.
+                    valueNode = Array.from(
+                        match.querySelectorAll?.('text, tspan') || []
+                    ).find(node =>
+                        /(?:^|\s)[-+]?\d[\d.,\s]*\s*(?:W|kW)$/i.test(
+                            String(node.textContent || '').trim()
+                        )
+                    ) || null;
                 }
 
-                nodes.forEach(node => {
-                    if (!node.dataset.symconOriginalY) {
-                        const originalY = node.getAttribute?.('y');
-                        if (originalY !== null) {
-                            node.dataset.symconOriginalY = originalY;
-                        }
-                    }
+                if (!valueNode) return;
 
-                    if (!node.dataset.symconOriginalTransform) {
-                        node.dataset.symconOriginalTransform =
-                            node.getAttribute?.('transform') || '';
-                    }
-
-                    const originalY = Number(node.dataset.symconOriginalY);
-
-                    if (Number.isFinite(originalY)) {
-                        // Nur in Compact/Lite leicht nach oben verschieben.
-                        // 8 px ergeben ungefähr denselben Abstand wie zwischen
-                        // Spannung, Strömen und Frequenz.
-                        node.setAttribute(
-                            'y',
-                            String(isFullLayout ? originalY : originalY - 8)
-                        );
-                    } else {
-                        const originalTransform =
-                            node.dataset.symconOriginalTransform || '';
-
-                        node.setAttribute(
-                            'transform',
-                            isFullLayout
-                                ? originalTransform
-                                : `${originalTransform} translate(0 -8)`.trim()
-                        );
-                    }
-                });
+                // Sichtbarkeit niemals verändern. Nur einen kleinen relativen
+                // SVG-Versatz verwenden; dadurch bleiben x/y und das Layout
+                // der Originalkarte unangetastet.
+                if (isFullLayout) {
+                    valueNode.removeAttribute?.('dy');
+                } else {
+                    valueNode.setAttribute?.('dy', '-8');
+                }
             });
         }
     }
