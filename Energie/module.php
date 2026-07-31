@@ -2679,9 +2679,36 @@ class Energiefluss extends IPSModuleStrict
             icon: 'mdi:ev-station'
         }] : [];
 
+        const configuredConsumers = groups.filter(group => group.hasPower);
+
+        // Zuerst alle aktuell aktiven Verbraucher nach ihrer absoluten
+        // Leistungsaufnahme sortieren. Absolute Werte sind wichtig, weil manche
+        // Messvariablen Verbrauch negativ liefern.
+        const activeConsumers = configuredConsumers
+            .filter(group => Math.abs(Number(group.value || 0)) > 0)
+            .sort((a, b) =>
+                Math.abs(Number(b.value || 0)) -
+                Math.abs(Number(a.value || 0))
+            );
+
+        // Danach die derzeit inaktiven Verbraucher in ihrer ursprünglichen
+        // Konfigurationsreihenfolge anhängen. Dadurch bleiben die verfügbaren
+        // Plätze gefüllt und es erscheinen nicht plötzlich weniger Geräte.
+        const inactiveConsumers = configuredConsumers.filter(group =>
+            Math.abs(Number(group.value || 0)) <= 0
+        );
+
+        const sortedConsumers = [
+            ...activeConsumers,
+            ...inactiveConsumers
+        ];
+
+        // Wallbox bleibt immer sichtbar und fest auf Position 1.
+        // Danach folgen zuerst die größten aktiven Verbraucher; freie Plätze
+        // werden mit den übrigen konfigurierten Verbrauchern aufgefüllt.
         const activeGroups = [
             ...wallboxLoad,
-            ...groups.filter(g => g.hasPower)
+            ...sortedConsumers
         ].slice(0, full ? 6 : 3);
         const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3')
             || entityAvailable(d, 'inverterCurrentL2') || entityAvailable(d, 'inverterCurrentL3')
@@ -2931,10 +2958,32 @@ class Energiefluss extends IPSModuleStrict
             icon: 'mdi:ev-station'
         }] : [];
 
+        const configuredConsumers = groups.filter(group => group.hasPower);
+
+        const activeConsumers = configuredConsumers
+            .filter(group => Math.abs(Number(group.value || 0)) > 0)
+            .sort((a, b) =>
+                Math.abs(Number(b.value || 0)) -
+                Math.abs(Number(a.value || 0))
+            );
+
+        const inactiveConsumers = configuredConsumers.filter(group =>
+            Math.abs(Number(group.value || 0)) <= 0
+        );
+
+        const sortedConsumers = [
+            ...activeConsumers,
+            ...inactiveConsumers
+        ];
+
+        // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
         const activeGroups = [
             ...wallboxLoad,
-            ...groups.filter(g => g.hasPower)
-        ].slice(0, currentTechnicalLayout.startsWith('full') ? 6 : 3);
+            ...sortedConsumers
+        ].slice(
+            0,
+            currentTechnicalLayout.startsWith('full') ? 6 : 3
+        );
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
         const pvEnergyTotal = activePvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
