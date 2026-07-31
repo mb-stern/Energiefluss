@@ -2584,17 +2584,6 @@ class Energiefluss extends IPSModuleStrict
                 max_power: Math.max(1, Number(d.solarMaxPower || 1)),
                 auto_scale: false,
                 display_mode: 1,
-
-                // Prozent-/Effizienzanzeige pro einzelner PV-Anlage.
-                // Die Originalkarte berechnet damit:
-                // aktuelle Leistung / konfigurierte Maximalleistung × 100.
-                pv1_max_power: Math.max(1, Number(activePvs[0]?.maxPower || 1)),
-                pv2_max_power: Math.max(1, Number(activePvs[1]?.maxPower || 1)),
-                pv3_max_power: Math.max(1, Number(activePvs[2]?.maxPower || 1)),
-                pv4_max_power: Math.max(1, Number(activePvs[3]?.maxPower || 1)),
-                pv5_max_power: Math.max(1, Number(activePvs[4]?.maxPower || 1)),
-                pv6_max_power: Math.max(1, Number(activePvs[5]?.maxPower || 1)),
-
                 pv1_name: activePvs[0]?.name || 'PV 1', pv2_name: activePvs[1]?.name || 'PV 2',
                 pv3_name: activePvs[2]?.name || 'PV 3', pv4_name: activePvs[3]?.name || 'PV 4',
                 pv5_name: activePvs[4]?.name || 'PV 5', pv6_name: activePvs[5]?.name || 'PV 6'
