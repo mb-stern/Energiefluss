@@ -2837,116 +2837,89 @@ class Energiefluss extends IPSModuleStrict
         const roots = getOpenShadowRoots(card.shadowRoot || card);
 
         for (const root of roots) {
-            const visibleTextNodes = Array.from(
+            // Phase 3 ist eindeutig konfiguriert und liegt direkt oberhalb
+            // des gesuchten Leistungswertes.
+            const phase3Selectors = [
+                '#inverter_current_L3',
+                '[id="inverter_current_L3"]',
+                '#inverter-current-L3',
+                '[id*="inverter_current_L3"]',
+                '[id*="inverter-current-L3"]'
+            ];
+
+            let phase3Node =
+                root.querySelector?.(phase3Selectors.join(',')) || null;
+
+            // Fallback, falls die Karten-Version die ID nicht am sichtbaren
+            // Textknoten, sondern an einer umschließenden Gruppe setzt.
+            if (phase3Node) {
+                const visibleChild = Array.from(
+                    phase3Node.querySelectorAll?.('text, tspan') || []
+                ).find(node =>
+                    /A$/i.test(String(node.textContent || '').trim())
+                );
+
+                if (visibleChild) {
+                    phase3Node = visibleChild;
+                }
+            }
+
+            if (!phase3Node) {
+                continue;
+            }
+
+            let phase3Box;
+
+            try {
+                phase3Box = phase3Node.getBBox();
+            } catch (_) {
+                continue;
+            }
+
+            const phase3CenterX =
+                phase3Box.x + phase3Box.width / 2;
+            const phase3Bottom =
+                phase3Box.y + phase3Box.height;
+
+            const visiblePowerNodes = Array.from(
                 root.querySelectorAll?.('svg text, svg tspan') || []
             ).filter(node => {
-                const style = getComputedStyle(node);
-                return (
-                    style.display !== 'none' &&
-                    style.visibility !== 'hidden' &&
-                    style.opacity !== '0'
-                );
-            });
-
-            const ampNodes = visibleTextNodes.filter(node =>
-                /^[-+]?\d[\d.,\s]*\s*A$/i.test(
-                    String(node.textContent || '').trim()
-                )
-            );
-
-            if (!ampNodes.length) {
-                continue;
-            }
-
-            let bestCluster = [];
-
-            for (const candidate of ampNodes) {
-                let candidateBox;
-
-                try {
-                    candidateBox = candidate.getBBox();
-                } catch (_) {
-                    continue;
-                }
-
-                const cx = candidateBox.x + candidateBox.width / 2;
-                const cy = candidateBox.y + candidateBox.height / 2;
-
-                const cluster = ampNodes.filter(other => {
-                    try {
-                        const box = other.getBBox();
-                        const ox = box.x + box.width / 2;
-                        const oy = box.y + box.height / 2;
-
-                        return (
-                            Math.abs(ox - cx) <= 95 &&
-                            Math.abs(oy - cy) <= 70
-                        );
-                    } catch (_) {
-                        return false;
-                    }
-                });
-
-                if (cluster.length > bestCluster.length) {
-                    bestCluster = cluster;
-                }
-            }
-
-            if (!bestCluster.length) {
-                continue;
-            }
-
-            const boxes = bestCluster.map(node => {
-                try {
-                    return node.getBBox();
-                } catch (_) {
-                    return null;
-                }
-            }).filter(Boolean);
-
-            if (!boxes.length) {
-                continue;
-            }
-
-            const minX = Math.min(...boxes.map(box => box.x));
-            const maxX = Math.max(...boxes.map(box => box.x + box.width));
-            const minY = Math.min(...boxes.map(box => box.y));
-            const maxY = Math.max(...boxes.map(box => box.y + box.height));
-
-            const nearbyPowerNodes = visibleTextNodes.filter(node => {
-                const shown = String(node.textContent || '').trim();
+                const shown =
+                    String(node.textContent || '').trim();
 
                 if (!/^[-+]?\d[\d.,\s]*\s*(?:W|kW)$/i.test(shown)) {
                     return false;
                 }
 
+                const style = getComputedStyle(node);
+
+                if (
+                    style.display === 'none' ||
+                    style.visibility === 'hidden' ||
+                    style.opacity === '0'
+                ) {
+                    return false;
+                }
+
                 try {
                     const box = node.getBBox();
-                    const cx = box.x + box.width / 2;
-                    const cy = box.y + box.height / 2;
+                    const centerX = box.x + box.width / 2;
+                    const top = box.y;
 
+                    // Der gesuchte Wert steht direkt unter Phase 3.
                     return (
-                        cx >= minX - 80 &&
-                        cx <= maxX + 80 &&
-                        cy >= minY - 65 &&
-                        cy <= maxY + 35
+                        Math.abs(centerX - phase3CenterX) <= 90 &&
+                        top >= phase3Bottom - 4 &&
+                        top <= phase3Bottom + 55
                     );
                 } catch (_) {
                     return false;
                 }
             });
 
-            let powerNode = nearbyPowerNodes.sort((a, b) => {
+            let powerNode = visiblePowerNodes.sort((a, b) => {
                 try {
-                    const boxA = a.getBBox();
-                    const boxB = b.getBBox();
-
-                    const distanceA =
-                        Math.abs((boxA.y + boxA.height / 2) - minY);
-                    const distanceB =
-                        Math.abs((boxB.y + boxB.height / 2) - minY);
-
-                    return distanceA - distanceB;
+                    return a.getBBox().y - b.getBBox().y;
                 } catch (_) {
                     return 0;
                 }
@@ -2958,18 +2931,31 @@ class Energiefluss extends IPSModuleStrict
                 powerNode.removeAttribute?.('visibility');
                 powerNode.removeAttribute?.('opacity');
                 powerNode.removeAttribute?.('hidden');
-                powerNode.style?.setProperty('display', 'inline', 'important');
-                powerNode.style?.setProperty('visibility', 'visible', 'important');
-                powerNode.style?.setProperty('opacity', '1', 'important');
+                powerNode.style?.setProperty(
+                    'display',
+                    'inline',
+                    'important'
+                );
+                powerNode.style?.setProperty(
+                    'visibility',
+                    'visible',
+                    'important'
+                );
+                powerNode.style?.setProperty(
+                    'opacity',
+                    '1',
+                    'important'
+                );
 
                 return;
             }
 
-            const ampTemplateNode = bestCluster[0];
+            // Falls kein vorhandener Watttext gefunden wird, direkt unter
+            // Phase 3 ein neues Feld erzeugen.
             const template =
-                String(ampTemplateNode.tagName || '').toLowerCase() === 'tspan'
-                    ? (ampTemplateNode.closest?.('text') || ampTemplateNode)
-                    : ampTemplateNode;
+                String(phase3Node.tagName || '').toLowerCase() === 'tspan'
+                    ? (phase3Node.closest?.('text') || phase3Node)
+                    : phase3Node;
 
             const parent = template.parentNode;
             if (!parent) {
@@ -2977,30 +2963,49 @@ class Energiefluss extends IPSModuleStrict
             }
 
             powerNode =
-                parent.querySelector?.('#symcon_inverter_power_fixed') || null;
+                parent.querySelector?.(
+                    '#symcon_inverter_power_fixed'
+                ) || null;
 
             if (!powerNode) {
                 powerNode = template.cloneNode(true);
                 powerNode.id = 'symcon_inverter_power_fixed';
-                parent.insertBefore(powerNode, template);
+                parent.appendChild(powerNode);
             }
 
             powerNode.textContent = valueText;
-            powerNode.style?.setProperty('display', 'inline', 'important');
-            powerNode.style?.setProperty('visibility', 'visible', 'important');
-            powerNode.style?.setProperty('opacity', '1', 'important');
+            powerNode.style?.setProperty(
+                'display',
+                'inline',
+                'important'
+            );
+            powerNode.style?.setProperty(
+                'visibility',
+                'visible',
+                'important'
+            );
+            powerNode.style?.setProperty(
+                'opacity',
+                '1',
+                'important'
+            );
 
+            const x = Number(template.getAttribute?.('x'));
             const y = Number(template.getAttribute?.('y'));
 
+            if (Number.isFinite(x)) {
+                powerNode.setAttribute('x', String(x));
+            }
+
             if (Number.isFinite(y)) {
-                powerNode.setAttribute('y', String(y - 16));
+                powerNode.setAttribute('y', String(y + 16));
             } else {
                 const transform =
                     template.getAttribute?.('transform') || '';
 
                 powerNode.setAttribute(
                     'transform',
-                    `${transform} translate(0 -16)`.trim()
+                    `${transform} translate(0 16)`.trim()
                 );
             }
 
