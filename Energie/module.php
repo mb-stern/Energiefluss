@@ -2495,14 +2495,7 @@ class Energiefluss extends IPSModuleStrict
         const entities = {};
         const addEntity = (key, entity, available = true) => { if (available) entities[key] = entity; };
 
-        // Originales Sunsynk-Feld für die gesamte AC-Wechselrichterleistung.
-        // Dieser Sensor stammt ausschließlich aus der in Symcon konfigurierten
-        // Eigenschaft „Wechselrichterleistung gesamt“.
-        addEntity(
-            'inverter_power_175',
-            'sensor.symcon_inverter',
-            entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable
-        );
+        addEntity('inverter_power_175', 'sensor.symcon_inverter', entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable);
         addEntity('inverter_current_164', 'sensor.symcon_inverter_current_l1', entityAvailable(d, 'inverterCurrentL1'));
         addEntity('inverter_current_L2', 'sensor.symcon_inverter_current_l2', entityAvailable(d, 'inverterCurrentL2'));
         addEntity('inverter_current_L3', 'sensor.symcon_inverter_current_l3', entityAvailable(d, 'inverterCurrentL3'));
@@ -2591,17 +2584,6 @@ class Energiefluss extends IPSModuleStrict
                 max_power: Math.max(1, Number(d.solarMaxPower || 1)),
                 auto_scale: false,
                 display_mode: 1,
-
-                // Prozent-/Effizienzanzeige pro einzelner PV-Anlage.
-                // Die Originalkarte berechnet damit:
-                // aktuelle Leistung / konfigurierte Maximalleistung × 100.
-                pv1_max_power: Math.max(1, Number(activePvs[0]?.maxPower || 1)),
-                pv2_max_power: Math.max(1, Number(activePvs[1]?.maxPower || 1)),
-                pv3_max_power: Math.max(1, Number(activePvs[2]?.maxPower || 1)),
-                pv4_max_power: Math.max(1, Number(activePvs[3]?.maxPower || 1)),
-                pv5_max_power: Math.max(1, Number(activePvs[4]?.maxPower || 1)),
-                pv6_max_power: Math.max(1, Number(activePvs[5]?.maxPower || 1)),
-
                 pv1_name: activePvs[0]?.name || 'PV 1', pv2_name: activePvs[1]?.name || 'PV 2',
                 pv3_name: activePvs[2]?.name || 'PV 3', pv4_name: activePvs[3]?.name || 'PV 4',
                 pv5_name: activePvs[4]?.name || 'PV 5', pv6_name: activePvs[5]?.name || 'PV 6'
@@ -2755,21 +2737,22 @@ class Energiefluss extends IPSModuleStrict
     }
 
     async function applySunsynkViewOverrides(card, d = null) {
-        // Keine Geometrie und keine Wechselrichterwerte nachträglich verändern.
-        // Die WR-Leistung wird ausschließlich über inverter_power_175 von der
-        // Originalkarte dargestellt. Hier werden nur Verbraucherfarben korrigiert.
+        // Keine Geometrie verändern. Wir korrigieren ausschließlich Werte
+        // und Farben in den bereits von der Originalkarte erzeugten Elementen.
         if (!card) return;
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
+        applyInverterPowerDisplay(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
         // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
-        // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
+        // stellen sicher, dass das Leistungsfeld anschließend gesetzt wird.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
                 applyAdditionalLoadWattColourByGeometry(card);
+                applyInverterPowerDisplay(card, card.__symconLastData || d);
             }, delay);
         });
 
@@ -2784,6 +2767,7 @@ class Energiefluss extends IPSModuleStrict
                     scheduled = false;
                     applyAdditionalLoadColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
+                    applyInverterPowerDisplay(card, card.__symconLastData || null);
                 });
             });
             card.__symconVisualObserver.observe(card.shadowRoot, {
@@ -2823,6 +2807,92 @@ class Energiefluss extends IPSModuleStrict
         };
         visit(root);
         return roots;
+    }
+
+    function applyInverterPowerDisplay(card, d) {
+        if (!card || !d) return;
+
+        const available = entityAvailable(d, 'inverterPower') || d.inverterPowerAvailable === true;
+        if (!available) return;
+
+        const value = Number(d.inverterPower);
+        const text = `${Math.round(Number.isFinite(value) ? value : 0).toLocaleString('de-DE')} W`;
+        const searchRoot = card.shadowRoot || card;
+        const roots = getOpenShadowRoots(searchRoot);
+
+        // Zuerst ein eventuell vorhandenes originales Leistungsfeld verwenden.
+        const powerSelectors = [
+            '#inverter_power_175', '[id="inverter_power_175"]',
+            '#inverter-power-175', '[id*="inverter_power"]', '[id*="inverter-power"]'
+        ];
+        for (const root of roots) {
+            const node = root.querySelector?.(powerSelectors.join(','));
+            if (!node) continue;
+            node.removeAttribute?.('display');
+            node.removeAttribute?.('visibility');
+            node.removeAttribute?.('opacity');
+            node.removeAttribute?.('hidden');
+            node.style?.setProperty('display', 'inline', 'important');
+            node.style?.setProperty('visibility', 'visible', 'important');
+            node.style?.setProperty('opacity', '1', 'important');
+            node.textContent = text;
+            return;
+        }
+
+        // Die GoodWe-Darstellung erzeugt das Leistungsfeld teilweise nicht,
+        // obwohl die Amperewerte vorhanden sind. Dann wird das sichtbare
+        // Ampere-Textelement derselben WR-Box als positionsgetreue Vorlage
+        // verwendet. Die Suche erfolgt zusätzlich über den angezeigten Inhalt,
+        // weil die SVG-IDs zwischen den Card-Versionen abweichen.
+        let currentNode = null;
+        for (const root of roots) {
+            currentNode = root.querySelector?.(
+                '#inverter_current_164, [id="inverter_current_164"], [id*="inverter_current"], [id*="inverter-current"]'
+            );
+            if (currentNode) break;
+
+            const candidates = root.querySelectorAll?.('svg text, svg tspan') || [];
+            currentNode = Array.from(candidates).find(node => {
+                const shown = String(node.textContent || '').trim();
+                if (!/^-?[\d.,]+\s*A$/i.test(shown)) return false;
+                const style = getComputedStyle(node);
+                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
+            }) || null;
+            if (currentNode) break;
+        }
+        if (!currentNode) return;
+
+        // Bei einem tspan das umschließende text-Element verwenden.
+        const template = String(currentNode.tagName || '').toLowerCase() === 'tspan'
+            ? (currentNode.closest?.('text') || currentNode)
+            : currentNode;
+        const parent = template.parentNode;
+        if (!parent) return;
+
+        let powerNode = parent.querySelector?.('#symcon_inverter_power_fixed');
+        if (!powerNode) {
+            powerNode = template.cloneNode(true);
+            powerNode.id = 'symcon_inverter_power_fixed';
+            parent.insertBefore(powerNode, template);
+        }
+
+        powerNode.textContent = text;
+        powerNode.removeAttribute?.('display');
+        powerNode.removeAttribute?.('visibility');
+        powerNode.removeAttribute?.('opacity');
+        powerNode.removeAttribute?.('hidden');
+        powerNode.style?.setProperty('display', 'inline', 'important');
+        powerNode.style?.setProperty('visibility', 'visible', 'important');
+        powerNode.style?.setProperty('opacity', '1', 'important');
+
+        // Exakt oberhalb der Amperezeile innerhalb derselben Box platzieren.
+        const y = Number(template.getAttribute?.('y'));
+        if (Number.isFinite(y)) {
+            powerNode.setAttribute('y', String(y - 16));
+        } else {
+            const oldTransform = template.getAttribute?.('transform') || '';
+            powerNode.setAttribute('transform', `${oldTransform} translate(0 -16)`.trim());
+        }
     }
 
     function applyAdditionalLoadWattColourByGeometry(card) {
