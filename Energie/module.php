@@ -2679,20 +2679,9 @@ class Energiefluss extends IPSModuleStrict
             icon: 'mdi:ev-station'
         }] : [];
 
-        const sortedConsumers = groups
-            .filter(group =>
-                group.hasPower &&
-                Number(group.value || 0) > 0
-            )
-            .sort((a, b) =>
-                Number(b.value || 0) - Number(a.value || 0)
-            );
-
-        // Wallbox bleibt unabhängig von ihrer aktuellen Leistung immer sichtbar
-        // und fest auf Position 1. Danach folgen die aktuell größten Verbraucher.
         const activeGroups = [
             ...wallboxLoad,
-            ...sortedConsumers
+            ...groups.filter(g => g.hasPower)
         ].slice(0, full ? 6 : 3);
         const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3')
             || entityAvailable(d, 'inverterCurrentL2') || entityAvailable(d, 'inverterCurrentL3')
@@ -2942,24 +2931,10 @@ class Energiefluss extends IPSModuleStrict
             icon: 'mdi:ev-station'
         }] : [];
 
-        const sortedConsumers = groups
-            .filter(group =>
-                group.hasPower &&
-                Number(group.value || 0) > 0
-            )
-            .sort((a, b) =>
-                Number(b.value || 0) - Number(a.value || 0)
-            );
-
-        // Exakt dieselbe Reihenfolge wie in createSunsynkConfig:
-        // Wallbox zuerst, danach die größten aktiven Verbraucher.
         const activeGroups = [
             ...wallboxLoad,
-            ...sortedConsumers
-        ].slice(
-            0,
-            currentTechnicalLayout.startsWith('full') ? 6 : 3
-        );
+            ...groups.filter(g => g.hasPower)
+        ].slice(0, currentTechnicalLayout.startsWith('full') ? 6 : 3);
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
         const pvEnergyTotal = activePvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
