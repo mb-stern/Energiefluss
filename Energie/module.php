@@ -2458,9 +2458,7 @@ class Energiefluss extends IPSModuleStrict
 
         const activePvs = pvs.filter(pv => pv.hasPower);
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
-        const activeGroups = groups
-            .filter(g => g.hasPower)
-            .slice(0, full ? 6 : 3);
+        const activeGroups = groups.filter(g => g.hasPower).slice(0, full ? 6 : 3);
         const hasGrid = entityAvailable(d, 'gridPower');
         const hasWallbox = !!d.hasWallbox;
         const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3')
@@ -2517,13 +2515,10 @@ class Energiefluss extends IPSModuleStrict
             addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
         }
 
-        // Die Wallbox wird nicht mehr als AUX angebunden, sondern als
-        // großer Non-Essential-Verbraucher auf der Netzseite dargestellt.
-        addEntity(
-            'nonessential_power',
-            'sensor.symcon_wallbox',
-            hasWallbox
-        );
+        if (hasWallbox) {
+            addEntity('aux_power_166', 'sensor.symcon_wallbox');
+            addEntity('day_aux_energy', 'sensor.symcon_wallbox_energy', wallbox.hasEnergy);
+        }
 
         activeGroups.forEach((group, i) => {
             addEntity(`essential_load${i + 1}`, `sensor.symcon_branch${i + 1}`);
@@ -2607,10 +2602,16 @@ class Energiefluss extends IPSModuleStrict
                 dynamic_colour: false,
                 dynamic_icon: false,
                 show_daily: showEnergyDetails && d.houseEnergyAvailable,
-                // Hausverbrauch bleibt unverändert der zentrale
-                // Essential Load. AUX ist vollständig deaktiviert.
-                show_aux: false,
-                show_daily_aux: false,
+                show_aux: hasWallbox,
+                show_daily_aux: showEnergyDetails && hasWallbox && wallbox.hasEnergy,
+                aux_name: wallbox?.name || 'Wallbox',
+                aux_daily_name: 'Ladeenergie',
+                aux_type: 'default',
+                aux_colour: AC.wallbox,
+                aux_off_colour: AC.wallbox,
+                aux_dynamic_colour: false,
+                show_absolute_aux: true,
+                invert_aux: false,
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
                 max_power: 12000,
                 auto_scale: false,
@@ -2630,12 +2631,7 @@ class Energiefluss extends IPSModuleStrict
                 grid_name: 'Netz',
                 show_daily_buy: showEnergyDetails && d.gridImportEnergyValueAvailable,
                 show_daily_sell: showEnergyDetails && d.gridExportEnergyValueAvailable,
-
-                // Wallbox als größer dargestellter Verbraucher auf der
-                // Non-Essential-Seite. Der Hausverbrauch bleibt davon unberührt.
-                show_nonessential: hasWallbox,
-                nonessential_name: wallbox?.name || 'Wallbox',
-                nonessential_icon: 'mdi:ev-station',
+                show_nonessential: false,
                 additional_loads: 0,
                 animation_speed: Math.max(1, Math.round(8 / flowSpeedFactor)),
                 max_power: 12000,
@@ -2652,9 +2648,7 @@ class Energiefluss extends IPSModuleStrict
     function createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups) {
         const activePvs = pvs.filter(pv => pv.hasPower);
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
-        const activeGroups = groups
-            .filter(g => g.hasPower)
-            .slice(0, currentTechnicalLayout.startsWith('full') ? 6 : 3);
+        const activeGroups = groups.filter(g => g.hasPower).slice(0, currentTechnicalLayout.startsWith('full') ? 6 : 3);
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
         const pvEnergyTotal = activePvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
