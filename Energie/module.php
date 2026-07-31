@@ -70,7 +70,6 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('ColorBatteryCharge', 6600182);
         $this->RegisterPropertyInteger('ColorBatteryDischarge', 2733814);
         $this->RegisterPropertyInteger('ColorConsumers', 3123599);
-        $this->RegisterPropertyInteger('ColorWallbox', 3123599);
         $this->RegisterPropertyInteger('ColorHouseLoad', 5087231);
         $this->RegisterPropertyInteger('ColorInverter', 11776947);
 
@@ -188,9 +187,21 @@ class Energiefluss extends IPSModuleStrict
                                 [
                                     'caption' => 'Energie (optional)',
                                     'name'    => 'EnergyVariableID',
-                                    'width'   => '320px',
+                                    'width'   => '260px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Maximalleistung (W)',
+                                    'name'    => 'MaxPower',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 1000000,
+                                        'suffix'  => ' W',
+                                    ],
                                 ],
                             ],
                         ],
@@ -366,7 +377,6 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryCharge', 'caption' => 'Batterie laden', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorHouseLoad', 'caption' => 'Hausverbrauch', 'allowTransparent' => false],
-                        ['type' => 'SelectColor', 'name' => 'ColorWallbox', 'caption' => 'Wallbox', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Weitere Verbraucher', 'allowTransparent' => false],
                         [
                             'type' => 'HorizontalSlider',
@@ -2568,7 +2578,10 @@ class Energiefluss extends IPSModuleStrict
                 show_daily: showEnergyDetails && activePvs.some(pv => pv.hasEnergy),
                 mppts: Math.max(1, Math.min(6, activePvs.length || 1)),
                 animation_speed: Math.max(1, Math.round(9 / flowSpeedFactor)),
-                max_power: 12000,
+                // Die Sunsynk-Karte besitzt nur einen gemeinsamen
+                // solar.max_power-Wert. Deshalb werden die je PV-Anlage
+                // konfigurierten Maximalleistungen addiert.
+                max_power: Math.max(1, Number(d.solarMaxPower || 1)),
                 auto_scale: false,
                 display_mode: 1,
                 pv1_name: activePvs[0]?.name || 'PV 1', pv2_name: activePvs[1]?.name || 'PV 2',
@@ -3212,7 +3225,11 @@ class Energiefluss extends IPSModuleStrict
             AC.grid = AC.import;
             AC.batt = AC.charge;
             AC.room = d.colors.room || AC.room;
-            AC.wallbox = d.colors.wallbox || AC.wallbox;
+
+            // Die Wallbox verwendet überall dieselbe Farbe wie
+            // „Weitere Verbraucher“.
+            AC.wallbox = AC.room;
+
             AC.home = d.colors.home || AC.home;
             AC.inverter = d.colors.inverter || AC.inverter;
         }
@@ -3227,7 +3244,7 @@ class Energiefluss extends IPSModuleStrict
         document.documentElement.style.setProperty('--ef-grid-export', AC.export);
         document.documentElement.style.setProperty('--ef-battery-charge', AC.charge);
         document.documentElement.style.setProperty('--ef-battery-discharge', AC.discharge);
-        document.documentElement.style.setProperty('--ef-wallbox', AC.wallbox);
+        document.documentElement.style.setProperty('--ef-wallbox', AC.room);
         document.documentElement.style.setProperty('--ef-consumer', AC.room);
         document.documentElement.style.setProperty('--ef-house-load', AC.home);
 
@@ -3886,6 +3903,7 @@ HTML;
                     'energy'      => $hasEnergy ? GetValueFormatted($energyVariableID) : '',
                     'energyValue' => $hasEnergy ? (float) GetValue($energyVariableID) : 0.0,
                     'hasEnergy'   => $hasEnergy,
+                    'maxPower'    => max(0, (int) ($source['MaxPower'] ?? 0)),
                 ];
             }
         }
@@ -4131,6 +4149,15 @@ HTML;
             ),
             'groups'           => $groups,
             'flowSpeedPercent' => $this->ReadPropertyInteger('FlowSpeedPercent'),
+            'solarMaxPower'    => max(
+                1,
+                array_sum(
+                    array_map(
+                        static fn(array $pv): int => max(0, (int) ($pv['maxPower'] ?? 0)),
+                        $pvs
+                    )
+                )
+            ),
             'houseColors'      => [
                 'facade'           => $this->ColorToHex($this->ReadPropertyInteger('HouseColorFacade')),
                 'roof'             => $this->ColorToHex($this->ReadPropertyInteger('HouseColorRoof')),
@@ -4151,7 +4178,6 @@ HTML;
                 'charge'    => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryCharge')),
                 'discharge' => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryDischarge')),
                 'home'      => $this->ColorToHex($this->ReadPropertyInteger('ColorHouseLoad')),
-                'wallbox'   => $this->ColorToHex($this->ReadPropertyInteger('ColorWallbox')),
                 'room'      => $this->ColorToHex($this->ReadPropertyInteger('ColorConsumers')),
             ],
         ];
