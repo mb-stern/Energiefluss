@@ -2823,88 +2823,188 @@ class Energiefluss extends IPSModuleStrict
     function applyInverterPowerDisplay(card, d) {
         if (!card || !d) return;
 
-        const available = entityAvailable(d, 'inverterPower') || d.inverterPowerAvailable === true;
+        const available =
+            entityAvailable(d, 'inverterPower') ||
+            d.inverterPowerAvailable === true;
+
         if (!available) return;
 
-        const value = Number(d.inverterPower);
-        const text = `${Math.round(Number.isFinite(value) ? value : 0).toLocaleString('de-DE')} W`;
-        const searchRoot = card.shadowRoot || card;
-        const roots = getOpenShadowRoots(searchRoot);
+        const rawValue = Number(d.inverterPower);
+        const value = Number.isFinite(rawValue) ? rawValue : 0;
+        const valueText =
+            `${Math.round(value).toLocaleString('de-DE')} W`;
 
-        // Das originale Feld mit inverter_power im Namen ist bei der
-        // GoodWe-Darstellung nicht zuverlässig die AC-Wechselrichterleistung.
-        // Je nach Card-Version zeigt es dort die PV-/Solarleistung an.
-        // Deshalb dieses Originalfeld nicht mehr als Datenquelle verwenden,
-        // sondern ausblenden und die konfigurierte WR-Gesamtleistung gezielt
-        // bei den sichtbaren Phasenströmen einfügen.
-        const powerSelectors = [
-            '#inverter_power_175',
-            '[id="inverter_power_175"]',
-            '#inverter-power-175',
-            '[id*="inverter_power"]',
-            '[id*="inverter-power"]'
-        ];
+        const roots = getOpenShadowRoots(card.shadowRoot || card);
 
         for (const root of roots) {
-            root.querySelectorAll?.(powerSelectors.join(',')).forEach(node => {
-                // Unser eigenes Feld niemals ausblenden.
-                if (node.id === 'symcon_inverter_power_fixed') return;
-                node.style?.setProperty('display', 'none', 'important');
-                node.style?.setProperty('visibility', 'hidden', 'important');
-            });
-        }
-
-        // Die konfigurierte WR-Leistung wird aus dem tatsächlich sichtbaren
-        // Ampere-Textelement derselben Box abgeleitet und direkt darüber
-        // positioniert. So stammt der Wert sicher aus InverterPower.
-        let currentNode = null;
-        for (const root of roots) {
-            currentNode = root.querySelector?.(
-                '#inverter_current_164, [id="inverter_current_164"], [id*="inverter_current"], [id*="inverter-current"]'
-            );
-            if (currentNode) break;
-
-            const candidates = root.querySelectorAll?.('svg text, svg tspan') || [];
-            currentNode = Array.from(candidates).find(node => {
-                const shown = String(node.textContent || '').trim();
-                if (!/^-?[\d.,]+\s*A$/i.test(shown)) return false;
+            const visibleTextNodes = Array.from(
+                root.querySelectorAll?.('svg text, svg tspan') || []
+            ).filter(node => {
                 const style = getComputedStyle(node);
-                return style.display !== 'none' && style.visibility !== 'hidden' && style.opacity !== '0';
-            }) || null;
-            if (currentNode) break;
-        }
-        if (!currentNode) return;
+                return (
+                    style.display !== 'none' &&
+                    style.visibility !== 'hidden' &&
+                    style.opacity !== '0'
+                );
+            });
 
-        // Bei einem tspan das umschließende text-Element verwenden.
-        const template = String(currentNode.tagName || '').toLowerCase() === 'tspan'
-            ? (currentNode.closest?.('text') || currentNode)
-            : currentNode;
-        const parent = template.parentNode;
-        if (!parent) return;
+            const ampNodes = visibleTextNodes.filter(node =>
+                /^[-+]?\d[\d.,\s]*\s*A$/i.test(
+                    String(node.textContent || '').trim()
+                )
+            );
 
-        let powerNode = parent.querySelector?.('#symcon_inverter_power_fixed');
-        if (!powerNode) {
-            powerNode = template.cloneNode(true);
-            powerNode.id = 'symcon_inverter_power_fixed';
-            parent.insertBefore(powerNode, template);
-        }
+            if (!ampNodes.length) {
+                continue;
+            }
 
-        powerNode.textContent = text;
-        powerNode.removeAttribute?.('display');
-        powerNode.removeAttribute?.('visibility');
-        powerNode.removeAttribute?.('opacity');
-        powerNode.removeAttribute?.('hidden');
-        powerNode.style?.setProperty('display', 'inline', 'important');
-        powerNode.style?.setProperty('visibility', 'visible', 'important');
-        powerNode.style?.setProperty('opacity', '1', 'important');
+            let bestCluster = [];
 
-        // Exakt oberhalb der Amperezeile innerhalb derselben Box platzieren.
-        const y = Number(template.getAttribute?.('y'));
-        if (Number.isFinite(y)) {
-            powerNode.setAttribute('y', String(y - 16));
-        } else {
-            const oldTransform = template.getAttribute?.('transform') || '';
-            powerNode.setAttribute('transform', `${oldTransform} translate(0 -16)`.trim());
+            for (const candidate of ampNodes) {
+                let candidateBox;
+
+                try {
+                    candidateBox = candidate.getBBox();
+                } catch (_) {
+                    continue;
+                }
+
+                const cx = candidateBox.x + candidateBox.width / 2;
+                const cy = candidateBox.y + candidateBox.height / 2;
+
+                const cluster = ampNodes.filter(other => {
+                    try {
+                        const box = other.getBBox();
+                        const ox = box.x + box.width / 2;
+                        const oy = box.y + box.height / 2;
+
+                        return (
+                            Math.abs(ox - cx) <= 95 &&
+                            Math.abs(oy - cy) <= 70
+                        );
+                    } catch (_) {
+                        return false;
+                    }
+                });
+
+                if (cluster.length > bestCluster.length) {
+                    bestCluster = cluster;
+                }
+            }
+
+            if (!bestCluster.length) {
+                continue;
+            }
+
+            const boxes = bestCluster.map(node => {
+                try {
+                    return node.getBBox();
+                } catch (_) {
+                    return null;
+                }
+            }).filter(Boolean);
+
+            if (!boxes.length) {
+                continue;
+            }
+
+            const minX = Math.min(...boxes.map(box => box.x));
+            const maxX = Math.max(...boxes.map(box => box.x + box.width));
+            const minY = Math.min(...boxes.map(box => box.y));
+            const maxY = Math.max(...boxes.map(box => box.y + box.height));
+
+            const nearbyPowerNodes = visibleTextNodes.filter(node => {
+                const shown = String(node.textContent || '').trim();
+
+                if (!/^[-+]?\d[\d.,\s]*\s*(?:W|kW)$/i.test(shown)) {
+                    return false;
+                }
+
+                try {
+                    const box = node.getBBox();
+                    const cx = box.x + box.width / 2;
+                    const cy = box.y + box.height / 2;
+
+                    return (
+                        cx >= minX - 80 &&
+                        cx <= maxX + 80 &&
+                        cy >= minY - 65 &&
+                        cy <= maxY + 35
+                    );
+                } catch (_) {
+                    return false;
+                }
+            });
+
+            let powerNode = nearbyPowerNodes.sort((a, b) => {
+                try {
+                    const boxA = a.getBBox();
+                    const boxB = b.getBBox();
+
+                    const distanceA =
+                        Math.abs((boxA.y + boxA.height / 2) - minY);
+                    const distanceB =
+                        Math.abs((boxB.y + boxB.height / 2) - minY);
+
+                    return distanceA - distanceB;
+                } catch (_) {
+                    return 0;
+                }
+            })[0] || null;
+
+            if (powerNode) {
+                powerNode.textContent = valueText;
+                powerNode.removeAttribute?.('display');
+                powerNode.removeAttribute?.('visibility');
+                powerNode.removeAttribute?.('opacity');
+                powerNode.removeAttribute?.('hidden');
+                powerNode.style?.setProperty('display', 'inline', 'important');
+                powerNode.style?.setProperty('visibility', 'visible', 'important');
+                powerNode.style?.setProperty('opacity', '1', 'important');
+
+                return;
+            }
+
+            const ampTemplateNode = bestCluster[0];
+            const template =
+                String(ampTemplateNode.tagName || '').toLowerCase() === 'tspan'
+                    ? (ampTemplateNode.closest?.('text') || ampTemplateNode)
+                    : ampTemplateNode;
+
+            const parent = template.parentNode;
+            if (!parent) {
+                continue;
+            }
+
+            powerNode =
+                parent.querySelector?.('#symcon_inverter_power_fixed') || null;
+
+            if (!powerNode) {
+                powerNode = template.cloneNode(true);
+                powerNode.id = 'symcon_inverter_power_fixed';
+                parent.insertBefore(powerNode, template);
+            }
+
+            powerNode.textContent = valueText;
+            powerNode.style?.setProperty('display', 'inline', 'important');
+            powerNode.style?.setProperty('visibility', 'visible', 'important');
+            powerNode.style?.setProperty('opacity', '1', 'important');
+
+            const y = Number(template.getAttribute?.('y'));
+
+            if (Number.isFinite(y)) {
+                powerNode.setAttribute('y', String(y - 16));
+            } else {
+                const transform =
+                    template.getAttribute?.('transform') || '';
+
+                powerNode.setAttribute(
+                    'transform',
+                    `${transform} translate(0 -16)`.trim()
+                );
+            }
+
+            return;
         }
     }
 
