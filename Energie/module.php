@@ -2619,7 +2619,11 @@ class Energiefluss extends IPSModuleStrict
                         'transmission-tower': 'tower-broadcast',
                         'power-plug': 'plug', 'flash': 'bolt'
                     };
-                    const fa = faMap[icon] || 'circle';
+                    // Bei symcon:<icon> beziehungsweise unbekannten Icons
+                    // den im Konfigurationsformular gewählten Namen direkt
+                    // als Font-Awesome-Klasse verwenden. Dadurch bleiben auch
+                    // individuelle SelectIcon-Auswahlen sichtbar.
+                    const fa = faMap[icon] || icon || 'circle';
                     this.innerHTML = `<i class="fa-solid fa-${fa}" aria-hidden="true"></i>`;
                 }
             });
@@ -2652,6 +2656,86 @@ class Energiefluss extends IPSModuleStrict
         return !!d?.available?.[key];
     }
 
+    function normalizeConsumerIcon(icon, fallback = 'mdi:power-plug') {
+        const raw = String(icon || '').trim();
+
+        if (!raw) {
+            return fallback;
+        }
+
+        // Bereits gültige Home-Assistant-/MDI-Icons unverändert übernehmen.
+        if (raw.startsWith('mdi:')) {
+            return raw;
+        }
+
+        // Typische IP-Symcon- bzw. Font-Awesome-Bezeichnungen auf die
+        // von der Sunsynk-Karte erwarteten MDI-Icons abbilden.
+        const key = raw
+            .toLowerCase()
+            .replace(/^fa-(solid|regular|brands)\s+fa-/, '')
+            .replace(/^fa-/, '')
+            .replace(/_/g, '-')
+            .replace(/\s+/g, '-');
+
+        const map = {
+            'plug': 'mdi:power-plug',
+            'power-plug': 'mdi:power-plug',
+            'bolt': 'mdi:flash',
+            'flash': 'mdi:flash',
+            'electricity': 'mdi:flash',
+
+            'stove': 'mdi:stove',
+            'oven': 'mdi:stove',
+            'kitchen': 'mdi:stove',
+            'fire-burner': 'mdi:stove',
+
+            'washing-machine': 'mdi:washing-machine',
+            'washer': 'mdi:washing-machine',
+            'dryer': 'mdi:tumble-dryer',
+            'tumble-dryer': 'mdi:tumble-dryer',
+            'dishwasher': 'mdi:dishwasher',
+
+            'boiler': 'mdi:water-boiler',
+            'water-heater': 'mdi:water-boiler',
+            'hot-water': 'mdi:water-boiler',
+
+            'fridge': 'mdi:fridge',
+            'refrigerator': 'mdi:fridge',
+            'freezer': 'mdi:fridge-outline',
+
+            'lightbulb': 'mdi:lightbulb',
+            'light': 'mdi:lightbulb',
+            'lamp': 'mdi:lightbulb',
+
+            'fan': 'mdi:fan',
+            'pump': 'mdi:pump',
+            'pool': 'mdi:pool',
+            'shower': 'mdi:shower',
+            'radiator': 'mdi:radiator',
+            'heat-pump': 'mdi:heat-pump',
+
+            'tv': 'mdi:television',
+            'television': 'mdi:television',
+            'computer': 'mdi:desktop-tower-monitor',
+            'desktop': 'mdi:desktop-tower-monitor',
+            'server': 'mdi:server',
+
+            'coffee': 'mdi:coffee-maker',
+            'coffee-maker': 'mdi:coffee-maker',
+
+            'car': 'mdi:car-electric',
+            'car-electric': 'mdi:car-electric',
+            'charging-station': 'mdi:ev-station',
+            'ev-station': 'mdi:ev-station'
+        };
+
+        // Nicht bekannte, aber im IP-Symcon-Formular ausgewählte Icons
+        // nicht durch den Stecker ersetzen. Sie werden mit einem eigenen
+        // Präfix an unser ha-icon-Fallback weitergereicht und dort als
+        // Font-Awesome-/Symcon-Icon dargestellt.
+        return map[key] || `symcon:${key}`;
+    }
+
     function createSunsynkConfig(d, pvs, batteries, wallbox, groups) {
         const requestedLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(currentTechnicalLayout)
             ? currentTechnicalLayout
@@ -2676,7 +2760,7 @@ class Energiefluss extends IPSModuleStrict
             hasPower: true,
             dailyValue: Number(wallbox?.energyValue || 0),
             hasDaily: !!wallbox?.hasEnergy,
-            icon: 'mdi:ev-station'
+            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station')
         }] : [];
 
         const configuredConsumers = groups.filter(group => group.hasPower);
@@ -2920,9 +3004,12 @@ class Energiefluss extends IPSModuleStrict
                 load1_name: activeGroups[0]?.name || '', load2_name: activeGroups[1]?.name || '',
                 load3_name: activeGroups[2]?.name || '', load4_name: activeGroups[3]?.name || '',
                 load5_name: activeGroups[4]?.name || '', load6_name: activeGroups[5]?.name || '',
-                load1_icon: activeGroups[0]?.icon || 'mdi:power-plug', load2_icon: activeGroups[1]?.icon || 'mdi:power-plug',
-                load3_icon: activeGroups[2]?.icon || 'mdi:power-plug', load4_icon: activeGroups[3]?.icon || 'mdi:power-plug',
-                load5_icon: activeGroups[4]?.icon || 'mdi:power-plug', load6_icon: activeGroups[5]?.icon || 'mdi:power-plug'
+                load1_icon: normalizeConsumerIcon(activeGroups[0]?.icon),
+                load2_icon: normalizeConsumerIcon(activeGroups[1]?.icon),
+                load3_icon: normalizeConsumerIcon(activeGroups[2]?.icon),
+                load4_icon: normalizeConsumerIcon(activeGroups[3]?.icon),
+                load5_icon: normalizeConsumerIcon(activeGroups[4]?.icon),
+                load6_icon: normalizeConsumerIcon(activeGroups[5]?.icon)
             },
             grid: {
                 colour: AC.import,
@@ -2955,7 +3042,7 @@ class Energiefluss extends IPSModuleStrict
             hasPower: true,
             dailyValue: Number(wallbox?.energyValue || 0),
             hasDaily: !!wallbox?.hasEnergy,
-            icon: 'mdi:ev-station'
+            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station')
         }] : [];
 
         const configuredConsumers = groups.filter(group => group.hasPower);
