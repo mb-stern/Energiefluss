@@ -2604,23 +2604,102 @@ class Energiefluss extends IPSModuleStrict
         // besteht aus eigenem SVG; dieser Fallback betrifft Zusatzicons.
         if (!customElements.get('ha-icon')) {
             customElements.define('ha-icon', class extends HTMLElement {
-                static get observedAttributes() { return ['icon']; }
-                connectedCallback() { this.render(); }
-                attributeChangedCallback() { this.render(); }
+                static get observedAttributes() {
+                    return ['icon'];
+                }
+
+                constructor() {
+                    super();
+                    this._icon = '';
+                }
+
+                connectedCallback() {
+                    this.render();
+                }
+
+                attributeChangedCallback() {
+                    this.render();
+                }
+
+                // Die Sunsynk-/Lit-Komponente setzt das Icon teilweise als
+                // JavaScript-Property (.icon) statt als HTML-Attribut.
+                // Der bisherige Fallback hat diese Zuweisung nicht erkannt.
+                set icon(value) {
+                    this._icon = String(value || '');
+                    this.render();
+                }
+
+                get icon() {
+                    return this._icon || this.getAttribute('icon') || '';
+                }
+
                 render() {
-                    const raw = this.getAttribute('icon') || 'mdi:circle-outline';
-                    const icon = raw.split(':').pop() || 'circle-outline';
+                    const raw =
+                        this._icon ||
+                        this.getAttribute('icon') ||
+                        'mdi:circle-outline';
+
+                    const icon =
+                        raw.split(':').pop() ||
+                        'circle-outline';
+
                     const faMap = {
-                        'home': 'house', 'home-outline': 'house',
-                        'car': 'car', 'car-electric': 'car',
+                        'home': 'house',
+                        'home-outline': 'house',
+                        'car': 'car',
+                        'car-electric': 'car',
                         'ev-station': 'charging-station',
-                        'battery': 'battery-half', 'battery-medium': 'battery-half',
-                        'solar-power': 'solar-panel', 'solar-panel': 'solar-panel',
+                        'battery': 'battery-half',
+                        'battery-medium': 'battery-half',
+                        'solar-power': 'solar-panel',
+                        'solar-panel': 'solar-panel',
                         'transmission-tower': 'tower-broadcast',
-                        'power-plug': 'plug', 'flash': 'bolt'
+                        'power-plug': 'plug',
+                        'flash': 'bolt',
+
+                        'stove': 'fire-burner',
+                        'washing-machine': 'shirt',
+                        'tumble-dryer': 'wind',
+                        'dishwasher': 'sink',
+                        'water-boiler': 'water',
+                        'fridge': 'snowflake',
+                        'fridge-outline': 'snowflake',
+                        'lightbulb': 'lightbulb',
+                        'fan': 'fan',
+                        'pump': 'water',
+                        'pool': 'person-swimming',
+                        'shower': 'shower',
+                        'radiator': 'temperature-high',
+                        'heat-pump': 'temperature-arrow-up',
+                        'television': 'tv',
+                        'desktop-tower-monitor': 'desktop',
+                        'server': 'server',
+                        'coffee-maker': 'mug-hot'
                     };
-                    const fa = faMap[icon] || 'circle';
-                    this.innerHTML = `<i class="fa-solid fa-${fa}" aria-hidden="true"></i>`;
+
+                    const fa = faMap[icon] || icon || 'circle';
+
+                    // Explizite Größe und Darstellung sind nötig, weil das
+                    // originale ha-icon normalerweise eigenes Shadow-DOM/CSS
+                    // mitbringt. Ohne diese Angaben bleibt der Ersatz in der
+                    // Sunsynk-Karte unsichtbar beziehungsweise 0 × 0 Pixel groß.
+                    this.style.display = 'inline-flex';
+                    this.style.alignItems = 'center';
+                    this.style.justifyContent = 'center';
+                    this.style.width = '1em';
+                    this.style.height = '1em';
+                    this.style.minWidth = '1em';
+                    this.style.minHeight = '1em';
+                    this.style.fontSize = 'inherit';
+                    this.style.lineHeight = '1';
+                    this.style.color = 'inherit';
+                    this.style.overflow = 'visible';
+
+                    this.innerHTML =
+                        `<i class="fa-solid fa-${fa}" ` +
+                        `style="display:inline-block;width:1em;height:1em;` +
+                        `font-size:1em;line-height:1;text-align:center;` +
+                        `color:inherit" aria-hidden="true"></i>`;
                 }
             });
         }
@@ -2652,6 +2731,86 @@ class Energiefluss extends IPSModuleStrict
         return !!d?.available?.[key];
     }
 
+    function normalizeConsumerIcon(icon, fallback = 'mdi:power-plug') {
+        const raw = String(icon || '').trim();
+
+        if (!raw) {
+            return fallback;
+        }
+
+        // Bereits gültige Home-Assistant-/MDI-Icons unverändert übernehmen.
+        if (raw.startsWith('mdi:')) {
+            return raw;
+        }
+
+        // Typische IP-Symcon- bzw. Font-Awesome-Bezeichnungen auf die
+        // von der Sunsynk-Karte erwarteten MDI-Icons abbilden.
+        const key = raw
+            .toLowerCase()
+            .replace(/^fa-(solid|regular|brands)\s+fa-/, '')
+            .replace(/^fa-/, '')
+            .replace(/_/g, '-')
+            .replace(/\s+/g, '-');
+
+        const map = {
+            'plug': 'mdi:power-plug',
+            'power-plug': 'mdi:power-plug',
+            'bolt': 'mdi:flash',
+            'flash': 'mdi:flash',
+            'electricity': 'mdi:flash',
+
+            'stove': 'mdi:stove',
+            'oven': 'mdi:stove',
+            'kitchen': 'mdi:stove',
+            'fire-burner': 'mdi:stove',
+
+            'washing-machine': 'mdi:washing-machine',
+            'washer': 'mdi:washing-machine',
+            'dryer': 'mdi:tumble-dryer',
+            'tumble-dryer': 'mdi:tumble-dryer',
+            'dishwasher': 'mdi:dishwasher',
+
+            'boiler': 'mdi:water-boiler',
+            'water-heater': 'mdi:water-boiler',
+            'hot-water': 'mdi:water-boiler',
+
+            'fridge': 'mdi:fridge',
+            'refrigerator': 'mdi:fridge',
+            'freezer': 'mdi:fridge-outline',
+
+            'lightbulb': 'mdi:lightbulb',
+            'light': 'mdi:lightbulb',
+            'lamp': 'mdi:lightbulb',
+
+            'fan': 'mdi:fan',
+            'pump': 'mdi:pump',
+            'pool': 'mdi:pool',
+            'shower': 'mdi:shower',
+            'radiator': 'mdi:radiator',
+            'heat-pump': 'mdi:heat-pump',
+
+            'tv': 'mdi:television',
+            'television': 'mdi:television',
+            'computer': 'mdi:desktop-tower-monitor',
+            'desktop': 'mdi:desktop-tower-monitor',
+            'server': 'mdi:server',
+
+            'coffee': 'mdi:coffee-maker',
+            'coffee-maker': 'mdi:coffee-maker',
+
+            'car': 'mdi:car-electric',
+            'car-electric': 'mdi:car-electric',
+            'charging-station': 'mdi:ev-station',
+            'ev-station': 'mdi:ev-station'
+        };
+
+        // Nicht bekannte, aber im IP-Symcon-Formular ausgewählte Icons
+        // nicht durch den Stecker ersetzen. Sie werden mit einem eigenen
+        // Präfix an unser ha-icon-Fallback weitergereicht und dort als
+        // Font-Awesome-/Symcon-Icon dargestellt.
+        return map[key] || `symcon:${key}`;
+    }
+
     function createSunsynkConfig(d, pvs, batteries, wallbox, groups) {
         const requestedLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(currentTechnicalLayout)
             ? currentTechnicalLayout
@@ -2676,7 +2835,7 @@ class Energiefluss extends IPSModuleStrict
             hasPower: true,
             dailyValue: Number(wallbox?.energyValue || 0),
             hasDaily: !!wallbox?.hasEnergy,
-            icon: 'mdi:ev-station'
+            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station')
         }] : [];
 
         const configuredConsumers = groups.filter(group => group.hasPower);
@@ -2806,6 +2965,13 @@ class Energiefluss extends IPSModuleStrict
         addEntity('day_grid_export_77', 'sensor.symcon_grid_export_energy', d.gridExportEnergyValueAvailable);
         addEntity('day_load_energy_84', 'sensor.symcon_load_energy', d.houseEnergyAvailable);
 
+        // Die Originalkarte rendert zusätzliche Verbraucher nicht zuverlässig
+        // über <ha-icon>. Deshalb merken wir die tatsächlich angezeigten Icons
+        // und setzen sie nach dem Rendern direkt in die SVG-Verbraucherboxen.
+        window.__symconVisibleConsumerIcons = activeGroups.map(group =>
+            normalizeConsumerIcon(group?.icon || 'mdi:power-plug')
+        );
+
         const cfg = {
             cardstyle: style,
             wide,
@@ -2920,9 +3086,12 @@ class Energiefluss extends IPSModuleStrict
                 load1_name: activeGroups[0]?.name || '', load2_name: activeGroups[1]?.name || '',
                 load3_name: activeGroups[2]?.name || '', load4_name: activeGroups[3]?.name || '',
                 load5_name: activeGroups[4]?.name || '', load6_name: activeGroups[5]?.name || '',
-                load1_icon: activeGroups[0]?.icon || 'mdi:power-plug', load2_icon: activeGroups[1]?.icon || 'mdi:power-plug',
-                load3_icon: activeGroups[2]?.icon || 'mdi:power-plug', load4_icon: activeGroups[3]?.icon || 'mdi:power-plug',
-                load5_icon: activeGroups[4]?.icon || 'mdi:power-plug', load6_icon: activeGroups[5]?.icon || 'mdi:power-plug'
+                load1_icon: normalizeConsumerIcon(activeGroups[0]?.icon),
+                load2_icon: normalizeConsumerIcon(activeGroups[1]?.icon),
+                load3_icon: normalizeConsumerIcon(activeGroups[2]?.icon),
+                load4_icon: normalizeConsumerIcon(activeGroups[3]?.icon),
+                load5_icon: normalizeConsumerIcon(activeGroups[4]?.icon),
+                load6_icon: normalizeConsumerIcon(activeGroups[5]?.icon)
             },
             grid: {
                 colour: AC.import,
@@ -2955,7 +3124,7 @@ class Energiefluss extends IPSModuleStrict
             hasPower: true,
             dailyValue: Number(wallbox?.energyValue || 0),
             hasDaily: !!wallbox?.hasEnergy,
-            icon: 'mdi:ev-station'
+            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station')
         }] : [];
 
         const configuredConsumers = groups.filter(group => group.hasPower);
@@ -3063,6 +3232,7 @@ class Energiefluss extends IPSModuleStrict
 
         applyAdditionalLoadColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
+        applyAdditionalLoadIcons(card);
         showInverterPowerAboveVoltages(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
@@ -3071,6 +3241,7 @@ class Energiefluss extends IPSModuleStrict
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
                 applyAdditionalLoadWattColourByGeometry(card);
+                applyAdditionalLoadIcons(card);
                 showInverterPowerAboveVoltages(
                     card,
                     card.__symconLastData || d
@@ -3089,6 +3260,7 @@ class Energiefluss extends IPSModuleStrict
                     scheduled = false;
                     applyAdditionalLoadColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
+                    applyAdditionalLoadIcons(card);
                     showInverterPowerAboveVoltages(
                         card,
                         card.__symconLastData || d
@@ -3249,6 +3421,137 @@ class Energiefluss extends IPSModuleStrict
             }
 
             return;
+        }
+    }
+
+    function consumerIconToFontAwesome(icon) {
+        const raw = String(icon || '').trim();
+        const key = raw.split(':').pop().toLowerCase();
+
+        const map = {
+            'power-plug': 'plug',
+            'flash': 'bolt',
+            'stove': 'fire-burner',
+            'washing-machine': 'shirt',
+            'tumble-dryer': 'wind',
+            'dishwasher': 'sink',
+            'water-boiler': 'water',
+            'fridge': 'snowflake',
+            'fridge-outline': 'snowflake',
+            'lightbulb': 'lightbulb',
+            'fan': 'fan',
+            'pump': 'water',
+            'pool': 'person-swimming',
+            'shower': 'shower',
+            'radiator': 'temperature-high',
+            'heat-pump': 'temperature-arrow-up',
+            'television': 'tv',
+            'desktop-tower-monitor': 'desktop',
+            'server': 'server',
+            'coffee-maker': 'mug-hot',
+            'car-electric': 'car',
+            'ev-station': 'charging-station'
+        };
+
+        if (raw.startsWith('symcon:')) {
+            return key || 'plug';
+        }
+
+        return map[key] || key || 'plug';
+    }
+
+    function applyAdditionalLoadIcons(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const icons = Array.isArray(window.__symconVisibleConsumerIcons)
+            ? window.__symconVisibleConsumerIcons
+            : [];
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            for (let i = 1; i <= 6; i++) {
+                const box =
+                    root.querySelector?.(`[id="es-load${i}"]`) ||
+                    root.querySelector?.(`[id="ess-load${i}"]`);
+
+                if (!box || typeof box.getBBox !== 'function') {
+                    continue;
+                }
+
+                let bbox;
+                try {
+                    bbox = box.getBBox();
+                } catch (_) {
+                    continue;
+                }
+
+                const svg = box.ownerSVGElement;
+                if (!svg) {
+                    continue;
+                }
+
+                const overlayId = `symcon-load-icon-${i}`;
+                let foreignObject = svg.querySelector?.(`#${overlayId}`);
+
+                if (!foreignObject) {
+                    foreignObject = document.createElementNS(
+                        'http://www.w3.org/2000/svg',
+                        'foreignObject'
+                    );
+                    foreignObject.id = overlayId;
+                    foreignObject.setAttribute('pointer-events', 'none');
+
+                    const wrapper = document.createElementNS(
+                        'http://www.w3.org/1999/xhtml',
+                        'div'
+                    );
+                    wrapper.style.width = '100%';
+                    wrapper.style.height = '100%';
+                    wrapper.style.display = 'flex';
+                    wrapper.style.alignItems = 'center';
+                    wrapper.style.justifyContent = 'center';
+                    wrapper.style.color = AC.room;
+                    wrapper.style.fontSize = '20px';
+                    wrapper.style.lineHeight = '1';
+
+                    const iconElement = document.createElement('i');
+                    iconElement.className = 'fa-solid fa-plug';
+                    iconElement.setAttribute('aria-hidden', 'true');
+
+                    wrapper.appendChild(iconElement);
+                    foreignObject.appendChild(wrapper);
+                    svg.appendChild(foreignObject);
+                }
+
+                // Icon im oberen Teil der Verbraucherbox platzieren, ohne Name
+                // oder Leistungswert zu überdecken.
+                foreignObject.setAttribute(
+                    'x',
+                    String(bbox.x + (bbox.width / 2) - 12)
+                );
+                foreignObject.setAttribute(
+                    'y',
+                    String(bbox.y + 5)
+                );
+                foreignObject.setAttribute('width', '24');
+                foreignObject.setAttribute('height', '24');
+
+                const iconElement =
+                    foreignObject.querySelector?.('i');
+
+                if (iconElement) {
+                    const fa = consumerIconToFontAwesome(
+                        icons[i - 1] || 'mdi:power-plug'
+                    );
+                    iconElement.className = `fa-solid fa-${fa}`;
+                    iconElement.style.color = AC.room;
+                    iconElement.style.fontSize = '20px';
+                }
+
+                foreignObject.style.display =
+                    icons[i - 1] ? '' : 'none';
+            }
         }
     }
 
