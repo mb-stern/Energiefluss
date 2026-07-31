@@ -2495,7 +2495,14 @@ class Energiefluss extends IPSModuleStrict
         const entities = {};
         const addEntity = (key, entity, available = true) => { if (available) entities[key] = entity; };
 
-        addEntity('inverter_power_175', 'sensor.symcon_inverter', entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable);
+        // Originales Sunsynk-Feld für die gesamte AC-Wechselrichterleistung.
+        // Dieser Sensor stammt ausschließlich aus der in Symcon konfigurierten
+        // Eigenschaft „Wechselrichterleistung gesamt“.
+        addEntity(
+            'inverter_power_175',
+            'sensor.symcon_inverter',
+            entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable
+        );
         addEntity('inverter_current_164', 'sensor.symcon_inverter_current_l1', entityAvailable(d, 'inverterCurrentL1'));
         addEntity('inverter_current_L2', 'sensor.symcon_inverter_current_l2', entityAvailable(d, 'inverterCurrentL2'));
         addEntity('inverter_current_L3', 'sensor.symcon_inverter_current_l3', entityAvailable(d, 'inverterCurrentL3'));
@@ -2553,10 +2560,7 @@ class Energiefluss extends IPSModuleStrict
         const cfg = {
             cardstyle: style,
             wide,
-            // Die große Entity-Schrift führt in Compact und Lite bei
-            // dreiphasigen Strömen, Spannung, Frequenz und WR-Leistung zu
-            // Überlagerungen. Deshalb nur in der Full-Ansicht verwenden.
-            large_font: full,
+            large_font: true,
             show_solar: activePvs.length > 0,
             show_battery: activeBatteries.length > 0,
             show_grid: hasGrid,
@@ -2751,22 +2755,21 @@ class Energiefluss extends IPSModuleStrict
     }
 
     async function applySunsynkViewOverrides(card, d = null) {
-        // Keine Geometrie verändern. Wir korrigieren ausschließlich Werte
-        // und Farben in den bereits von der Originalkarte erzeugten Elementen.
+        // Keine Geometrie und keine Wechselrichterwerte nachträglich verändern.
+        // Die WR-Leistung wird ausschließlich über inverter_power_175 von der
+        // Originalkarte dargestellt. Hier werden nur Verbraucherfarben korrigiert.
         if (!card) return;
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
-        moveInverterPowerHigher(card);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
         // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
-        // stellen sicher, dass das Leistungsfeld anschließend gesetzt wird.
+        // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
                 applyAdditionalLoadWattColourByGeometry(card);
-                moveInverterPowerHigher(card);
             }, delay);
         });
 
@@ -2781,7 +2784,6 @@ class Energiefluss extends IPSModuleStrict
                     scheduled = false;
                     applyAdditionalLoadColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
-                    moveInverterPowerHigher(card);
                 });
             });
             card.__symconVisualObserver.observe(card.shadowRoot, {
@@ -2821,54 +2823,6 @@ class Energiefluss extends IPSModuleStrict
         };
         visit(root);
         return roots;
-    }
-
-    function moveInverterPowerHigher(card) {
-        if (!card || !card.shadowRoot) return;
-
-        const isFullLayout =
-            currentTechnicalLayout === 'full' ||
-            currentTechnicalLayout === 'full-wide';
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        for (const root of roots) {
-            const matches = root.querySelectorAll?.(
-                '#inverter_power_175, [id="inverter_power_175"], ' +
-                '#inverter-power-175, [id="inverter-power-175"]'
-            ) || [];
-
-            matches.forEach(match => {
-                let valueNode = null;
-                const tag = String(match.tagName || '').toLowerCase();
-
-                // Liegt die ID direkt auf einem sichtbaren Textknoten?
-                if (tag === 'text' || tag === 'tspan') {
-                    valueNode = match;
-                } else {
-                    // Liegt die ID auf einer Gruppe, nur den darin enthaltenen
-                    // Leistungswert wählen – nicht die Amperewerte mitverschieben.
-                    valueNode = Array.from(
-                        match.querySelectorAll?.('text, tspan') || []
-                    ).find(node =>
-                        /(?:^|\s)[-+]?\d[\d.,\s]*\s*(?:W|kW)$/i.test(
-                            String(node.textContent || '').trim()
-                        )
-                    ) || null;
-                }
-
-                if (!valueNode) return;
-
-                // Sichtbarkeit niemals verändern. Nur einen kleinen relativen
-                // SVG-Versatz verwenden; dadurch bleiben x/y und das Layout
-                // der Originalkarte unangetastet.
-                if (isFullLayout) {
-                    valueNode.removeAttribute?.('dy');
-                } else {
-                    valueNode.setAttribute?.('dy', '-8');
-                }
-            });
-        }
     }
 
     function applyAdditionalLoadWattColourByGeometry(card) {
