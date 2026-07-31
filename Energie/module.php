@@ -2920,7 +2920,9 @@ class Energiefluss extends IPSModuleStrict
             }
 
             if (Number.isFinite(y)) {
-                powerNode.setAttribute('y', String(y - 16));
+                // Gegenüber v51 um 4 px tiefer, damit der Abstand zur
+                // ersten Spannungszeile dem Abstand Spannung → Strom entspricht.
+                powerNode.setAttribute('y', String(y - 12));
                 powerNode.removeAttribute?.('transform');
             } else {
                 const originalTransform =
@@ -2928,7 +2930,7 @@ class Energiefluss extends IPSModuleStrict
 
                 powerNode.setAttribute(
                     'transform',
-                    `${originalTransform} translate(0 -16)`.trim()
+                    `${originalTransform} translate(0 -12)`.trim()
                 );
             }
 
