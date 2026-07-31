@@ -2458,9 +2458,26 @@ class Energiefluss extends IPSModuleStrict
 
         const activePvs = pvs.filter(pv => pv.hasPower);
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
-        const activeGroups = groups.filter(g => g.hasPower).slice(0, full ? 6 : 3);
         const hasGrid = entityAvailable(d, 'gridPower');
         const hasWallbox = !!d.hasWallbox;
+
+        // Die Wallbox wird als erster zusätzlicher Verbraucher eingereiht.
+        // Dadurch erhält sie in Compact/Lite den größeren Verbraucherplatz.
+        // Full/Full Wide zeigen insgesamt bis zu sechs Verbraucher inklusive
+        // Wallbox. Farblich wird sie wie alle übrigen Verbraucher behandelt.
+        const wallboxLoad = hasWallbox ? [{
+            name: wallbox?.name || 'Wallbox',
+            value: Number(wallbox?.value || 0),
+            hasPower: true,
+            dailyValue: Number(wallbox?.energyValue || 0),
+            hasDaily: !!wallbox?.hasEnergy,
+            icon: 'mdi:ev-station'
+        }] : [];
+
+        const activeGroups = [
+            ...wallboxLoad,
+            ...groups.filter(g => g.hasPower)
+        ].slice(0, full ? 6 : 3);
         const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3')
             || entityAvailable(d, 'inverterCurrentL2') || entityAvailable(d, 'inverterCurrentL3')
             || entityAvailable(d, 'gridVoltageL2') || entityAvailable(d, 'gridVoltageL3');
@@ -2513,11 +2530,6 @@ class Energiefluss extends IPSModuleStrict
             addEntity('battery2_voltage_183', 'sensor.symcon_battery2_voltage', activeBatteries[1].hasVoltage);
             addEntity('day_battery2_charge_70', 'sensor.symcon_battery2_charge_energy', activeBatteries[1].hasChargeEnergy);
             addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
-        }
-
-        if (hasWallbox) {
-            addEntity('aux_power_166', 'sensor.symcon_wallbox');
-            addEntity('day_aux_energy', 'sensor.symcon_wallbox_energy', wallbox.hasEnergy);
         }
 
         activeGroups.forEach((group, i) => {
@@ -2602,16 +2614,9 @@ class Energiefluss extends IPSModuleStrict
                 dynamic_colour: false,
                 dynamic_icon: false,
                 show_daily: showEnergyDetails && d.houseEnergyAvailable,
-                show_aux: hasWallbox,
-                show_daily_aux: showEnergyDetails && hasWallbox && wallbox.hasEnergy,
-                aux_name: wallbox?.name || 'Wallbox',
-                aux_daily_name: 'Ladeenergie',
-                aux_type: 'default',
-                aux_colour: AC.wallbox,
-                aux_off_colour: AC.wallbox,
-                aux_dynamic_colour: false,
-                show_absolute_aux: true,
-                invert_aux: false,
+                // AUX ist deaktiviert; die Wallbox ist Verbraucher 1.
+                show_aux: false,
+                show_daily_aux: false,
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
                 max_power: 12000,
                 auto_scale: false,
@@ -2648,7 +2653,21 @@ class Energiefluss extends IPSModuleStrict
     function createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups) {
         const activePvs = pvs.filter(pv => pv.hasPower);
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
-        const activeGroups = groups.filter(g => g.hasPower).slice(0, currentTechnicalLayout.startsWith('full') ? 6 : 3);
+        const hasWallbox = !!d.hasWallbox;
+
+        const wallboxLoad = hasWallbox ? [{
+            name: wallbox?.name || 'Wallbox',
+            value: Number(wallbox?.value || 0),
+            hasPower: true,
+            dailyValue: Number(wallbox?.energyValue || 0),
+            hasDaily: !!wallbox?.hasEnergy,
+            icon: 'mdi:ev-station'
+        }] : [];
+
+        const activeGroups = [
+            ...wallboxLoad,
+            ...groups.filter(g => g.hasPower)
+        ].slice(0, currentTechnicalLayout.startsWith('full') ? 6 : 3);
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
         const pvEnergyTotal = activePvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
