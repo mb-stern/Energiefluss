@@ -198,9 +198,102 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Maximalleistung (W)',
+                                    'caption' => 'Maximalleistung Anlage (W)',
                                     'name'    => 'MaxPower',
                                     'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 1000000,
+                                        'suffix'  => ' W',
+                                    ],
+                                ],
+                                [
+                                    'caption' => 'Anzahl Strings',
+                                    'name'    => 'StringCount',
+                                    'width'   => '125px',
+                                    'add'     => 2,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 1,
+                                        'maximum' => 2,
+                                    ],
+                                ],
+
+                                [
+                                    'caption' => 'String 1',
+                                    'name'    => 'String1Name',
+                                    'width'   => '150px',
+                                    'add'     => 'String 1',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                ],
+                                [
+                                    'caption' => 'S1 Leistung',
+                                    'name'    => 'String1PowerVariableID',
+                                    'width'   => '240px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S1 Spannung',
+                                    'name'    => 'String1VoltageVariableID',
+                                    'width'   => '220px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S1 Strom',
+                                    'name'    => 'String1CurrentVariableID',
+                                    'width'   => '220px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S1 Max. (W)',
+                                    'name'    => 'String1MaxPower',
+                                    'width'   => '150px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type'    => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 1000000,
+                                        'suffix'  => ' W',
+                                    ],
+                                ],
+
+                                [
+                                    'caption' => 'String 2',
+                                    'name'    => 'String2Name',
+                                    'width'   => '150px',
+                                    'add'     => 'String 2',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                ],
+                                [
+                                    'caption' => 'S2 Leistung',
+                                    'name'    => 'String2PowerVariableID',
+                                    'width'   => '240px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S2 Spannung',
+                                    'name'    => 'String2VoltageVariableID',
+                                    'width'   => '220px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S2 Strom',
+                                    'name'    => 'String2CurrentVariableID',
+                                    'width'   => '220px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'S2 Max. (W)',
+                                    'name'    => 'String2MaxPower',
+                                    'width'   => '150px',
                                     'add'     => 0,
                                     'edit'    => [
                                         'type'    => 'NumberSpinner',
@@ -2535,7 +2628,29 @@ class Energiefluss extends IPSModuleStrict
         addEntity('grid_connected_status_194', 'sensor.symcon_grid_status', entityAvailable(d, 'gridStatus'));
         addEntity('load_frequency_192', 'sensor.symcon_grid_frequency', entityAvailable(d, 'gridFrequency'));
 
-        activePvs.forEach((pv, i) => addEntity(i < 4 ? `pv${i + 1}_power_${186 + i}` : `pv${i + 1}_power`, `sensor.symcon_pv${i + 1}`));
+        activePvs.forEach((pv, i) => {
+            const stringNo = i + 1;
+
+            addEntity(
+                i < 4
+                    ? `pv${stringNo}_power_${186 + i}`
+                    : `pv${stringNo}_power`,
+                `sensor.symcon_pv${stringNo}`
+            );
+
+            addEntity(
+                `pv${stringNo}_voltage_${109 + (i * 2)}`,
+                `sensor.symcon_pv${stringNo}_voltage`,
+                pv.hasVoltage
+            );
+
+            addEntity(
+                `pv${stringNo}_current_${110 + (i * 2)}`,
+                `sensor.symcon_pv${stringNo}_current`,
+                pv.hasCurrent
+            );
+        });
+
         if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
         addEntity(
             'environment_temp',
@@ -2752,7 +2867,18 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_battery2_charge_energy': ssState(bat2.chargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery2_discharge_energy': ssState(bat2.dischargeEnergy || 0, 'kWh')
         };
-        activePvs.forEach((pv, i) => states[`sensor.symcon_pv${i + 1}`] = ssState(pv.value || 0, 'W'));
+        activePvs.forEach((pv, i) => {
+            const stringNo = i + 1;
+
+            states[`sensor.symcon_pv${stringNo}`] =
+                ssState(pv.value || 0, 'W');
+
+            states[`sensor.symcon_pv${stringNo}_voltage`] =
+                ssState(pv.voltage || 0, 'V');
+
+            states[`sensor.symcon_pv${stringNo}_current`] =
+                ssState(pv.current || 0, 'A');
+        });
         activeGroups.forEach((group, i) => {
             states[`sensor.symcon_branch${i + 1}`] = ssState(group.value || 0, 'W');
             states[`sensor.symcon_branch${i + 1}_daily`] = ssState(group.dailyValue || 0, 'kWh');
@@ -3870,7 +3996,16 @@ HTML;
         $producers = json_decode($this->ReadPropertyString('Producers'), true);
         if (is_array($producers)) {
             foreach ($producers as $producer) {
-                foreach (['VariableID', 'EnergyVariableID'] as $key) {
+                foreach ([
+                    'VariableID',
+                    'EnergyVariableID',
+                    'String1PowerVariableID',
+                    'String1VoltageVariableID',
+                    'String1CurrentVariableID',
+                    'String2PowerVariableID',
+                    'String2VoltageVariableID',
+                    'String2CurrentVariableID'
+                ] as $key) {
                     $variableID = (int) ($producer[$key] ?? 0);
                     if ($variableID > 0) {
                         $ids[] = $variableID;
@@ -3954,29 +4089,158 @@ HTML;
         $pvs = [];
         $batteries = [];
 
-        // PV-Anlagen.
+        // PV-Anlagen mit standardmäßig zwei konfigurierbaren Strings.
+        // Die Sunsynk-Karte erhält die Strings fortlaufend als PV1 bis PV6.
+        // Bestehende Konfigurationen ohne Stringvariablen werden weiterhin
+        // als einzelne PV-Anlage übernommen.
         $decodedPVs = json_decode($this->ReadPropertyString('Producers'), true);
         if (is_array($decodedPVs)) {
             foreach ($decodedPVs as $source) {
-                $variableID = (int) ($source['VariableID'] ?? 0);
-                if ($variableID <= 0 || !IPS_VariableExists($variableID)) {
+                if (count($pvs) >= 6) {
+                    break;
+                }
+
+                $plantName = trim((string) ($source['Name'] ?? ''));
+                $plantPowerVariableID = (int) ($source['VariableID'] ?? 0);
+                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
+
+                $hasEnergy =
+                    $energyVariableID > 0 &&
+                    IPS_VariableExists($energyVariableID);
+
+                $stringCount = max(
+                    1,
+                    min(2, (int) ($source['StringCount'] ?? 2))
+                );
+
+                $hasConfiguredStringPower = false;
+                for ($stringNo = 1; $stringNo <= $stringCount; $stringNo++) {
+                    $candidateID = (int) (
+                        $source['String' . $stringNo . 'PowerVariableID'] ?? 0
+                    );
+
+                    if ($candidateID > 0 && IPS_VariableExists($candidateID)) {
+                        $hasConfiguredStringPower = true;
+                        break;
+                    }
+                }
+
+                // Neue String-Konfiguration.
+                if ($hasConfiguredStringPower) {
+                    for ($stringNo = 1; $stringNo <= $stringCount; $stringNo++) {
+                        if (count($pvs) >= 6) {
+                            break 2;
+                        }
+
+                        $powerVariableID = (int) (
+                            $source['String' . $stringNo . 'PowerVariableID'] ?? 0
+                        );
+
+                        if (
+                            $powerVariableID <= 0 ||
+                            !IPS_VariableExists($powerVariableID)
+                        ) {
+                            continue;
+                        }
+
+                        $voltageVariableID = (int) (
+                            $source['String' . $stringNo . 'VoltageVariableID'] ?? 0
+                        );
+                        $currentVariableID = (int) (
+                            $source['String' . $stringNo . 'CurrentVariableID'] ?? 0
+                        );
+
+                        $hasVoltage =
+                            $voltageVariableID > 0 &&
+                            IPS_VariableExists($voltageVariableID);
+
+                        $hasCurrent =
+                            $currentVariableID > 0 &&
+                            IPS_VariableExists($currentVariableID);
+
+                        $configuredName = trim((string) (
+                            $source['String' . $stringNo . 'Name'] ?? ''
+                        ));
+
+                        $stringName = $configuredName !== ''
+                            ? $configuredName
+                            : (
+                                $plantName !== ''
+                                    ? $plantName . ' String ' . $stringNo
+                                    : 'PV ' . (count($pvs) + 1)
+                            );
+
+                        // Die Anlagenenergie wird nur dem ersten String
+                        // zugeordnet, damit sie in der Gesamtsumme nicht
+                        // mehrfach gezählt wird.
+                        $stringHasEnergy = $hasEnergy && $stringNo === 1;
+
+                        $pvs[] = [
+                            'name'        => $stringName,
+                            'plantName'   => $plantName,
+                            'stringNo'    => $stringNo,
+                            'value'       => (float) GetValue($powerVariableID),
+                            'hasPower'    => true,
+                            'energy'      => $stringHasEnergy
+                                ? GetValueFormatted($energyVariableID)
+                                : '',
+                            'energyValue' => $stringHasEnergy
+                                ? (float) GetValue($energyVariableID)
+                                : 0.0,
+                            'hasEnergy'   => $stringHasEnergy,
+                            'voltage'     => $hasVoltage
+                                ? (float) GetValue($voltageVariableID)
+                                : 0.0,
+                            'hasVoltage'  => $hasVoltage,
+                            'current'     => $hasCurrent
+                                ? (float) GetValue($currentVariableID)
+                                : 0.0,
+                            'hasCurrent'  => $hasCurrent,
+                            'maxPower'    => max(
+                                0,
+                                (int) (
+                                    $source[
+                                        'String' . $stringNo . 'MaxPower'
+                                    ] ?? 0
+                                )
+                            ),
+                        ];
+                    }
+
                     continue;
                 }
 
-                $energyVariableID = (int) ($source['EnergyVariableID'] ?? 0);
-
-                $hasEnergy = $energyVariableID > 0 && IPS_VariableExists($energyVariableID);
+                // Abwärtskompatibilität: alte Zeile als eine PV-Anlage.
+                if (
+                    $plantPowerVariableID <= 0 ||
+                    !IPS_VariableExists($plantPowerVariableID)
+                ) {
+                    continue;
+                }
 
                 $pvs[] = [
-                    'name'        => trim((string) ($source['Name'] ?? '')) !== ''
-                        ? (string) $source['Name']
+                    'name'        => $plantName !== ''
+                        ? $plantName
                         : 'PV ' . (count($pvs) + 1),
-                    'value'       => (float) GetValue($variableID),
+                    'plantName'   => $plantName,
+                    'stringNo'    => 1,
+                    'value'       => (float) GetValue($plantPowerVariableID),
                     'hasPower'    => true,
-                    'energy'      => $hasEnergy ? GetValueFormatted($energyVariableID) : '',
-                    'energyValue' => $hasEnergy ? (float) GetValue($energyVariableID) : 0.0,
+                    'energy'      => $hasEnergy
+                        ? GetValueFormatted($energyVariableID)
+                        : '',
+                    'energyValue' => $hasEnergy
+                        ? (float) GetValue($energyVariableID)
+                        : 0.0,
                     'hasEnergy'   => $hasEnergy,
-                    'maxPower'    => max(0, (int) ($source['MaxPower'] ?? 0)),
+                    'voltage'     => 0.0,
+                    'hasVoltage'  => false,
+                    'current'     => 0.0,
+                    'hasCurrent'  => false,
+                    'maxPower'    => max(
+                        0,
+                        (int) ($source['MaxPower'] ?? 0)
+                    ),
                 ];
             }
         }
