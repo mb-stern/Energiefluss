@@ -2837,6 +2837,22 @@ class Energiefluss extends IPSModuleStrict
     function showInverterPowerAboveVoltages(card, d) {
         if (!card || !card.shadowRoot || !d) return;
 
+        const roots = getOpenShadowRoots(card.shadowRoot);
+        const isFullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        // In Full/Full Wide darf diese zusätzliche Anzeige nicht erscheinen.
+        // Ein aus Compact/Lite vorhandenes Overlay wird beim Umschalten entfernt.
+        if (isFullLayout) {
+            for (const root of roots) {
+                root.querySelectorAll?.(
+                    '#symcon_inverter_power_overlay'
+                ).forEach(node => node.remove());
+            }
+            return;
+        }
+
         const available =
             entityAvailable(d, 'inverterPower') ||
             d.inverterPowerAvailable === true;
@@ -2847,8 +2863,6 @@ class Energiefluss extends IPSModuleStrict
         const value = Number.isFinite(rawValue) ? rawValue : 0;
         const valueText =
             `${Math.round(value).toLocaleString('de-DE')} W`;
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
 
         for (const root of roots) {
             const voltageSelectors = [
