@@ -3823,6 +3823,15 @@ HTML;
         // Optional kann Rücklieferung als separate positive Variable angegeben werden.
         $gridBase = $this->ReadVar('L1');
 
+        // Die konfigurierte Netzleistungsvariable liefert:
+        // positiv = Rücklieferung, negativ = Netzbezug.
+        // Intern verwenden beide Visualisierungen dagegen:
+        // positiv = Netzbezug, negativ = Rücklieferung.
+        // Deshalb wird ausschließlich die Netzleistungsvariable umgedreht.
+        $gridBase *= -1;
+
+        // Die vorhandene Option erlaubt bei abweichenden Sensoren weiterhin
+        // eine zusätzliche manuelle Umkehrung.
         if ($this->ReadPropertyBoolean('InvertGridPower')) {
             $gridBase *= -1;
         }
