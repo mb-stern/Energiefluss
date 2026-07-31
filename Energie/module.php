@@ -25,6 +25,7 @@ class Energiefluss extends IPSModuleStrict
         // Dynamische Anlagen.
         $this->RegisterPropertyString('Producers', '[]');
         $this->RegisterPropertyString('Batteries', '[]');
+        $this->RegisterPropertyInteger('OutsideTemperature', 0);
 
         // Netz.
         $this->RegisterPropertyInteger('L1', 0);
@@ -162,6 +163,11 @@ class Energiefluss extends IPSModuleStrict
                     'type'    => 'ExpansionPanel',
                     'caption' => 'Solaranlagen',
                     'items'   => [
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'OutsideTemperature',
+                            'caption' => 'Außentemperatur (optional, Anzeige bei der Sonne)',
+                        ],
                         [
                             'type'     => 'List',
                             'name'     => 'Producers',
@@ -2531,6 +2537,11 @@ class Energiefluss extends IPSModuleStrict
 
         activePvs.forEach((pv, i) => addEntity(i < 4 ? `pv${i + 1}_power_${186 + i}` : `pv${i + 1}_power`, `sensor.symcon_pv${i + 1}`));
         if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+        addEntity(
+            'environment_temp',
+            'sensor.symcon_outside_temperature',
+            entityAvailable(d, 'outsideTemperature')
+        );
 
         if (activeBatteries[0]) {
             addEntity('battery_soc_184', 'sensor.symcon_battery_soc', activeBatteries[0].hasSoc);
@@ -2721,6 +2732,10 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_wallbox': ssState(wallbox?.value || 0, 'W'),
             'sensor.symcon_wallbox_energy': ssState(wallbox?.energyValue || 0, 'kWh'),
             'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
+            'sensor.symcon_outside_temperature': ssState(
+                d.outsideTemperature || 0,
+                '°C'
+            ),
             'sensor.symcon_grid_import_energy': ssState(d.gridImportEnergyValue || 0, 'kWh'),
             'sensor.symcon_grid_export_energy': ssState(d.gridExportEnergyValue || 0, 'kWh'),
             'sensor.symcon_load_energy': ssState(d.houseEnergy || 0, 'kWh'),
@@ -3836,6 +3851,7 @@ HTML;
             'InverterTemperature',
             'WallboxPower',
             'WallboxEnergy',
+            'OutsideTemperature',
         ] as $property) {
             $id = $this->ReadPropertyInteger($property);
             if ($id > 0) {
@@ -4172,6 +4188,7 @@ HTML;
             'inverterCurrentL2' => $this->ReadVar('InverterCurrentL2'),
             'inverterCurrentL3' => $this->ReadVar('InverterCurrentL3'),
             'inverterPowerAvailable' => $inverterPowerAvailable,
+            'outsideTemperature' => $this->ReadVar('OutsideTemperature'),
             'inverterVoltage'  => $this->ReadVar('InverterVoltage'),
             'inverterCurrent'  => $this->ReadVar('InverterCurrent'),
             'inverterFrequency'=> $this->ReadVar('InverterFrequency'),
@@ -4190,6 +4207,10 @@ HTML;
                 'inverterCurrentL2' => ($this->ReadPropertyInteger('InverterCurrentL2') > 0 && IPS_VariableExists($this->ReadPropertyInteger('InverterCurrentL2'))),
                 'inverterCurrentL3' => ($this->ReadPropertyInteger('InverterCurrentL3') > 0 && IPS_VariableExists($this->ReadPropertyInteger('InverterCurrentL3'))),
                 'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
+                'outsideTemperature' => (
+                    $this->ReadPropertyInteger('OutsideTemperature') > 0
+                    && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
+                ),
             ],
             'gridImportEnergy' => $this->ReadVarFormatted('GridImportEnergy'),
             'gridExportEnergy' => $this->ReadVarFormatted('GridExportEnergy'),
