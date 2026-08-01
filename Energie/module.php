@@ -176,7 +176,7 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'SolarForecastRemaining',
-                            'caption' => 'Solarprognose verbleibend heute (kWh, optional)',
+                            'caption' => 'Solarprognose heute gesamt (kWh, optional)',
                         ],
                         [
                             'type'     => 'List',
@@ -3314,7 +3314,21 @@ class Energiefluss extends IPSModuleStrict
         );
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
-        const pvEnergyTotal = activePvs.reduce((sum, pv) => sum + Number(pv.energyValue || 0), 0);
+        const pvEnergyTotal = activePvs.reduce(
+            (sum, pv) => sum + Number(pv.energyValue || 0),
+            0
+        );
+
+        // Die konfigurierte Prognosevariable liefert die erwartete
+        // Tagesproduktion insgesamt. Sunsynk erwartet bei remaining_solar
+        // jedoch nur die noch verbleibende Energie.
+        const forecastTotal = Number(d.solarForecastRemaining || 0);
+        const solarForecastRemaining = Math.max(
+            (Number.isFinite(forecastTotal) ? forecastTotal : 0) -
+            pvEnergyTotal,
+            0
+        );
+
         const states = {
             'sensor.symcon_grid': ssState(d.gridPhaseL1Available ? d.gridPhaseL1 : grid, 'W'),
             'sensor.symcon_grid_power': ssState(grid, 'W'),
@@ -3335,7 +3349,7 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_wallbox_energy': ssState(wallbox?.energyValue || 0, 'kWh'),
             'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
             'sensor.symcon_solar_forecast_remaining': ssState(
-                d.solarForecastRemaining || 0,
+                solarForecastRemaining,
                 'kWh'
             ),
             'sensor.symcon_outside_temperature': ssState(
