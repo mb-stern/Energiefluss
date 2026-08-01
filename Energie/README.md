@@ -15,11 +15,11 @@ Beide Ansichten können direkt innerhalb der Visualisierung umgeschaltet werden.
 
 ### Technische Energieflussansicht
 
-![Technische Energieflussansicht](docs/images/technical-view.png)
+![alt text](image-1.png)
 
 ### Hausansicht
 
-![Hausansicht](docs/images/house-view.png)
+![alt text](image.png)
 
 ---
 
