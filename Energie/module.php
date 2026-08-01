@@ -4048,16 +4048,9 @@ class Energiefluss extends IPSModuleStrict
                     }
                 });
 
-                // Nur Texte innerhalb der eigentlichen Wechselrichterbox
-                // einfärben. Spannungen des Smartmeters bleiben unverändert.
+                // Sämtliche Texte innerhalb der WR-Box:
+                // Leistung, Ströme, Spannungen und Beschriftungen.
                 container.querySelectorAll?.('text, tspan').forEach(node => {
-                    const value = String(node.textContent || '').trim();
-
-                    // Smartmeter-Spannungen (z.B. 230 V) nicht anfassen.
-                    if (/^\d+(?:[.,]\d+)?\s*V$/i.test(value)) {
-                        return;
-                    }
-
                     colourText(node);
                 });
             });
