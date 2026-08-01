@@ -3465,16 +3465,42 @@ class Energiefluss extends IPSModuleStrict
                 : AC.discharge;
 
             for (const root of roots) {
-                const main =
-                    root.querySelector?.(
-                        batteryNo === 1
-                            ? '#battery_main, #battery'
-                            : '#battery2_main, #battery2'
-                    );
+                // Je nach Layout verwendet die Originalkarte andere
+                // Container-IDs. Compact/Lite und Full/Full Wide werden
+                // deshalb gemeinsam berücksichtigt.
+                const mainSelectors = batteryNo === 1
+                    ? [
+                        '#battery_main',
+                        '#battery',
+                        '#full_battery',
+                        '#full-battery',
+                        '#battery_full',
+                        '#battery-full',
+                        '[id*="battery"][id*="full"]:not([id*="battery2"])'
+                    ]
+                    : [
+                        '#battery2_main',
+                        '#battery2',
+                        '#full_battery2',
+                        '#full-battery2',
+                        '#battery2_full',
+                        '#battery2-full',
+                        '[id*="battery2"][id*="full"]'
+                    ];
 
-                if (!main) {
+                const mains = new Set();
+
+                mainSelectors.forEach(selector => {
+                    root.querySelectorAll?.(selector).forEach(node => {
+                        mains.add(node);
+                    });
+                });
+
+                if (!mains.size) {
                     continue;
                 }
+
+                for (const main of mains) {
 
                 // 1. Box um die Batterieleistung.
                 const batteryData = main.querySelector?.(
@@ -3501,19 +3527,64 @@ class Energiefluss extends IPSModuleStrict
                 // eingefärbt. Wir ändern nur die FARBE des bereits gefüllten
                 // SOC-Bereichs. Die Stop-Positionen und damit der sichtbare
                 // Ladezustand bleiben vollständig unverändert.
-                const outerIcon =
-                    main.querySelector?.(
-                        batteryNo === 1
-                            ? '#battery_icon #bat_outter'
-                            : '#battery2_icon'
-                    );
+                const outerIconSelectors = batteryNo === 1
+                    ? [
+                        '#battery_icon #bat_outter',
+                        '#battery_icon',
+                        '#bat_outter',
+                        '#bat-outer',
+                        '[id*="battery"][id*="icon"]:not([id*="battery2"])',
+                        '[id*="bat"][id*="outter"]',
+                        '[id*="bat"][id*="outer"]'
+                    ]
+                    : [
+                        '#battery2_icon',
+                        '#bat2_outter',
+                        '#bat2-outer',
+                        '[id*="battery2"][id*="icon"]',
+                        '[id*="bat2"][id*="outter"]',
+                        '[id*="bat2"][id*="outer"]'
+                    ];
+
+                let outerIcon = null;
+
+                for (const selector of outerIconSelectors) {
+                    outerIcon = main.querySelector?.(selector) || null;
+                    if (outerIcon) {
+                        break;
+                    }
+                }
 
                 if (outerIcon) {
-                    const gradient = outerIcon.querySelector?.(
-                        batteryNo === 1
-                            ? '#bLg-bat1'
-                            : '#b2Lg, #b2Lg-bat2'
-                    );
+                    const gradientSelectors = batteryNo === 1
+                        ? [
+                            '#bLg-bat1',
+                            '#battery-gradient',
+                            '#battery_gradient',
+                            'linearGradient[id*="bat1"]',
+                            'linearGradient[id*="battery"]:not([id*="battery2"])'
+                        ]
+                        : [
+                            '#b2Lg',
+                            '#b2Lg-bat2',
+                            '#battery2-gradient',
+                            '#battery2_gradient',
+                            'linearGradient[id*="bat2"]',
+                            'linearGradient[id*="battery2"]'
+                        ];
+
+                    let gradient = null;
+
+                    for (const selector of gradientSelectors) {
+                        gradient =
+                            outerIcon.querySelector?.(selector) ||
+                            main.querySelector?.(selector) ||
+                            null;
+
+                        if (gradient) {
+                            break;
+                        }
+                    }
 
                     if (gradient) {
                         // Der SOC wird bewusst zweifarbig dargestellt:
@@ -3637,6 +3708,7 @@ class Energiefluss extends IPSModuleStrict
                         'important'
                     );
                 });
+                }
             }
         });
     }
