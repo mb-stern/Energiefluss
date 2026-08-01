@@ -3017,6 +3017,15 @@ class Energiefluss extends IPSModuleStrict
             normalizeConsumerIcon(group?.icon || 'mdi:power-plug')
         );
 
+        // Einheitliche Farbe für Haus, Hausverbrauch und Leitung zum Haus.
+        // Dadurch kann die Verbraucherfarbe nicht mehr auf den Hauszweig
+        // durchschlagen.
+        const houseSourceColour = dominantHouseSourceColour(
+            Number(d.grid || 0),
+            activePvs,
+            activeBatteries
+        );
+
         const cfg = {
             cardstyle: style,
             wide,
@@ -3122,14 +3131,15 @@ class Energiefluss extends IPSModuleStrict
                 invert_flow: false
             },
             load: {
-                // Nur Fallbackfarbe. Bei dynamic_colour übernimmt die
-                // Originalkarte die Farbe der aktuell dominierenden Quelle.
-                colour: AC.room,
+                // Hauszweig, Haussymbol, Bezeichnung und Leistungsbox verwenden
+                // dieselbe aktuell dominante Quellenfarbe.
+                colour: houseSourceColour,
                 off_colour: '#9e9e9e',
 
-                // Haussymbol und Hausverbrauch folgen automatisch der
-                // Versorgung aus Solar, Batterie oder Netz.
-                dynamic_colour: true,
+                // Die Farbe wird oben eindeutig berechnet. Damit verhindert
+                // man, dass die Originalkarte zeitweise load.colour der
+                // zusätzlichen Verbraucher auf den Hauszweig überträgt.
+                dynamic_colour: false,
                 dynamic_icon: true,
                 show_daily: showEnergyDetails && d.houseEnergyAvailable,
                 // AUX ist deaktiviert; die Wallbox ist Verbraucher 1.
@@ -3920,66 +3930,99 @@ class Energiefluss extends IPSModuleStrict
 
         const roots = getOpenShadowRoots(card.shadowRoot);
 
+        const colourText = node => {
+            if (!node) return;
+
+            node.setAttribute?.('fill', houseColour);
+            node.setAttribute?.('color', houseColour);
+            node.style?.setProperty('fill', houseColour, 'important');
+            node.style?.setProperty('color', houseColour, 'important');
+
+            node.querySelectorAll?.('tspan').forEach(tspan => {
+                tspan.setAttribute?.('fill', houseColour);
+                tspan.style?.setProperty(
+                    'fill',
+                    houseColour,
+                    'important'
+                );
+                tspan.style?.setProperty(
+                    'color',
+                    houseColour,
+                    'important'
+                );
+            });
+        };
+
         for (const root of roots) {
-            const selectors = [
+            const houseNodes = new Set();
+
+            // Bekannte IDs der Hauptlast. Zusätzliche Verbraucher load1 ... load6
+            // werden ausdrücklich nicht erfasst.
+            [
                 '#essential_power',
-                '[id="essential_power"]',
                 '#essential-power',
-                '[id="essential-power"]',
                 '#essential_load',
-                '[id="essential_load"]',
                 '#essential-load',
-                '[id="essential-load"]',
+                '#essential_name',
+                '#essential-name',
                 '#load_power',
-                '[id="load_power"]',
                 '#load-power',
-                '[id="load-power"]',
                 '#load_value',
-                '[id="load_value"]',
                 '#load-value',
-                '[id="load-value"]',
+                '#load_name',
+                '#load-name',
                 '#house_power',
-                '[id="house_power"]',
                 '#house-power',
-                '[id="house-power"]'
-            ];
-
-            const nodes = new Set();
-
-            root.querySelectorAll?.(selectors.join(',')).forEach(node => {
-                nodes.add(node);
-                node.querySelectorAll?.('text, tspan').forEach(child => {
-                    nodes.add(child);
+                '#house_load',
+                '#house-load'
+            ].forEach(selector => {
+                root.querySelectorAll?.(selector).forEach(node => {
+                    houseNodes.add(node);
+                    node.querySelectorAll?.('text, tspan').forEach(child => {
+                        houseNodes.add(child);
+                    });
                 });
             });
 
-            // Versionsunabhängiger Fallback: Nur Hauptlast-/Haus-Container
-            // durchsuchen, zusätzliche Verbraucher load1 ... load6 ausschließen.
-            root.querySelectorAll?.(
-                '[id*="essential"], [id*="load"], [id*="house"]'
-            ).forEach(container => {
-                const id = String(container.id || '').toLowerCase();
+            // Die sichtbare Bezeichnung „Hausverbrauch“ ist der zuverlässigste
+            // layoutunabhängige Anker. Nur ihre direkte SVG-Gruppe wird geprüft.
+            root.querySelectorAll?.('text, tspan').forEach(labelNode => {
+                const shown = String(labelNode.textContent || '').trim();
+
+                if (shown !== 'Hausverbrauch') {
+                    return;
+                }
+
+                houseNodes.add(labelNode);
+
+                const group = labelNode.closest?.('g');
+                if (!group) {
+                    return;
+                }
+
+                const groupId = String(group.id || '').toLowerCase();
 
                 if (
-                    /(?:load|ess)[-_]?[1-6]/.test(id) ||
-                    id.includes('aux') ||
-                    id.includes('nonessential')
+                    /(?:load|ess)[-_]?[1-6]/.test(groupId) ||
+                    groupId.includes('aux') ||
+                    groupId.includes('nonessential')
                 ) {
                     return;
                 }
 
-                container.querySelectorAll?.('text, tspan').forEach(node => {
-                    const shown = String(node.textContent || '').trim();
+                group.querySelectorAll?.('text, tspan').forEach(node => {
+                    const value = String(node.textContent || '').trim();
 
                     if (
-                        /[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(shown)
+                        value === 'Hausverbrauch' ||
+                        /[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(value)
                     ) {
-                        nodes.add(node);
+                        houseNodes.add(node);
                     }
                 });
             });
 
-            nodes.forEach(node => {
+            houseNodes.forEach(node => {
                 const tag = String(node.tagName || '').toLowerCase();
 
                 if (tag !== 'text' && tag !== 'tspan') {
@@ -3989,37 +4032,11 @@ class Energiefluss extends IPSModuleStrict
                 const shown = String(node.textContent || '').trim();
 
                 if (
-                    !/[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(shown)
+                    shown === 'Hausverbrauch' ||
+                    /[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(shown)
                 ) {
-                    return;
+                    colourText(node);
                 }
-
-                node.setAttribute?.('fill', houseColour);
-                node.setAttribute?.('color', houseColour);
-                node.style?.setProperty(
-                    'fill',
-                    houseColour,
-                    'important'
-                );
-                node.style?.setProperty(
-                    'color',
-                    houseColour,
-                    'important'
-                );
-
-                node.querySelectorAll?.('tspan').forEach(tspan => {
-                    tspan.setAttribute?.('fill', houseColour);
-                    tspan.style?.setProperty(
-                        'fill',
-                        houseColour,
-                        'important'
-                    );
-                    tspan.style?.setProperty(
-                        'color',
-                        houseColour,
-                        'important'
-                    );
-                });
             });
         }
     }
