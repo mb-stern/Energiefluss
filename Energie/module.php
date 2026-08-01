@@ -3233,6 +3233,7 @@ class Energiefluss extends IPSModuleStrict
         applyAdditionalLoadColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyAdditionalLoadIcons(card);
+        applyTechnicalBatteryColours(card, d);
         showInverterPowerAboveVoltages(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
@@ -3242,6 +3243,10 @@ class Energiefluss extends IPSModuleStrict
             setTimeout(() => {
                 applyAdditionalLoadWattColourByGeometry(card);
                 applyAdditionalLoadIcons(card);
+                applyTechnicalBatteryColours(
+                    card,
+                    card.__symconLastData || d
+                );
                 showInverterPowerAboveVoltages(
                     card,
                     card.__symconLastData || d
@@ -3261,6 +3266,10 @@ class Energiefluss extends IPSModuleStrict
                     applyAdditionalLoadColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                     applyAdditionalLoadIcons(card);
+                    applyTechnicalBatteryColours(
+                        card,
+                        card.__symconLastData || d
+                    );
                     showInverterPowerAboveVoltages(
                         card,
                         card.__symconLastData || d
@@ -3422,6 +3431,80 @@ class Energiefluss extends IPSModuleStrict
 
             return;
         }
+    }
+
+    function applyTechnicalBatteryColours(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const batteries = Array.isArray(d.batteries)
+            ? d.batteries
+            : [];
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        batteries.slice(0, 2).forEach((battery, index) => {
+            const batteryNo = index + 1;
+            const power = Number(battery?.value || 0);
+
+            // Nur die Flussdarstellung korrigieren:
+            // negativ = Laden, positiv = Entladen.
+            const colour = power < 0
+                ? AC.charge
+                : AC.discharge;
+
+            for (const root of roots) {
+                const batteryContainers = Array.from(
+                    root.querySelectorAll?.('[id*="battery"], [id*="Battery"]') || []
+                ).filter(node => {
+                    const id = String(node.id || '').toLowerCase();
+                    const isSecond = /battery[-_]?2/.test(id);
+
+                    return batteryNo === 1 ? !isSecond : isSecond;
+                });
+
+                batteryContainers.forEach(container => {
+                    // Die statische Leitung.
+                    container.querySelectorAll?.(
+                        '.anim-line, .battery-line, .battery_line, ' +
+                        'path[id*="line"], line[id*="line"], polyline[id*="line"]'
+                    ).forEach(line => {
+                        line.setAttribute?.('stroke', colour);
+                        line.style?.setProperty('stroke', colour, 'important');
+                        line.style?.setProperty('color', colour, 'important');
+                    });
+
+                    // Der fließende Punkt wird von der Karte je nach Version
+                    // als Kreis, Ellipse oder per CSS-Farbe erzeugt.
+                    container.querySelectorAll?.(
+                        '.dot, .flow-dot, .flow_dot, ' +
+                        '[class*="dot"], [class*="flow"] circle, ' +
+                        '[class*="flow"] ellipse, circle, ellipse'
+                    ).forEach(dot => {
+                        dot.setAttribute?.('fill', colour);
+                        dot.setAttribute?.('stroke', colour);
+                        dot.style?.setProperty('fill', colour, 'important');
+                        dot.style?.setProperty('stroke', colour, 'important');
+                        dot.style?.setProperty('color', colour, 'important');
+                    });
+
+                    // Einige Versionen erzeugen den Punkt über CSS-Variablen
+                    // am Batterie-Container.
+                    [
+                        '--battery-color',
+                        '--battery-line-color',
+                        '--battery-flow-color',
+                        '--battery-dot-color',
+                        '--flow-color'
+                    ].forEach(variable => {
+                        container.style?.setProperty(
+                            variable,
+                            colour,
+                            'important'
+                        );
+                    });
+                });
+            }
+        });
     }
 
     function consumerIconToFontAwesome(icon) {
