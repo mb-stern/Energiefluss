@@ -3300,6 +3300,7 @@ class Energiefluss extends IPSModuleStrict
         applyAdditionalLoadWattColourByGeometry(card);
         applyAdditionalLoadIcons(card);
         applyTechnicalBatteryColours(card, d);
+        applyHouseLoadWattColour(card, d);
         showInverterPowerAboveVoltages(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
@@ -3310,6 +3311,10 @@ class Energiefluss extends IPSModuleStrict
                 applyAdditionalLoadWattColourByGeometry(card);
                 applyAdditionalLoadIcons(card);
                 applyTechnicalBatteryColours(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyHouseLoadWattColour(
                     card,
                     card.__symconLastData || d
                 );
@@ -3333,6 +3338,10 @@ class Energiefluss extends IPSModuleStrict
                     applyAdditionalLoadWattColourByGeometry(card);
                     applyAdditionalLoadIcons(card);
                     applyTechnicalBatteryColours(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyHouseLoadWattColour(
                         card,
                         card.__symconLastData || d
                     );
@@ -3900,6 +3909,121 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
+    function applyHouseLoadWattColour(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const houseColour = dominantHouseSourceColour(
+            Number(d.grid || 0),
+            Array.isArray(d.pvs) ? d.pvs : [],
+            Array.isArray(d.batteries) ? d.batteries : []
+        );
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            const selectors = [
+                '#essential_power',
+                '[id="essential_power"]',
+                '#essential-power',
+                '[id="essential-power"]',
+                '#essential_load',
+                '[id="essential_load"]',
+                '#essential-load',
+                '[id="essential-load"]',
+                '#load_power',
+                '[id="load_power"]',
+                '#load-power',
+                '[id="load-power"]',
+                '#load_value',
+                '[id="load_value"]',
+                '#load-value',
+                '[id="load-value"]',
+                '#house_power',
+                '[id="house_power"]',
+                '#house-power',
+                '[id="house-power"]'
+            ];
+
+            const nodes = new Set();
+
+            root.querySelectorAll?.(selectors.join(',')).forEach(node => {
+                nodes.add(node);
+                node.querySelectorAll?.('text, tspan').forEach(child => {
+                    nodes.add(child);
+                });
+            });
+
+            // Versionsunabhängiger Fallback: Nur Hauptlast-/Haus-Container
+            // durchsuchen, zusätzliche Verbraucher load1 ... load6 ausschließen.
+            root.querySelectorAll?.(
+                '[id*="essential"], [id*="load"], [id*="house"]'
+            ).forEach(container => {
+                const id = String(container.id || '').toLowerCase();
+
+                if (
+                    /(?:load|ess)[-_]?[1-6]/.test(id) ||
+                    id.includes('aux') ||
+                    id.includes('nonessential')
+                ) {
+                    return;
+                }
+
+                container.querySelectorAll?.('text, tspan').forEach(node => {
+                    const shown = String(node.textContent || '').trim();
+
+                    if (
+                        /[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(shown)
+                    ) {
+                        nodes.add(node);
+                    }
+                });
+            });
+
+            nodes.forEach(node => {
+                const tag = String(node.tagName || '').toLowerCase();
+
+                if (tag !== 'text' && tag !== 'tspan') {
+                    return;
+                }
+
+                const shown = String(node.textContent || '').trim();
+
+                if (
+                    !/[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(shown)
+                ) {
+                    return;
+                }
+
+                node.setAttribute?.('fill', houseColour);
+                node.setAttribute?.('color', houseColour);
+                node.style?.setProperty(
+                    'fill',
+                    houseColour,
+                    'important'
+                );
+                node.style?.setProperty(
+                    'color',
+                    houseColour,
+                    'important'
+                );
+
+                node.querySelectorAll?.('tspan').forEach(tspan => {
+                    tspan.setAttribute?.('fill', houseColour);
+                    tspan.style?.setProperty(
+                        'fill',
+                        houseColour,
+                        'important'
+                    );
+                    tspan.style?.setProperty(
+                        'color',
+                        houseColour,
+                        'important'
+                    );
+                });
+            });
+        }
+    }
+
     function applyAdditionalLoadWattColourByGeometry(card) {
         if (!card || !card.shadowRoot) return;
 
@@ -3967,10 +4091,9 @@ class Energiefluss extends IPSModuleStrict
         const roots = getOpenShadowRoots(card.shadowRoot);
         const consumerColour = AC.room; // Konfiguration „Weitere Verbraucher“
 
-        // Die Sunsynk-Card verwendet für Hausverbrauch und zusätzliche
-        // Verbraucher standardmäßig dieselbe load.colour. Der Hausverbrauch
-        // soll jedoch AC.home behalten, während nur load1 ... load6 die
-        // separat konfigurierte Farbe „Weitere Verbraucher“ erhalten.
+        // Die zusätzlichen Verbraucher load1 ... load6 behalten ihre
+        // konfigurierte Farbe „Weitere Verbraucher“. Hausverbrauch und
+        // Haussymbol werden separat dynamisch nach Hauptquelle eingefärbt.
         for (const root of roots) {
             // Nur die Watt-Leistungswerte in den Verbraucherboxen dauerhaft
             // auf die konfigurierte Farbe „Weitere Verbraucher“ festlegen.
