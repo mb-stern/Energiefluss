@@ -3678,7 +3678,6 @@ class Energiefluss extends IPSModuleStrict
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
-        adjustConsumerBoxLayout(card);
         alignConsumerNamesToPowerBoxes(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyTechnicalBatteryColours(card, d);
@@ -3692,7 +3691,6 @@ class Energiefluss extends IPSModuleStrict
         // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
-                adjustConsumerBoxLayout(card);
                 alignConsumerNamesToPowerBoxes(card);
                 applyAdditionalLoadWattColourByGeometry(card);
                         applyTechnicalBatteryColours(
@@ -3728,7 +3726,6 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
-                    adjustConsumerBoxLayout(card);
                     alignConsumerNamesToPowerBoxes(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                                 applyTechnicalBatteryColours(
@@ -4505,144 +4502,6 @@ class Energiefluss extends IPSModuleStrict
                 ) {
                     colourText(node);
                 }
-            });
-        }
-    }
-
-    function adjustConsumerBoxLayout(card) {
-        if (!card || !card.shadowRoot) return;
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        for (const root of roots) {
-            const entries = [];
-
-            root.querySelectorAll?.(
-                'rect[id^="es-load"], rect[id^="ess-load"]'
-            ).forEach(rect => {
-                try {
-                    const box = rect.getBBox();
-
-                    if (box.width <= 0 || box.height <= 0) {
-                        return;
-                    }
-
-                    const group = rect.closest?.('g');
-
-                    if (!group) {
-                        return;
-                    }
-
-                    entries.push({
-                        rect,
-                        group,
-                        box,
-                        centerX: box.x + (box.width / 2),
-                        centerY: box.y + (box.height / 2)
-                    });
-                } catch (_) {
-                    // Noch nicht aufgebaute SVG-Elemente ignorieren.
-                }
-            });
-
-            if (!entries.length) {
-                continue;
-            }
-
-            // Verbraucher anhand ihrer Y-Position in obere und untere Reihe
-            // gruppieren. Innerhalb jeder Reihe wird etwas zusätzlicher
-            // horizontaler Abstand geschaffen.
-            const sortedY = [...entries]
-                .map(entry => entry.centerY)
-                .sort((a, b) => a - b);
-
-            const splitY =
-                sortedY.length > 1
-                    ? (sortedY[0] + sortedY[sortedY.length - 1]) / 2
-                    : sortedY[0];
-
-            const rows = [
-                entries.filter(entry => entry.centerY <= splitY),
-                entries.filter(entry => entry.centerY > splitY)
-            ].filter(row => row.length);
-
-            rows.forEach(row => {
-                row.sort((a, b) => a.centerX - b.centerX);
-
-                const middle = (row.length - 1) / 2;
-                const spacing = 5;
-
-                row.forEach((entry, index) => {
-                    const offsetX = (index - middle) * spacing;
-                    const group = entry.group;
-
-                    if (!group.dataset.symconOriginalTransform) {
-                        group.dataset.symconOriginalTransform =
-                            group.getAttribute('transform') || '';
-                    }
-
-                    const original =
-                        group.dataset.symconOriginalTransform || '';
-
-                    group.setAttribute(
-                        'transform',
-                        `${original} translate(${offsetX} 0)`.trim()
-                    );
-                });
-            });
-
-            // kWh-Werte der unteren Verbraucherreihe etwas nach unten setzen,
-            // damit sie nicht von der Netzleitung verdeckt werden.
-            const lowerEntries = entries.filter(
-                entry => entry.centerY > splitY
-            );
-
-            root.querySelectorAll?.('text, tspan').forEach(node => {
-                const value = String(node.textContent || '').trim();
-
-                if (!/\bkWh\b/i.test(value)) {
-                    return;
-                }
-
-                let box;
-
-                try {
-                    box = node.getBBox();
-                } catch (_) {
-                    return;
-                }
-
-                const centerX = box.x + (box.width / 2);
-                const centerY = box.y + (box.height / 2);
-
-                const nearLowerConsumer = lowerEntries.some(entry => {
-                    const horizontalDistance =
-                        Math.abs(centerX - entry.centerX);
-                    const verticalDistance =
-                        Math.abs(centerY - entry.centerY);
-
-                    return (
-                        horizontalDistance < 85 &&
-                        verticalDistance < 75
-                    );
-                });
-
-                if (!nearLowerConsumer) {
-                    return;
-                }
-
-                if (!node.dataset.symconOriginalTransform) {
-                    node.dataset.symconOriginalTransform =
-                        node.getAttribute('transform') || '';
-                }
-
-                const original =
-                    node.dataset.symconOriginalTransform || '';
-
-                node.setAttribute(
-                    'transform',
-                    `${original} translate(0 7)`.trim()
-                );
             });
         }
     }
