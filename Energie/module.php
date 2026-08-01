@@ -3034,7 +3034,13 @@ class Energiefluss extends IPSModuleStrict
                 shutdown_soc: Number(activeBatteries[0]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[0]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                colour: AC.discharge,
+                // Die Originalkarte verwendet battery.colour für den
+                // äußeren Batterierahmen und den Flusspunkt. Deshalb wird
+                // nur diese Farbe richtungsabhängig gesetzt. charge_colour
+                // und die dynamische SOC-Füllung bleiben unverändert.
+                colour: Number(activeBatteries[0]?.value || 0) < 0
+                    ? AC.charge
+                    : AC.discharge,
                 charge_colour: AC.charge,
                 show_daily: showEnergyDetails && !!activeBatteries[0] && (activeBatteries[0].hasChargeEnergy || activeBatteries[0].hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
@@ -3057,7 +3063,9 @@ class Energiefluss extends IPSModuleStrict
                 shutdown_soc: Number(activeBatteries[1]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[1]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                colour: AC.discharge,
+                colour: Number(activeBatteries[1]?.value || 0) < 0
+                    ? AC.charge
+                    : AC.discharge,
                 charge_colour: AC.charge,
                 show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
                 show_absolute: true,
@@ -3446,62 +3454,164 @@ class Energiefluss extends IPSModuleStrict
             const batteryNo = index + 1;
             const power = Number(battery?.value || 0);
 
-            // Nur die Flussdarstellung korrigieren:
+            // Modulkonvention:
             // negativ = Laden, positiv = Entladen.
             const colour = power < 0
                 ? AC.charge
                 : AC.discharge;
 
             for (const root of roots) {
-                const batteryContainers = Array.from(
-                    root.querySelectorAll?.('[id*="battery"], [id*="Battery"]') || []
-                ).filter(node => {
-                    const id = String(node.id || '').toLowerCase();
-                    const isSecond = /battery[-_]?2/.test(id);
+                const mainId = batteryNo === 1
+                    ? '#battery_main'
+                    : '#battery2_main';
 
-                    return batteryNo === 1 ? !isSecond : isSecond;
-                });
+                const main =
+                    root.querySelector?.(mainId) ||
+                    root.querySelector?.(
+                        batteryNo === 1
+                            ? '#battery, #battery1'
+                            : '#battery2, #battery-2'
+                    );
 
-                batteryContainers.forEach(container => {
-                    // Die statische Leitung.
-                    container.querySelectorAll?.(
-                        '.anim-line, .battery-line, .battery_line, ' +
-                        'path[id*="line"], line[id*="line"], polyline[id*="line"]'
-                    ).forEach(line => {
-                        line.setAttribute?.('stroke', colour);
-                        line.style?.setProperty('stroke', colour, 'important');
-                        line.style?.setProperty('color', colour, 'important');
-                    });
+                if (!main) {
+                    continue;
+                }
 
-                    // Der fließende Punkt wird von der Karte je nach Version
-                    // als Kreis, Ellipse oder per CSS-Farbe erzeugt.
-                    container.querySelectorAll?.(
-                        '.dot, .flow-dot, .flow_dot, ' +
-                        '[class*="dot"], [class*="flow"] circle, ' +
-                        '[class*="flow"] ellipse, circle, ellipse'
-                    ).forEach(dot => {
-                        dot.setAttribute?.('fill', colour);
-                        dot.setAttribute?.('stroke', colour);
-                        dot.style?.setProperty('fill', colour, 'important');
-                        dot.style?.setProperty('stroke', colour, 'important');
-                        dot.style?.setProperty('color', colour, 'important');
-                    });
+                /*
+                 * Die Originalkarte verwendet in Compact/Lite mehrere
+                 * voneinander unabhängige SVG-Elemente:
+                 *
+                 * - Batterie-Symbol / äußerer Rahmen
+                 * - Box um die Batterieleistung
+                 * - Leitung
+                 * - animierter Punkt
+                 *
+                 * Darum reicht battery.colour alleine nicht aus.
+                 * Wir färben hier gezielt nur Rahmen und Flussdarstellung.
+                 * Die SOC-Füllung wird nicht verändert.
+                 */
 
-                    // Einige Versionen erzeugen den Punkt über CSS-Variablen
-                    // am Batterie-Container.
-                    [
-                        '--battery-color',
-                        '--battery-line-color',
-                        '--battery-flow-color',
-                        '--battery-dot-color',
-                        '--flow-color'
-                    ].forEach(variable => {
-                        container.style?.setProperty(
-                            variable,
+                // 1. Box um die Batterieleistung in Compact/Lite.
+                const dataId = batteryNo === 1
+                    ? '#battery_data'
+                    : '#battery2_data';
+
+                const batteryData = main.querySelector?.(dataId);
+
+                if (batteryData) {
+                    const rects = Array.from(
+                        batteryData.querySelectorAll?.(':scope > rect') || []
+                    );
+
+                    // Erste Box: aktuelle Batterieleistung.
+                    // Zweite Box: Detail-/Batteriebereich.
+                    rects.slice(0, 2).forEach(rect => {
+                        rect.setAttribute?.('stroke', colour);
+                        rect.style?.setProperty(
+                            'stroke',
                             colour,
                             'important'
                         );
                     });
+                }
+
+                // Bei zwei Batterien gibt es eine zusätzliche Gesamtleistungsbox.
+                const totalPowerBox = main.querySelector?.(
+                    batteryNo === 1
+                        ? '#battery_total_power > rect'
+                        : '#battery2_total_power > rect'
+                );
+
+                if (totalPowerBox) {
+                    totalPowerBox.setAttribute?.('stroke', colour);
+                    totalPowerBox.style?.setProperty(
+                        'stroke',
+                        colour,
+                        'important'
+                    );
+                }
+
+                // 2. Äußerer Batteriesymbol-Rahmen:
+                // Nur ungefüllte Formen anfassen. Damit bleiben SOC-Füllung,
+                // Verlauf und Ladezustandsdarstellung vollständig erhalten.
+                main.querySelectorAll?.(
+                    'rect[fill="none"], path[fill="none"], ' +
+                    'polygon[fill="none"], polyline[fill="none"], ' +
+                    'rect[fill="transparent"], path[fill="transparent"]'
+                ).forEach(shape => {
+                    shape.setAttribute?.('stroke', colour);
+                    shape.style?.setProperty(
+                        'stroke',
+                        colour,
+                        'important'
+                    );
+                });
+
+                // 3. Leitung zwischen Batterie und Wechselrichter.
+                main.querySelectorAll?.(
+                    '.anim-line, [class*="anim-line"], ' +
+                    '[class*="battery-line"], [class*="battery_line"], ' +
+                    'path[id*="line"], line[id*="line"], ' +
+                    'polyline[id*="line"]'
+                ).forEach(line => {
+                    line.setAttribute?.('stroke', colour);
+                    line.style?.setProperty(
+                        'stroke',
+                        colour,
+                        'important'
+                    );
+                    line.style?.setProperty(
+                        'color',
+                        colour,
+                        'important'
+                    );
+                });
+
+                // 4. Fließender Punkt. In den verschiedenen Card-Versionen
+                // wird er als circle/ellipse oder über eine flow-/dot-Klasse
+                // erzeugt.
+                main.querySelectorAll?.(
+                    'circle, ellipse, .dot, .flow-dot, .flow_dot, ' +
+                    '[class*="dot"], [class*="flow"] circle, ' +
+                    '[class*="flow"] ellipse'
+                ).forEach(dot => {
+                    dot.setAttribute?.('fill', colour);
+                    dot.setAttribute?.('stroke', colour);
+                    dot.style?.setProperty(
+                        'fill',
+                        colour,
+                        'important'
+                    );
+                    dot.style?.setProperty(
+                        'stroke',
+                        colour,
+                        'important'
+                    );
+                    dot.style?.setProperty(
+                        'color',
+                        colour,
+                        'important'
+                    );
+                });
+
+                // CSS-Variablen für Versionen, welche Linie/Punkt darüber färben.
+                [
+                    '--battery-color',
+                    '--battery-colour',
+                    '--battery-line-color',
+                    '--battery-line-colour',
+                    '--battery-flow-color',
+                    '--battery-flow-colour',
+                    '--battery-dot-color',
+                    '--battery-dot-colour',
+                    '--flow-color',
+                    '--flow-colour'
+                ].forEach(variable => {
+                    main.style?.setProperty(
+                        variable,
+                        colour,
+                        'important'
+                    );
                 });
             }
         });
