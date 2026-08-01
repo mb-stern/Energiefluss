@@ -3587,49 +3587,47 @@ class Energiefluss extends IPSModuleStrict
                     }
 
                     if (gradient) {
-                        // Der SOC wird bewusst zweifarbig dargestellt:
-                        // gefüllter Anteil = konfigurierte Ladefarbe
-                        // restlicher Anteil = konfigurierte Entladefarbe
+                        // Das komplette Batteriesymbol erhält eine einheitliche
+                        // Farbe entsprechend der aktuellen Flussrichtung:
+                        // Laden = konfigurierte Ladefarbe
+                        // Entladen = konfigurierte Entladefarbe
                         //
-                        // Die harte Farbkante liegt exakt beim aktuellen SOC.
-                        // Damit bleibt der Ladezustand sichtbar, ohne dass sich
-                        // die Geometrie oder der SOC-Wert selbst verändert.
-                        gradient.replaceChildren();
-
-                        const createStop = (offset, stopColour) => {
-                            const stop = document.createElementNS(
-                                'http://www.w3.org/2000/svg',
-                                'stop'
-                            );
-
-                            stop.setAttribute('offset', `${offset}%`);
-                            stop.setAttribute('stop-color', stopColour);
-                            stop.style.setProperty(
-                                'stop-color',
-                                stopColour,
-                                'important'
-                            );
-
-                            return stop;
-                        };
-
-                        const socPercent = Math.max(
-                            0,
-                            Math.min(100, soc)
+                        // Der SOC-Wert selbst und seine Textanzeige bleiben
+                        // unverändert. Nur die Symbolfarbe wird vereinheitlicht.
+                        const stops = Array.from(
+                            gradient.querySelectorAll?.('stop') || []
                         );
 
-                        gradient.appendChild(
-                            createStop(0, AC.charge)
-                        );
-                        gradient.appendChild(
-                            createStop(socPercent, AC.charge)
-                        );
-                        gradient.appendChild(
-                            createStop(socPercent, AC.discharge)
-                        );
-                        gradient.appendChild(
-                            createStop(100, AC.discharge)
-                        );
+                        if (stops.length) {
+                            stops.forEach(stop => {
+                                stop.setAttribute('stop-color', colour);
+                                stop.style.setProperty(
+                                    'stop-color',
+                                    colour,
+                                    'important'
+                                );
+                            });
+                        } else {
+                            const createStop = offset => {
+                                const stop = document.createElementNS(
+                                    'http://www.w3.org/2000/svg',
+                                    'stop'
+                                );
+
+                                stop.setAttribute('offset', `${offset}%`);
+                                stop.setAttribute('stop-color', colour);
+                                stop.style.setProperty(
+                                    'stop-color',
+                                    colour,
+                                    'important'
+                                );
+
+                                return stop;
+                            };
+
+                            gradient.appendChild(createStop(0));
+                            gradient.appendChild(createStop(100));
+                        }
                     }
 
                     // Falls die verwendete Karten-Version keinen Gradienten
