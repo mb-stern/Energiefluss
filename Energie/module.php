@@ -495,9 +495,47 @@ class Energiefluss extends IPSModuleStrict
                                 [
                                     'caption' => 'Icon',
                                     'name'    => 'Icon',
-                                    'width'   => '120px',
+                                    'width'   => '175px',
                                     'add'     => 'plug',
-                                    'edit'    => ['type' => 'SelectIcon'],
+                                    'edit'    => [
+                                        'type'    => 'Select',
+                                        'options' => [
+                                            ['caption' => 'Stecker', 'value' => 'plug'],
+                                            ['caption' => 'Strom / Blitz', 'value' => 'bolt'],
+                                            ['caption' => 'Herd / Backofen', 'value' => 'stove'],
+                                            ['caption' => 'Waschmaschine', 'value' => 'washing-machine'],
+                                            ['caption' => 'Trockner', 'value' => 'dryer'],
+                                            ['caption' => 'Geschirrspüler', 'value' => 'dishwasher'],
+                                            ['caption' => 'Boiler', 'value' => 'boiler'],
+                                            ['caption' => 'Wasser', 'value' => 'water'],
+                                            ['caption' => 'Kühlschrank', 'value' => 'fridge'],
+                                            ['caption' => 'Gefrierschrank', 'value' => 'freezer'],
+                                            ['caption' => 'Licht', 'value' => 'lightbulb'],
+                                            ['caption' => 'Ventilator', 'value' => 'fan'],
+                                            ['caption' => 'Pumpe', 'value' => 'pump'],
+                                            ['caption' => 'Pool', 'value' => 'pool'],
+                                            ['caption' => 'Dusche', 'value' => 'shower'],
+                                            ['caption' => 'Heizung / Radiator', 'value' => 'radiator'],
+                                            ['caption' => 'Wärmepumpe', 'value' => 'heatpump'],
+                                            ['caption' => 'Klimaanlage', 'value' => 'air-conditioner'],
+                                            ['caption' => 'Fernseher', 'value' => 'tv'],
+                                            ['caption' => 'Computer', 'value' => 'computer'],
+                                            ['caption' => 'Laptop', 'value' => 'laptop'],
+                                            ['caption' => 'Server', 'value' => 'server'],
+                                            ['caption' => 'Kaffeemaschine', 'value' => 'coffee-maker'],
+                                            ['caption' => 'Mikrowelle', 'value' => 'microwave'],
+                                            ['caption' => 'Toaster', 'value' => 'toaster'],
+                                            ['caption' => 'Wallbox / Ladestation', 'value' => 'ev-station'],
+                                            ['caption' => 'Elektroauto', 'value' => 'car'],
+                                            ['caption' => 'Garage', 'value' => 'garage'],
+                                            ['caption' => 'Haus', 'value' => 'house'],
+                                            ['caption' => 'Lager / Werkstatt', 'value' => 'warehouse'],
+                                            ['caption' => 'Tür', 'value' => 'door-open'],
+                                            ['caption' => 'Staubsauger', 'value' => 'vacuum'],
+                                            ['caption' => 'Kamera', 'value' => 'camera'],
+                                            ['caption' => 'WLAN', 'value' => 'wifi'],
+                                        ],
+                                    ],
                                 ],
                                 [
                                     'caption' => 'Wallbox',
@@ -2805,7 +2843,7 @@ class Energiefluss extends IPSModuleStrict
                     this.style.height = size;
                     this.style.minWidth = size;
                     this.style.minHeight = size;
-                    this.style.color = 'inherit';
+                    this.style.color = this.style.color || 'inherit';
                     this.style.lineHeight = '1';
                     this.style.overflow = 'visible';
                     this.style.boxSizing = 'border-box';
@@ -2900,6 +2938,7 @@ class Energiefluss extends IPSModuleStrict
             'shower': 'mdi:shower',
             'radiator': 'mdi:radiator',
             'heat-pump': 'mdi:heat-pump',
+            'heatpump': 'mdi:heat-pump',
             'tv': 'mdi:television',
             'television': 'mdi:television',
             'computer': 'mdi:desktop-tower-monitor',
@@ -3344,6 +3383,7 @@ class Energiefluss extends IPSModuleStrict
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
+        applyConsumerIconColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyTechnicalBatteryColours(card, d);
         applyHouseLoadWattColour(card, d);
@@ -3355,6 +3395,7 @@ class Energiefluss extends IPSModuleStrict
         // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
+                applyConsumerIconColours(card);
                 applyAdditionalLoadWattColourByGeometry(card);
                         applyTechnicalBatteryColours(
                     card,
@@ -3385,6 +3426,7 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
+                    applyConsumerIconColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                                 applyTechnicalBatteryColours(
                         card,
@@ -4095,6 +4137,66 @@ class Energiefluss extends IPSModuleStrict
                     colourText(node);
                 }
             });
+        }
+    }
+
+    function applyConsumerIconColours(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            for (let i = 1; i <= 6; i++) {
+                const box =
+                    root.querySelector?.(`[id="es-load${i}"]`) ||
+                    root.querySelector?.(`[id="ess-load${i}"]`);
+
+                if (!box) {
+                    continue;
+                }
+
+                const candidates = new Set();
+                const group = box.closest?.('g') || box.parentNode;
+
+                group?.querySelectorAll?.('ha-icon').forEach(icon => {
+                    candidates.add(icon);
+                });
+
+                // Je nach Layout liegt das foreignObject als Geschwisterelement
+                // innerhalb derselben übergeordneten Verbrauchergruppe.
+                group?.querySelectorAll?.(
+                    'foreignObject ha-icon, foreignobject ha-icon'
+                ).forEach(icon => {
+                    candidates.add(icon);
+                });
+
+                candidates.forEach(icon => {
+                    icon.style.setProperty(
+                        'color',
+                        AC.room,
+                        'important'
+                    );
+                    icon.style.setProperty(
+                        '--symcon-icon-color',
+                        AC.room,
+                        'important'
+                    );
+
+                    icon.querySelectorAll?.('svg, path').forEach(node => {
+                        node.style?.setProperty(
+                            'color',
+                            AC.room,
+                            'important'
+                        );
+                        node.style?.setProperty(
+                            'fill',
+                            AC.room,
+                            'important'
+                        );
+                        node.setAttribute?.('fill', AC.room);
+                    });
+                });
+            }
         }
     }
 
