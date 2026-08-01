@@ -2940,8 +2940,6 @@ class Energiefluss extends IPSModuleStrict
                         'important'
                     );
 
-                    // Einzelne Font-Awesome-Symbole besitzen zusätzlich
-                    // explizite Stroke-Werte.
                     if (
                         node.hasAttribute('stroke') &&
                         node.getAttribute('stroke') !== 'none'
@@ -2954,6 +2952,144 @@ class Energiefluss extends IPSModuleStrict
                         );
                     }
                 });
+            }
+
+            moveIconIntoNativeSvg() {
+                const sourceSvg = this.querySelector('svg');
+                const foreignObject = this.closest('foreignObject');
+
+                if (!sourceSvg || !foreignObject) {
+                    return;
+                }
+
+                const svgParent = foreignObject.parentNode;
+                if (!svgParent) {
+                    return;
+                }
+
+                const x = Number(foreignObject.getAttribute('x') || 0);
+                const y = Number(foreignObject.getAttribute('y') || 0);
+                const width = Number(
+                    foreignObject.getAttribute('width') || 24
+                );
+                const height = Number(
+                    foreignObject.getAttribute('height') || 24
+                );
+
+                const viewBox = String(
+                    sourceSvg.getAttribute('viewBox') || '0 0 512 512'
+                )
+                    .trim()
+                    .split(/\s+/)
+                    .map(Number);
+
+                const vbX = Number.isFinite(viewBox[0])
+                    ? viewBox[0]
+                    : 0;
+                const vbY = Number.isFinite(viewBox[1])
+                    ? viewBox[1]
+                    : 0;
+                const vbWidth =
+                    Number.isFinite(viewBox[2]) && viewBox[2] > 0
+                        ? viewBox[2]
+                        : 512;
+                const vbHeight =
+                    Number.isFinite(viewBox[3]) && viewBox[3] > 0
+                        ? viewBox[3]
+                        : 512;
+
+                const scale = Math.min(
+                    width / vbWidth,
+                    height / vbHeight
+                );
+
+                const translateX =
+                    x + ((width - (vbWidth * scale)) / 2) -
+                    (vbX * scale);
+                const translateY =
+                    y + ((height - (vbHeight * scale)) / 2) -
+                    (vbY * scale);
+
+                if (!foreignObject.dataset.symconIconId) {
+                    foreignObject.dataset.symconIconId =
+                        `symcon-native-icon-${Math.random()
+                            .toString(36)
+                            .slice(2)}`;
+                }
+
+                const iconId =
+                    foreignObject.dataset.symconIconId;
+
+                svgParent
+                    .querySelectorAll?.(
+                        `[data-symcon-native-icon="${iconId}"]`
+                    )
+                    .forEach(node => node.remove());
+
+                const group = document.createElementNS(
+                    'http://www.w3.org/2000/svg',
+                    'g'
+                );
+
+                group.setAttribute(
+                    'data-symcon-native-icon',
+                    iconId
+                );
+                group.setAttribute(
+                    'transform',
+                    `translate(${translateX} ${translateY}) ` +
+                    `scale(${scale})`
+                );
+                group.setAttribute('pointer-events', 'none');
+                group.setAttribute('fill', AC.room);
+                group.setAttribute('color', AC.room);
+
+                Array.from(sourceSvg.childNodes).forEach(child => {
+                    const cloned = child.cloneNode(true);
+
+                    if (cloned.nodeType === Node.ELEMENT_NODE) {
+                        cloned.setAttribute?.('fill', AC.room);
+                        cloned.setAttribute?.('color', AC.room);
+                    }
+
+                    group.appendChild(cloned);
+                });
+
+                group.querySelectorAll?.(
+                    'path, g, polygon, circle, rect, ellipse, polyline'
+                ).forEach(node => {
+                    node.setAttribute('fill', AC.room);
+                    node.setAttribute('color', AC.room);
+                    node.style?.setProperty(
+                        'fill',
+                        AC.room,
+                        'important'
+                    );
+
+                    if (
+                        node.hasAttribute('stroke') &&
+                        node.getAttribute('stroke') !== 'none'
+                    ) {
+                        node.setAttribute('stroke', AC.room);
+                    }
+                });
+
+                svgParent.insertBefore(
+                    group,
+                    foreignObject.nextSibling
+                );
+
+                /*
+                 * Auf Mobilgeräten ist HTML in SVG-foreignObject unzuverlässig.
+                 * Nach der Übernahme als echtes SVG wird der HTML-Platzhalter
+                 * deshalb ausgeblendet. Position und Größe stammen weiterhin
+                 * vollständig von Sunsynk.
+                 */
+                foreignObject.style.setProperty(
+                    'display',
+                    'none',
+                    'important'
+                );
             }
 
             renderFontAwesomeSvg(attempt = 0) {
@@ -2975,10 +3111,10 @@ class Energiefluss extends IPSModuleStrict
                             this.applyConsumerColourToSvg();
 
                             [0, 30, 120].forEach(delay => {
-                                setTimeout(
-                                    () => this.applyConsumerColourToSvg(),
-                                    delay
-                                );
+                                setTimeout(() => {
+                                    this.applyConsumerColourToSvg();
+                                    this.moveIconIntoNativeSvg();
+                                }, delay);
                             });
                         } catch (_) {
                             // Ein weiterer Renderdurchlauf versucht es erneut.
