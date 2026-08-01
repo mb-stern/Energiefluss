@@ -3516,28 +3516,49 @@ class Energiefluss extends IPSModuleStrict
                     );
 
                     if (gradient) {
-                        const stops = Array.from(
-                            gradient.querySelectorAll?.('stop') || []
+                        // Der SOC wird bewusst zweifarbig dargestellt:
+                        // gefüllter Anteil = konfigurierte Ladefarbe
+                        // restlicher Anteil = konfigurierte Entladefarbe
+                        //
+                        // Die harte Farbkante liegt exakt beim aktuellen SOC.
+                        // Damit bleibt der Ladezustand sichtbar, ohne dass sich
+                        // die Geometrie oder der SOC-Wert selbst verändert.
+                        gradient.replaceChildren();
+
+                        const createStop = (offset, stopColour) => {
+                            const stop = document.createElementNS(
+                                'http://www.w3.org/2000/svg',
+                                'stop'
+                            );
+
+                            stop.setAttribute('offset', `${offset}%`);
+                            stop.setAttribute('stop-color', stopColour);
+                            stop.style.setProperty(
+                                'stop-color',
+                                stopColour,
+                                'important'
+                            );
+
+                            return stop;
+                        };
+
+                        const socPercent = Math.max(
+                            0,
+                            Math.min(100, soc)
                         );
 
-                        stops.forEach(stop => {
-                            const rawOffset =
-                                String(stop.getAttribute?.('offset') || '0')
-                                    .replace('%', '');
-                            const offset = Number(rawOffset);
-
-                            // Nur der gefüllte Anteil bis zum aktuellen SOC
-                            // erhält die Lade-/Entladefarbe. Der leere Teil
-                            // behält seine Originalfarbe.
-                            if (Number.isFinite(offset) && offset <= soc) {
-                                stop.setAttribute?.('stop-color', colour);
-                                stop.style?.setProperty(
-                                    'stop-color',
-                                    colour,
-                                    'important'
-                                );
-                            }
-                        });
+                        gradient.appendChild(
+                            createStop(0, AC.charge)
+                        );
+                        gradient.appendChild(
+                            createStop(socPercent, AC.charge)
+                        );
+                        gradient.appendChild(
+                            createStop(socPercent, AC.discharge)
+                        );
+                        gradient.appendChild(
+                            createStop(100, AC.discharge)
+                        );
                     }
 
                     // Falls die verwendete Karten-Version keinen Gradienten
