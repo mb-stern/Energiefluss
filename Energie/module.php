@@ -784,7 +784,8 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #display-mode-button,
-    #technical-layout-button {
+    #technical-layout-button,
+    #technical-wide-button {
         appearance: none;
         border: 1px solid var(--w-border);
         border-radius: 7px;
@@ -805,14 +806,26 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #display-mode-button:hover,
-    #technical-layout-button:hover {
+    #technical-layout-button:hover,
+    #technical-wide-button:hover {
         color: var(--w-text);
         border-color: var(--w-text2);
     }
 
     #display-mode-button:active,
-    #technical-layout-button:active {
+    #technical-layout-button:active,
+    #technical-wide-button:active {
         transform: translateY(1px);
+    }
+
+    #technical-wide-button.active {
+        color: var(--w-text);
+        border-color: var(--w-text2);
+        background: color-mix(
+            in srgb,
+            var(--w-surface) 82%,
+            var(--w-text2)
+        );
     }
     #scale-root {
         width: 540px;
@@ -1307,7 +1320,8 @@ class Energiefluss extends IPSModuleStrict
         }
 
         #display-mode-button,
-        #technical-layout-button {
+        #technical-layout-button,
+        #technical-wide-button {
             width: 34px;
             height: 30px;
             padding: 0;
@@ -1410,7 +1424,8 @@ class Energiefluss extends IPSModuleStrict
     </div>
 
     <div id="display-mode-bar">
-        <button id="technical-layout-button" type="button" title="Technikansicht verdichten" aria-label="Technikansicht verdichten">▦</button>
+        <button id="technical-layout-button" type="button" title="Technikansicht wechseln" aria-label="Technikansicht wechseln">L</button>
+        <button id="technical-wide-button" type="button" title="Wide-Ansicht umschalten" aria-label="Wide-Ansicht umschalten">W</button>
         <button id="display-mode-button" type="button" title="Ansicht wechseln" aria-label="Ansicht wechseln">⇄</button>
     </div>
 </div>
@@ -4522,11 +4537,7 @@ class Energiefluss extends IPSModuleStrict
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
         currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
-        const layoutButton = document.getElementById('technical-layout-button');
-        if (layoutButton) {
-            layoutButton.textContent = ({compact: 'C', 'compact-wide': 'CW', lite: 'L', 'lite-wide': 'LW', full: 'F', 'full-wide': 'FW'})[currentTechnicalLayout] || 'L';
-            layoutButton.title = `Sunsynk-Ansicht: ${currentTechnicalLayout}`;
-        }
+        updateTechnicalLayoutButtons();
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
             ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
@@ -4558,6 +4569,48 @@ class Energiefluss extends IPSModuleStrict
     let currentDisplayMode = '__INITIAL_DISPLAY_MODE__';
     let currentTechnicalLayout = 'lite';
 
+    function updateTechnicalLayoutButtons() {
+        const layoutButton =
+            document.getElementById('technical-layout-button');
+        const wideButton =
+            document.getElementById('technical-wide-button');
+
+        const baseLayout = currentTechnicalLayout.replace('-wide', '');
+        const isWide = currentTechnicalLayout.endsWith('-wide');
+
+        if (layoutButton) {
+            const labels = {
+                compact: 'Compact',
+                lite: 'Lite',
+                full: 'Full'
+            };
+
+            layoutButton.textContent = labels[baseLayout] || 'Lite';
+            layoutButton.title =
+                `Technikansicht: ${labels[baseLayout] || 'Lite'}`;
+            layoutButton.setAttribute(
+                'aria-label',
+                layoutButton.title
+            );
+
+            // Der Text ist länger als das bisherige Einzelzeichen.
+            layoutButton.style.width = '72px';
+        }
+
+        if (wideButton) {
+            wideButton.textContent = 'Wide';
+            wideButton.classList.toggle('active', isWide);
+            wideButton.title = isWide
+                ? 'Wide-Ansicht ausschalten'
+                : 'Wide-Ansicht einschalten';
+            wideButton.setAttribute(
+                'aria-label',
+                wideButton.title
+            );
+            wideButton.style.width = '58px';
+        }
+    }
+
     function updateDisplayModeButton() {
         const button = document.getElementById('display-mode-button');
         if (!button) {
@@ -4582,9 +4635,22 @@ class Energiefluss extends IPSModuleStrict
 
         if (stage) stage.style.display = house ? 'none' : 'block';
         if (houseStage) houseStage.style.display = house ? 'block' : 'none';
-        const layoutButton = document.getElementById('technical-layout-button');
-        if (layoutButton) layoutButton.style.display = house ? 'none' : 'inline-flex';
+        const layoutButton =
+            document.getElementById('technical-layout-button');
+        const wideButton =
+            document.getElementById('technical-wide-button');
 
+        if (layoutButton) {
+            layoutButton.style.display =
+                house ? 'none' : 'inline-flex';
+        }
+
+        if (wideButton) {
+            wideButton.style.display =
+                house ? 'none' : 'inline-flex';
+        }
+
+        updateTechnicalLayoutButtons();
         updateDisplayModeButton();
 
         // Beide Ansichten bleiben auf dem von IP-Symcon
@@ -4603,15 +4669,47 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
-    const technicalLayoutButton = document.getElementById('technical-layout-button');
+    const technicalLayoutButton =
+        document.getElementById('technical-layout-button');
+
     if (technicalLayoutButton) {
         technicalLayoutButton.addEventListener('click', function () {
-            const order = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'];
-            const newLayout = order[(Math.max(0, order.indexOf(currentTechnicalLayout)) + 1) % order.length];
+            const isWide =
+                currentTechnicalLayout.endsWith('-wide');
+            const currentBase =
+                currentTechnicalLayout.replace('-wide', '');
+            const order = ['compact', 'lite', 'full'];
+            const currentIndex = Math.max(
+                0,
+                order.indexOf(currentBase)
+            );
+            const nextBase =
+                order[(currentIndex + 1) % order.length];
+            const newLayout =
+                nextBase + (isWide ? '-wide' : '');
+
             requestAction('ToggleTechnicalLayout', newLayout);
         });
     }
 
+    const technicalWideButton =
+        document.getElementById('technical-wide-button');
+
+    if (technicalWideButton) {
+        technicalWideButton.addEventListener('click', function () {
+            const isWide =
+                currentTechnicalLayout.endsWith('-wide');
+            const baseLayout =
+                currentTechnicalLayout.replace('-wide', '');
+            const newLayout = isWide
+                ? baseLayout
+                : `${baseLayout}-wide`;
+
+            requestAction('ToggleTechnicalLayout', newLayout);
+        });
+    }
+
+    updateTechnicalLayoutButtons();
     updateDisplayModeButton();
 
     // ---------- Layout ----------
