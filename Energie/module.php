@@ -3032,8 +3032,10 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_inverter',
             entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable
         );
+        // Die Sunsynk-Karte verwendet für die sichtbare
+        // Wechselrichter-/Kühlkörpertemperatur radiator_temp_91.
         addEntity(
-            'inverter_temp_91',
+            'radiator_temp_91',
             'sensor.symcon_inverter_temperature',
             entityAvailable(d, 'inverterTemperature')
         );
