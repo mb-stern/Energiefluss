@@ -2845,9 +2845,11 @@ class Energiefluss extends IPSModuleStrict
                     '1',
                     'important'
                 );
+                // Alle Verbraucher-Icons verwenden unabhängig vom
+                // gewählten Symbol dieselbe konfigurierte Verbraucherfarbe.
                 this.style.setProperty(
                     'color',
-                    'inherit',
+                    AC.room,
                     'important'
                 );
 
@@ -2897,6 +2899,63 @@ class Energiefluss extends IPSModuleStrict
                 this.renderFontAwesomeSvg();
             }
 
+            applyConsumerColourToSvg() {
+                const colour = AC.room;
+
+                this.style.setProperty(
+                    'color',
+                    colour,
+                    'important'
+                );
+
+                this.querySelectorAll('svg').forEach(svg => {
+                    svg.setAttribute('color', colour);
+                    svg.setAttribute('fill', colour);
+                    svg.style.setProperty(
+                        'color',
+                        colour,
+                        'important'
+                    );
+                    svg.style.setProperty(
+                        'fill',
+                        colour,
+                        'important'
+                    );
+                });
+
+                this.querySelectorAll(
+                    'svg path, svg g, svg polygon, svg circle, ' +
+                    'svg rect, svg ellipse, svg polyline'
+                ).forEach(node => {
+                    node.setAttribute('fill', colour);
+                    node.setAttribute('color', colour);
+                    node.style.setProperty(
+                        'fill',
+                        colour,
+                        'important'
+                    );
+                    node.style.setProperty(
+                        'color',
+                        colour,
+                        'important'
+                    );
+
+                    // Einzelne Font-Awesome-Symbole besitzen zusätzlich
+                    // explizite Stroke-Werte.
+                    if (
+                        node.hasAttribute('stroke') &&
+                        node.getAttribute('stroke') !== 'none'
+                    ) {
+                        node.setAttribute('stroke', colour);
+                        node.style.setProperty(
+                            'stroke',
+                            colour,
+                            'important'
+                        );
+                    }
+                });
+            }
+
             renderFontAwesomeSvg(attempt = 0) {
                 const fontAwesome = window.FontAwesome;
 
@@ -2908,6 +2967,18 @@ class Energiefluss extends IPSModuleStrict
                         try {
                             fontAwesome.dom.i2svg({
                                 node: this
+                            });
+
+                            // i2svg arbeitet teilweise asynchron. Die Farbe
+                            // deshalb unmittelbar und nochmals kurz danach
+                            // auf das tatsächlich erzeugte SVG anwenden.
+                            this.applyConsumerColourToSvg();
+
+                            [0, 30, 120].forEach(delay => {
+                                setTimeout(
+                                    () => this.applyConsumerColourToSvg(),
+                                    delay
+                                );
                             });
                         } catch (_) {
                             // Ein weiterer Renderdurchlauf versucht es erneut.
