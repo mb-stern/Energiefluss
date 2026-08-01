@@ -3088,8 +3088,11 @@ class Energiefluss extends IPSModuleStrict
             load: {
                 colour: AC.home,
                 off_colour: '#9e9e9e',
-                dynamic_colour: false,
-                dynamic_icon: false,
+
+                // Haussymbol automatisch entsprechend der aktuellen Versorgung
+                // aus Solar, Batterie und Netz einfärben und anpassen.
+                dynamic_colour: true,
+                dynamic_icon: true,
                 show_daily: showEnergyDetails && d.houseEnergyAvailable,
                 // AUX ist deaktiviert; die Wallbox ist Verbraucher 1.
                 show_aux: false,
