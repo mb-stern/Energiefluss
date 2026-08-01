@@ -3233,7 +3233,6 @@ class Energiefluss extends IPSModuleStrict
         applyAdditionalLoadColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyAdditionalLoadIcons(card);
-        applyTechnicalBatteryColours(card, d);
         showInverterPowerAboveVoltages(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
@@ -3243,10 +3242,6 @@ class Energiefluss extends IPSModuleStrict
             setTimeout(() => {
                 applyAdditionalLoadWattColourByGeometry(card);
                 applyAdditionalLoadIcons(card);
-                applyTechnicalBatteryColours(
-                    card,
-                    card.__symconLastData || d
-                );
                 showInverterPowerAboveVoltages(
                     card,
                     card.__symconLastData || d
@@ -3266,10 +3261,6 @@ class Energiefluss extends IPSModuleStrict
                     applyAdditionalLoadColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                     applyAdditionalLoadIcons(card);
-                    applyTechnicalBatteryColours(
-                        card,
-                        card.__symconLastData || d
-                    );
                     showInverterPowerAboveVoltages(
                         card,
                         card.__symconLastData || d
@@ -3431,124 +3422,6 @@ class Energiefluss extends IPSModuleStrict
 
             return;
         }
-    }
-
-    function applyTechnicalBatteryColours(card, d) {
-        if (!card || !card.shadowRoot || !d) return;
-
-        const batteries = Array.isArray(d.batteries)
-            ? d.batteries
-            : [];
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        batteries.slice(0, 2).forEach((battery, index) => {
-            const batteryNo = index + 1;
-            const power = Number(battery?.value || 0);
-
-            // Modulkonvention:
-            // negativ = Laden, positiv = Entladen.
-            const colour = power < 0
-                ? AC.charge
-                : AC.discharge;
-
-            for (const root of roots) {
-                const containerSelectors = batteryNo === 1
-                    ? [
-                        '#battery',
-                        '#battery1',
-                        '#battery-container',
-                        '#battery_container',
-                        '#battery-flow',
-                        '#battery_flow',
-                        '[id="battery_icon"]',
-                        '[id="battery-icon"]'
-                    ]
-                    : [
-                        '#battery2',
-                        '#battery-2',
-                        '#battery2-container',
-                        '#battery2_container',
-                        '#battery2-flow',
-                        '#battery2_flow',
-                        '[id="battery2_icon"]',
-                        '[id="battery2-icon"]'
-                    ];
-
-                const containers = new Set();
-
-                containerSelectors.forEach(selector => {
-                    root.querySelectorAll?.(selector).forEach(node => {
-                        containers.add(node);
-                    });
-                });
-
-                // Zusätzlich versionsunabhängig nach eindeutigen Batterie-IDs
-                // suchen. Batterie 1 darf dabei keine battery2-Elemente erfassen.
-                root.querySelectorAll?.('[id*="battery"], [id*="Battery"]').forEach(node => {
-                    const id = String(node.id || '').toLowerCase();
-                    const isSecond = /battery[-_]?2/.test(id);
-
-                    if (
-                        (batteryNo === 1 && !isSecond) ||
-                        (batteryNo === 2 && isSecond)
-                    ) {
-                        containers.add(node);
-                    }
-                });
-
-                containers.forEach(container => {
-                    // Leitung zwischen Batterie und Wechselrichter.
-                    container.querySelectorAll?.(
-                        '.anim-line, .battery-line, .battery_line, ' +
-                        'path[id*="line"], line[id*="line"], polyline[id*="line"]'
-                    ).forEach(line => {
-                        line.setAttribute?.('stroke', colour);
-                        line.style?.setProperty('stroke', colour, 'important');
-                        line.style?.setProperty('color', colour, 'important');
-                    });
-
-                    // Batteriegehäuse bzw. Batteriesymbol. Texte und SOC-Werte
-                    // bleiben unangetastet, da diese bereits korrekt gefärbt sind.
-                    container.querySelectorAll?.(
-                        '[id*="icon"] path, [id*="icon"] rect, ' +
-                        '[id*="icon"] polygon, [id*="icon"] polyline, ' +
-                        '.battery-icon path, .battery-icon rect, ' +
-                        '.battery-icon polygon, .battery-icon polyline'
-                    ).forEach(shape => {
-                        shape.setAttribute?.('stroke', colour);
-                        shape.style?.setProperty('stroke', colour, 'important');
-
-                        const fill = shape.getAttribute?.('fill');
-                        if (
-                            fill &&
-                            fill !== 'none' &&
-                            !String(fill).startsWith('url(')
-                        ) {
-                            shape.setAttribute?.('fill', colour);
-                            shape.style?.setProperty('fill', colour, 'important');
-                        }
-                    });
-
-                    // Falls die ID direkt auf dem Gehäusepfad liegt.
-                    const tag = String(container.tagName || '').toLowerCase();
-                    if (['path', 'rect', 'polygon', 'polyline'].includes(tag)) {
-                        container.setAttribute?.('stroke', colour);
-                        container.style?.setProperty('stroke', colour, 'important');
-
-                        const fill = container.getAttribute?.('fill');
-                        if (
-                            fill &&
-                            fill !== 'none' &&
-                            !String(fill).startsWith('url(')
-                        ) {
-                            container.setAttribute?.('fill', colour);
-                            container.style?.setProperty('fill', colour, 'important');
-                        }
-                    }
-                });
-            }
-        });
     }
 
     function consumerIconToFontAwesome(icon) {
