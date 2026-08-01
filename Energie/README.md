@@ -29,8 +29,9 @@ Dieses Modul integriert und erweitert zwei hervorragende Open-Source-Projekte f�
 **Projekt:** https://github.com/slipx06/sunsynk-power-flow-card
 
 - Grundlage der **technischen Energieflussansicht**
+- Urspr체nglich f체r Home Assistant entwickelt
 - Unterst체tzung der Ansichten **Lite**, **Compact**, **Full** sowie deren **Wide-Varianten**
-- F체r IP-Symcon erweitert und angepasst
+- F체r IP-Symcon angepasst und lokal integriert
 - **Lizenz:** Apache License 2.0
 
 ---
