@@ -350,36 +350,123 @@ class Energiefluss extends IPSModuleStrict
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'Netz & Wechselrichter',
+                    'caption' => 'Netz & Smart Meter',
                     'items'   => [
-                        ['type' => 'Label', 'caption' => 'Netz'],
-                        ['type' => 'SelectVariable', 'name' => 'L1', 'caption' => 'Netzleistung (W)'],
-                        ['type' => 'CheckBox', 'name' => 'InvertGridPower', 'caption' => 'Vorzeichen der Netzleistung umkehren'],
-                        ['type' => 'SelectVariable', 'name' => 'GridExportPower', 'caption' => 'Rücklieferung Leistung (W, optional)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridImportEnergy', 'caption' => 'Netzbezug gesamt (kWh)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridExportEnergy', 'caption' => 'Rücklieferung / Einspeisung gesamt (kWh)'],
-                        ['type' => 'Label', 'caption' => 'Smartmeter / dreiphasiges Netz (optional)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridPhaseL1', 'caption' => 'Phase L1 Leistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridPhaseL2', 'caption' => 'Phase L2 Leistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridPhaseL3', 'caption' => 'Phase L3 Leistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridFrequency', 'caption' => 'Netzfrequenz (Hz)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridVoltageL1', 'caption' => 'Spannung Phase L1 (V)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridVoltageL2', 'caption' => 'Spannung Phase L2 (V)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridVoltageL3', 'caption' => 'Spannung Phase L3 (V)'],
-                        ['type' => 'Label', 'caption' => 'Wechselrichter und Haus'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterPower', 'caption' => 'Wechselrichterleistung gesamt (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterCurrentL1', 'caption' => 'Wechselrichterstrom Phase L1 (A)'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterCurrentL2', 'caption' => 'Wechselrichterstrom Phase L2 (A)'],
-                        ['type' => 'SelectVariable', 'name' => 'InverterCurrentL3', 'caption' => 'Wechselrichterstrom Phase L3 (A)'],
+                        [
+                            'type'    => 'Label',
+                            'caption' => 'Aktuelle Netzleistung',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'L1',
+                            'caption' => 'Netzleistung gesamt (W)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'InvertGridPower',
+                            'caption' => 'Vorzeichen der Netzleistung umkehren',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridExportPower',
+                            'caption' => 'Separate Einspeiseleistung (W, optional)',
+                        ],
+                        [
+                            'type'    => 'Label',
+                            'caption' => 'Energiezähler',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridImportEnergy',
+                            'caption' => 'Netzbezug gesamt (kWh)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridExportEnergy',
+                            'caption' => 'Netzeinspeisung gesamt (kWh)',
+                        ],
+                        [
+                            'type'    => 'Label',
+                            'caption' => 'Phasenwerte des Smart Meters (optional)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridPhaseL1',
+                            'caption' => 'Leistung Phase L1 (W)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridPhaseL2',
+                            'caption' => 'Leistung Phase L2 (W)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridPhaseL3',
+                            'caption' => 'Leistung Phase L3 (W)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridVoltageL1',
+                            'caption' => 'Spannung Phase L1 (V)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridVoltageL2',
+                            'caption' => 'Spannung Phase L2 (V)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridVoltageL3',
+                            'caption' => 'Spannung Phase L3 (V)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'GridFrequency',
+                            'caption' => 'Netzfrequenz (Hz)',
+                        ],
+                    ],
+                ],
+                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => 'Wechselrichter & Hausverbrauch',
+                    'items'   => [
+                        [
+                            'type'    => 'Label',
+                            'caption' => 'Wechselrichter',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'InverterPower',
+                            'caption' => 'Wechselrichterleistung gesamt (W)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'InverterCurrentL1',
+                            'caption' => 'Wechselrichterstrom Phase L1 (A)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'InverterCurrentL2',
+                            'caption' => 'Wechselrichterstrom Phase L2 (A)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'InverterCurrentL3',
+                            'caption' => 'Wechselrichterstrom Phase L3 (A)',
+                        ],
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'InverterTemperature',
                             'caption' => 'Wechselrichtertemperatur (°C, optional)',
                         ],
                         [
+                            'type'    => 'Label',
+                            'caption' => 'Hausverbrauch',
+                        ],
+                        [
                             'type'    => 'Select',
                             'name'    => 'HouseCalculationMode',
-                            'caption' => 'Berechnung Hausverbrauch',
+                            'caption' => 'Berechnung des Hausverbrauchs',
                             'options' => [
                                 [
                                     'caption' => 'Automatisch: Variable verwenden, sonst PV + Batterie + Netz',
@@ -400,7 +487,6 @@ class Energiefluss extends IPSModuleStrict
                             'name'    => 'HousePower',
                             'caption' => 'Hausverbrauch (W, nur bei Automatisch)',
                         ],
-
                     ],
                 ],
                 [
