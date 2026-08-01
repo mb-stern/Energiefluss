@@ -2862,17 +2862,23 @@ class Energiefluss extends IPSModuleStrict
                             .trim() ||
                         '24px';
 
-                    this.style.display = 'inline-flex';
+                    this.style.display = 'flex';
                     this.style.alignItems = 'center';
                     this.style.justifyContent = 'center';
-                    this.style.width = size;
-                    this.style.height = size;
-                    this.style.minWidth = size;
-                    this.style.minHeight = size;
+                    this.style.width = '100%';
+                    this.style.height = '100%';
+                    this.style.minWidth = '0';
+                    this.style.minHeight = '0';
+                    this.style.maxWidth = '100%';
+                    this.style.maxHeight = '100%';
+                    this.style.position = 'static';
+                    this.style.inset = 'auto';
+                    this.style.transform = 'none';
                     this.style.color = this.style.color || 'inherit';
                     this.style.lineHeight = '1';
-                    this.style.overflow = 'visible';
+                    this.style.overflow = 'hidden';
                     this.style.boxSizing = 'border-box';
+                    this.style.fontSize = size;
 
                     const paths = definition.paths
                         .map(path => `<path d="${path}"></path>`)
@@ -3447,6 +3453,7 @@ class Energiefluss extends IPSModuleStrict
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
+        stabilizeConsumerIcons(card);
         applyConsumerIconColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyTechnicalBatteryColours(card, d);
@@ -3460,6 +3467,7 @@ class Energiefluss extends IPSModuleStrict
         // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
+                stabilizeConsumerIcons(card);
                 applyConsumerIconColours(card);
                 applyAdditionalLoadWattColourByGeometry(card);
                         applyTechnicalBatteryColours(
@@ -3495,6 +3503,7 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
+                    stabilizeConsumerIcons(card);
                     applyConsumerIconColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                                 applyTechnicalBatteryColours(
@@ -4271,6 +4280,67 @@ class Energiefluss extends IPSModuleStrict
                 ) {
                     colourText(node);
                 }
+            });
+        }
+    }
+
+    function stabilizeConsumerIcons(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            root.querySelectorAll?.('ha-icon').forEach(icon => {
+                const foreignObject = icon.closest?.('foreignObject');
+
+                // Ein HTML-Custom-Element direkt innerhalb eines SVG wird auf
+                // einigen mobilen Browsern bei (0,0) gezeichnet. Solche losen
+                // Elemente werden ausgeblendet statt oben links angezeigt.
+                if (!foreignObject) {
+                    icon.style.setProperty('display', 'none', 'important');
+                    return;
+                }
+
+                foreignObject.style?.setProperty(
+                    'overflow',
+                    'hidden',
+                    'important'
+                );
+
+                icon.style.setProperty('display', 'flex', 'important');
+                icon.style.setProperty('position', 'static', 'important');
+                icon.style.setProperty('left', 'auto', 'important');
+                icon.style.setProperty('top', 'auto', 'important');
+                icon.style.setProperty('right', 'auto', 'important');
+                icon.style.setProperty('bottom', 'auto', 'important');
+                icon.style.setProperty('transform', 'none', 'important');
+                icon.style.setProperty('width', '100%', 'important');
+                icon.style.setProperty('height', '100%', 'important');
+                icon.style.setProperty('min-width', '0', 'important');
+                icon.style.setProperty('min-height', '0', 'important');
+                icon.style.setProperty('max-width', '100%', 'important');
+                icon.style.setProperty('max-height', '100%', 'important');
+                icon.style.setProperty('overflow', 'hidden', 'important');
+                icon.style.setProperty('box-sizing', 'border-box', 'important');
+                icon.style.setProperty('margin', '0', 'important');
+                icon.style.setProperty('padding', '1px', 'important');
+
+                icon.querySelectorAll?.('svg').forEach(svg => {
+                    svg.setAttribute('width', '100%');
+                    svg.setAttribute('height', '100%');
+                    svg.setAttribute(
+                        'preserveAspectRatio',
+                        'xMidYMid meet'
+                    );
+                    svg.style.setProperty('display', 'block', 'important');
+                    svg.style.setProperty('width', '100%', 'important');
+                    svg.style.setProperty('height', '100%', 'important');
+                    svg.style.setProperty('max-width', '100%', 'important');
+                    svg.style.setProperty('max-height', '100%', 'important');
+                    svg.style.setProperty('position', 'static', 'important');
+                    svg.style.setProperty('transform', 'none', 'important');
+                    svg.style.setProperty('overflow', 'hidden', 'important');
+                });
             });
         }
     }
