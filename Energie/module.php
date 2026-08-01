@@ -3453,6 +3453,10 @@ class Energiefluss extends IPSModuleStrict
         batteries.slice(0, 2).forEach((battery, index) => {
             const batteryNo = index + 1;
             const power = Number(battery?.value || 0);
+            const soc = Math.max(
+                0,
+                Math.min(100, Number(battery?.soc || 0))
+            );
 
             // Modulkonvention:
             // negativ = Laden, positiv = Entladen.
@@ -3461,51 +3465,28 @@ class Energiefluss extends IPSModuleStrict
                 : AC.discharge;
 
             for (const root of roots) {
-                const mainId = batteryNo === 1
-                    ? '#battery_main'
-                    : '#battery2_main';
-
                 const main =
-                    root.querySelector?.(mainId) ||
                     root.querySelector?.(
                         batteryNo === 1
-                            ? '#battery, #battery1'
-                            : '#battery2, #battery-2'
+                            ? '#battery_main, #battery'
+                            : '#battery2_main, #battery2'
                     );
 
                 if (!main) {
                     continue;
                 }
 
-                /*
-                 * Die Originalkarte verwendet in Compact/Lite mehrere
-                 * voneinander unabhängige SVG-Elemente:
-                 *
-                 * - Batterie-Symbol / äußerer Rahmen
-                 * - Box um die Batterieleistung
-                 * - Leitung
-                 * - animierter Punkt
-                 *
-                 * Darum reicht battery.colour alleine nicht aus.
-                 * Wir färben hier gezielt nur Rahmen und Flussdarstellung.
-                 * Die SOC-Füllung wird nicht verändert.
-                 */
-
-                // 1. Box um die Batterieleistung in Compact/Lite.
-                const dataId = batteryNo === 1
-                    ? '#battery_data'
-                    : '#battery2_data';
-
-                const batteryData = main.querySelector?.(dataId);
+                // 1. Box um die Batterieleistung.
+                const batteryData = main.querySelector?.(
+                    batteryNo === 1
+                        ? '#battery_data'
+                        : '#battery2_data'
+                );
 
                 if (batteryData) {
-                    const rects = Array.from(
+                    Array.from(
                         batteryData.querySelectorAll?.(':scope > rect') || []
-                    );
-
-                    // Erste Box: aktuelle Batterieleistung.
-                    // Zweite Box: Detail-/Batteriebereich.
-                    rects.slice(0, 2).forEach(rect => {
+                    ).slice(0, 2).forEach(rect => {
                         rect.setAttribute?.('stroke', colour);
                         rect.style?.setProperty(
                             'stroke',
@@ -3515,39 +3496,73 @@ class Energiefluss extends IPSModuleStrict
                     });
                 }
 
-                // Bei zwei Batterien gibt es eine zusätzliche Gesamtleistungsbox.
-                const totalPowerBox = main.querySelector?.(
-                    batteryNo === 1
-                        ? '#battery_total_power > rect'
-                        : '#battery2_total_power > rect'
-                );
-
-                if (totalPowerBox) {
-                    totalPowerBox.setAttribute?.('stroke', colour);
-                    totalPowerBox.style?.setProperty(
-                        'stroke',
-                        colour,
-                        'important'
+                // 2. Batteriesymbol:
+                // Der äußere Batteriepfad wird über einen SVG-Gradienten
+                // eingefärbt. Wir ändern nur die FARBE des bereits gefüllten
+                // SOC-Bereichs. Die Stop-Positionen und damit der sichtbare
+                // Ladezustand bleiben vollständig unverändert.
+                const outerIcon =
+                    main.querySelector?.(
+                        batteryNo === 1
+                            ? '#battery_icon #bat_outter'
+                            : '#battery2_icon'
                     );
+
+                if (outerIcon) {
+                    const gradient = outerIcon.querySelector?.(
+                        batteryNo === 1
+                            ? '#bLg-bat1'
+                            : '#b2Lg, #b2Lg-bat2'
+                    );
+
+                    if (gradient) {
+                        const stops = Array.from(
+                            gradient.querySelectorAll?.('stop') || []
+                        );
+
+                        stops.forEach(stop => {
+                            const rawOffset =
+                                String(stop.getAttribute?.('offset') || '0')
+                                    .replace('%', '');
+                            const offset = Number(rawOffset);
+
+                            // Nur der gefüllte Anteil bis zum aktuellen SOC
+                            // erhält die Lade-/Entladefarbe. Der leere Teil
+                            // behält seine Originalfarbe.
+                            if (Number.isFinite(offset) && offset <= soc) {
+                                stop.setAttribute?.('stop-color', colour);
+                                stop.style?.setProperty(
+                                    'stop-color',
+                                    colour,
+                                    'important'
+                                );
+                            }
+                        });
+                    }
+
+                    // Falls die verwendete Karten-Version keinen Gradienten
+                    // mit bekannten IDs nutzt, nur den äußeren Pfad einfärben.
+                    // Der innere Ladeanimationspfad bleibt unangetastet.
+                    const outerPath = outerIcon.querySelector?.(
+                        ':scope > path'
+                    );
+
+                    if (
+                        outerPath &&
+                        !String(
+                            outerPath.getAttribute?.('fill') || ''
+                        ).startsWith('url(')
+                    ) {
+                        outerPath.setAttribute?.('fill', colour);
+                        outerPath.style?.setProperty(
+                            'fill',
+                            colour,
+                            'important'
+                        );
+                    }
                 }
 
-                // 2. Äußerer Batteriesymbol-Rahmen:
-                // Nur ungefüllte Formen anfassen. Damit bleiben SOC-Füllung,
-                // Verlauf und Ladezustandsdarstellung vollständig erhalten.
-                main.querySelectorAll?.(
-                    'rect[fill="none"], path[fill="none"], ' +
-                    'polygon[fill="none"], polyline[fill="none"], ' +
-                    'rect[fill="transparent"], path[fill="transparent"]'
-                ).forEach(shape => {
-                    shape.setAttribute?.('stroke', colour);
-                    shape.style?.setProperty(
-                        'stroke',
-                        colour,
-                        'important'
-                    );
-                });
-
-                // 3. Leitung zwischen Batterie und Wechselrichter.
+                // 3. Leitung.
                 main.querySelectorAll?.(
                     '.anim-line, [class*="anim-line"], ' +
                     '[class*="battery-line"], [class*="battery_line"], ' +
@@ -3567,14 +3582,22 @@ class Energiefluss extends IPSModuleStrict
                     );
                 });
 
-                // 4. Fließender Punkt. In den verschiedenen Card-Versionen
-                // wird er als circle/ellipse oder über eine flow-/dot-Klasse
-                // erzeugt.
+                // 4. Fließende Punkte direkt über ihre echten IDs erfassen.
                 main.querySelectorAll?.(
-                    'circle, ellipse, .dot, .flow-dot, .flow_dot, ' +
-                    '[class*="dot"], [class*="flow"] circle, ' +
-                    '[class*="flow"] ellipse'
+                    '#power-dot-charge, #power-dot-discharge, ' +
+                    '[id="power-dot-charge"], [id="power-dot-discharge"], ' +
+                    'circle[id="bat"]'
                 ).forEach(dot => {
+                    const id = String(dot.id || '');
+
+                    // Unsichtbare Gegenrichtung transparent lassen.
+                    if (
+                        (id.includes('charge') && power >= 0) ||
+                        (id.includes('discharge') && power < 0)
+                    ) {
+                        return;
+                    }
+
                     dot.setAttribute?.('fill', colour);
                     dot.setAttribute?.('stroke', colour);
                     dot.style?.setProperty(
@@ -3589,26 +3612,6 @@ class Energiefluss extends IPSModuleStrict
                     );
                     dot.style?.setProperty(
                         'color',
-                        colour,
-                        'important'
-                    );
-                });
-
-                // CSS-Variablen für Versionen, welche Linie/Punkt darüber färben.
-                [
-                    '--battery-color',
-                    '--battery-colour',
-                    '--battery-line-color',
-                    '--battery-line-colour',
-                    '--battery-flow-color',
-                    '--battery-flow-colour',
-                    '--battery-dot-color',
-                    '--battery-dot-colour',
-                    '--flow-color',
-                    '--flow-colour'
-                ].forEach(variable => {
-                    main.style?.setProperty(
-                        variable,
                         colour,
                         'important'
                     );
