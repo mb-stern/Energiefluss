@@ -3232,6 +3232,14 @@ class Energiefluss extends IPSModuleStrict
             ...activeConsumers,
             ...inactiveConsumers
         ].slice(0, full ? 6 : 3);
+
+        // Nur diese Texte dürfen später geometrisch zentriert werden.
+        // Dadurch bleiben PV-Stringwerte, Spannungen, Ströme und sonstige
+        // Beschriftungen vollständig unangetastet.
+        window.__symconVisibleConsumerNames = activeGroups
+            .map(group => String(group?.name || '').trim())
+            .filter(Boolean);
+
         const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3')
             || entityAvailable(d, 'inverterCurrentL2') || entityAvailable(d, 'inverterCurrentL3')
             || entityAvailable(d, 'gridVoltageL2') || entityAvailable(d, 'gridVoltageL3');
@@ -4505,17 +4513,25 @@ class Energiefluss extends IPSModuleStrict
                 continue;
             }
 
+            const consumerNames = new Set(
+                Array.isArray(window.__symconVisibleConsumerNames)
+                    ? window.__symconVisibleConsumerNames
+                    : []
+            );
+
+            if (!consumerNames.size) {
+                continue;
+            }
+
             root.querySelectorAll?.('text').forEach(textNode => {
                 const value = String(
                     textNode.textContent || ''
                 ).trim();
 
-                if (
-                    !value ||
-                    value === 'Haus' ||
-                    value === 'Hausverbrauch' ||
-                    /[-+]?\d[\d.,'’\s]*\s*(?:W|kW|kWh)$/i.test(value)
-                ) {
+                // Ausschließlich exakt konfigurierte Verbrauchernamen
+                // zentrieren. PV-Stringwerte wie V/A/W sowie sämtliche
+                // anderen Texte bleiben an ihrer Originalposition.
+                if (!consumerNames.has(value)) {
                     return;
                 }
 
