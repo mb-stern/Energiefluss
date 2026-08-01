@@ -48,6 +48,11 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('InverterCurrentL2', 0);
         $this->RegisterPropertyInteger('InverterCurrentL3', 0);
         $this->RegisterPropertyInteger('HousePower', 0);
+
+        // auto: konfigurierte Hausverbrauchsvariable verwenden, sonst Bilanz
+        // balance: PV + Batterie + Netzsaldo
+        // inverter-grid: Wechselrichterleistung + Netzbezug - Einspeisung
+        $this->RegisterPropertyString('HouseCalculationMode', 'auto');
         // Alte Eigenschaften bleiben zur Abwärtskompatibilität registriert,
         // werden in der neuen Sunsynk-Konfiguration aber nicht mehr angezeigt.
         $this->RegisterPropertyInteger('InverterVoltage', 0);
@@ -427,7 +432,30 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'InverterCurrentL1', 'caption' => 'Wechselrichterstrom Phase L1 (A)'],
                         ['type' => 'SelectVariable', 'name' => 'InverterCurrentL2', 'caption' => 'Wechselrichterstrom Phase L2 (A)'],
                         ['type' => 'SelectVariable', 'name' => 'InverterCurrentL3', 'caption' => 'Wechselrichterstrom Phase L3 (A)'],
-                        ['type' => 'SelectVariable', 'name' => 'HousePower', 'caption' => 'Hausverbrauch (W, optional; sonst berechnet)'],
+                        [
+                            'type'    => 'Select',
+                            'name'    => 'HouseCalculationMode',
+                            'caption' => 'Berechnung Hausverbrauch',
+                            'options' => [
+                                [
+                                    'caption' => 'Automatisch: Variable verwenden, sonst PV + Batterie + Netz',
+                                    'value'   => 'auto',
+                                ],
+                                [
+                                    'caption' => 'PV + Batterie + Netzbezug − Netzeinspeisung',
+                                    'value'   => 'balance',
+                                ],
+                                [
+                                    'caption' => 'Wechselrichter gesamt + Netzbezug − Netzeinspeisung',
+                                    'value'   => 'inverter-grid',
+                                ],
+                            ],
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'HousePower',
+                            'caption' => 'Hausverbrauch (W, nur bei Automatisch)',
+                        ],
 
                     ],
                 ],
@@ -4559,8 +4587,43 @@ class Energiefluss extends IPSModuleStrict
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
 
         // Netzbezug positiv, Rücklieferung negativ.
-        const calculatedHouse = Math.max(pvTotal + batteryTotal + grid, 0);
-        const haus = d.available?.housePowerConfigured && Number.isFinite(Number(d.housePower)) ? Math.max(Number(d.housePower), 0) : calculatedHouse;
+        const calculatedHouseBalance = Math.max(
+            pvTotal + batteryTotal + grid,
+            0
+        );
+
+        const inverterPower = Number(d.inverterPower || 0);
+        const calculatedHouseInverterGrid = Math.max(
+            (Number.isFinite(inverterPower) ? inverterPower : 0) + grid,
+            0
+        );
+
+        const houseCalculationMode = [
+            'auto',
+            'balance',
+            'inverter-grid'
+        ].includes(d.houseCalculationMode)
+            ? d.houseCalculationMode
+            : 'auto';
+
+        let haus;
+
+        if (houseCalculationMode === 'inverter-grid') {
+            // Wechselrichterleistung gesamt + Netzbezug − Netzeinspeisung.
+            haus = calculatedHouseInverterGrid;
+        } else if (houseCalculationMode === 'balance') {
+            // PV + Batterieentladung − Batterieladung
+            // + Netzbezug − Netzeinspeisung.
+            haus = calculatedHouseBalance;
+        } else {
+            // Bisheriges Verhalten: konfigurierte Hausverbrauchsvariable
+            // hat Vorrang, ansonsten wird die vollständige Bilanz verwendet.
+            haus =
+                d.available?.housePowerConfigured &&
+                Number.isFinite(Number(d.housePower))
+                    ? Math.max(Number(d.housePower), 0)
+                    : calculatedHouseBalance;
+        }
 
         // Neue technische Ansicht.
         currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
@@ -5684,6 +5747,9 @@ HTML;
             'gridVoltageL3'    => $this->ReadVar('GridVoltageL3'),
             'gridConnectedStatus' => $gridConnectedStatus,
             'housePower'       => $this->ReadVar('HousePower'),
+            'houseCalculationMode' => $this->ReadPropertyString(
+                'HouseCalculationMode'
+            ),
             'inverterPower'    => $this->ReadVar('InverterPower'),
             'inverterCurrentL1' => $this->ReadVar('InverterCurrentL1'),
             'inverterCurrentL2' => $this->ReadVar('InverterCurrentL2'),
