@@ -3011,44 +3011,13 @@ class Energiefluss extends IPSModuleStrict
                 const iconOffsetY = -3;
 
                 /*
-                 * Icon horizontal auf die Mitte der zugehörigen Leistungsbox
-                 * ausrichten. Falls die Box nicht ermittelt werden kann,
-                 * bleibt die von Sunsynk vorgegebene Mitte erhalten.
+                 * Die horizontale Position vollständig von Sunsynk übernehmen.
+                 * Der von Sunsynk erzeugte foreignObject-Platzhalter sitzt
+                 * bereits an der für die jeweilige Ansicht vorgesehenen Stelle.
+                 * Wir verändern daher nur Größe und vertikalen Abstand.
                  */
-                const iconCenterX = x + (width / 2);
-                let targetCenterX = iconCenterX;
-
-                const loadBoxes = Array.from(
-                    svgParent.querySelectorAll?.(
-                        'rect[id^="es-load"], rect[id^="ess-load"]'
-                    ) || []
-                );
-
-                let closestDistance = Number.POSITIVE_INFINITY;
-
-                loadBoxes.forEach(boxNode => {
-                    try {
-                        const box = boxNode.getBBox();
-                        const boxCenterX = box.x + (box.width / 2);
-                        const boxCenterY = box.y + (box.height / 2);
-                        const iconCenterY = y + (height / 2);
-
-                        const distance =
-                            Math.abs(boxCenterX - iconCenterX) +
-                            Math.abs(boxCenterY - iconCenterY);
-
-                        if (distance < closestDistance) {
-                            closestDistance = distance;
-                            targetCenterX = boxCenterX;
-                        }
-                    } catch (_) {
-                        // Ungültige SVG-Geometrien ignorieren.
-                    }
-                });
-
                 const translateX =
-                    targetCenterX -
-                    ((vbWidth * scale) / 2) -
+                    x + ((width - (vbWidth * scale)) / 2) -
                     (vbX * scale);
 
                 const translateY =
