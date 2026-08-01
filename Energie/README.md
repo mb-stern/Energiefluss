@@ -9,6 +9,47 @@ Das Modul kombiniert zwei vollständig integrierte Visualisierungen:
 
 Beide Ansichten können direkt innerhalb der Visualisierung umgeschaltet werden.
 
+# ❤️ Verwendete Open-Source-Projekte
+
+Dieses Modul integriert und erweitert zwei hervorragende Open-Source-Projekte für die Verwendung innerhalb von **IP-Symcon**.
+
+## 🏠 Power Flow Card
+
+**Projekt:** https://github.com/LordGuenni/power-flow-card
+
+- Grundlage der **Hausansicht**
+- Ursprünglich für Home Assistant entwickelt
+- Für IP-Symcon angepasst und lokal integriert
+- **Lizenz:** MIT
+
+---
+
+## ⚡ Sunsynk Power Flow Card
+
+**Projekt:** https://github.com/slipx06/sunsynk-power-flow-card
+
+- Grundlage der **technischen Energieflussansicht**
+- Unterstützung der Ansichten **Lite**, **Compact**, **Full** sowie deren **Wide-Varianten**
+- Für IP-Symcon erweitert und angepasst
+- **Lizenz:** Apache License 2.0
+
+---
+
+Alle benötigten Dateien werden **lokal** mit diesem Modul ausgeliefert.
+
+Es werden **keine externen CDN-Dateien** oder Internetverbindungen für die Visualisierung benötigt.
+
+---
+
+# ✨ Funktionen
+
+Das Modul kombiniert zwei vollständig integrierte Visualisierungen:
+
+- ⚡ Technische Energieflussansicht
+- 🏠 Grafische Hausansicht
+
+Beide Ansichten können direkt innerhalb der Visualisierung umgeschaltet werden.
+
 ---
 
 ## 📸 Screenshots
@@ -23,25 +64,23 @@ Beide Ansichten können direkt innerhalb der Visualisierung umgeschaltet werden.
 
 ---
 
-## ✨ Highlights
+## 🚀 Highlights
 
-- ⚡ Zwei vollständig integrierte Visualisierungen
-- 🏠 Grafische Hausansicht
-- 🔧 Technische Energieflussansicht
-- ☀️ Mehrere PV-Anlagen
-- 🔋 Mehrere Batteriespeicher
+- ☀️ Bis zu **6 PV-Strings / PV-Eingänge**
+- 🔧 **1 Wechselrichter**
+- 🔋 Bis zu **2 Batteriespeicher**
 - ⚡ Smart Meter
 - 🚗 Wallbox mit Fahrzeug-SOC
-- 🔌 Frei konfigurierbare Verbraucher
+- 🔌 Beliebig viele Verbraucher (automatische Anzeige der leistungsstärksten)
 - 🎨 Frei konfigurierbare Farben
-- 🎯 Frei wählbare Icons für Verbraucher
-- 📱 Smartphone-optimiert
+- 🎯 Frei wählbare Verbraucher-Icons
 - 📊 Automatische Hausverbrauchsberechnung
 - 🔮 Solarprognose
 - 🌡️ Wechselrichtertemperatur
+- 📱 Optimiert für Desktop, Tablet und Smartphone
 - ⚡ Dynamische Energieflussanimation
 - 📐 Lite-, Compact- und Full-Ansicht
-- ↔️ Jede Ansicht zusätzlich als Wide-Version
+- ↔️ Alle Ansichten zusätzlich als Wide-Version
 
 ---
 
