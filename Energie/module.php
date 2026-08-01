@@ -181,21 +181,11 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'        => 'List',
                             'name'        => 'Producers',
-                            'caption'     => 'PV-Strings (maximal 6)',
+                            'caption'     => 'PV-Strings (maximal 6 dargestellt)',
                             'rowCount'    => 6,
                             'add'         => true,
                             'delete'      => true,
                             'changeOrder' => true,
-                            'onAdd'       => <<<'PHP'
-if (count($Producers) > 6) {
-    $this->UpdateFormField(
-        'Producers',
-        'values',
-        array_slice($Producers, 0, 6)
-    );
-    echo 'Es können maximal 6 PV-Strings konfiguriert werden.';
-}
-PHP,
                             'columns'     => [
                                 [
                                     'caption' => 'Bezeichnung',
@@ -265,21 +255,11 @@ PHP,
                         [
                             'type'     => 'List',
                             'name'     => 'Batteries',
-                            'caption'     => 'Batterien (maximal 2)',
+                            'caption'     => 'Batterien (maximal 2 dargestellt)',
                             'rowCount'    => 2,
                             'add'         => true,
                             'delete'      => true,
                             'changeOrder' => true,
-                            'onAdd'       => <<<'PHP'
-if (count($Batteries) > 2) {
-    $this->UpdateFormField(
-        'Batteries',
-        'values',
-        array_slice($Batteries, 0, 2)
-    );
-    echo 'Es können maximal 2 Batterien konfiguriert werden.';
-}
-PHP,
                             'columns'     => [
                                 [
                                     'caption' => 'Name',
