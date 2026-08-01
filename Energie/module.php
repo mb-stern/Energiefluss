@@ -3463,6 +3463,71 @@ class Energiefluss extends IPSModuleStrict
                 });
 
                 batteryContainers.forEach(container => {
+                    // Nur den äußeren Rahmen des Batteriesymbols färben.
+                    // Die SOC-Füllung und deren dynamische Darstellung bleiben
+                    // ausdrücklich unverändert.
+                    const iconShapes = Array.from(
+                        container.querySelectorAll?.(
+                            'rect, path, polygon, polyline'
+                        ) || []
+                    ).filter(shape => {
+                        try {
+                            const box = shape.getBBox();
+                            return box.width > 0 && box.height > 0;
+                        } catch (_) {
+                            return false;
+                        }
+                    });
+
+                    if (iconShapes.length) {
+                        // Der äußere Batterierahmen ist innerhalb des
+                        // Batteriecontainers in der Regel die größte Form.
+                        const outerShape = iconShapes.sort((a, b) => {
+                            try {
+                                const boxA = a.getBBox();
+                                const boxB = b.getBBox();
+
+                                return (
+                                    (boxB.width * boxB.height) -
+                                    (boxA.width * boxA.height)
+                                );
+                            } catch (_) {
+                                return 0;
+                            }
+                        })[0];
+
+                        if (outerShape) {
+                            outerShape.setAttribute?.('stroke', colour);
+                            outerShape.style?.setProperty(
+                                'stroke',
+                                colour,
+                                'important'
+                            );
+                            outerShape.style?.setProperty(
+                                'color',
+                                colour,
+                                'important'
+                            );
+
+                            // Nur dann die Füllfarbe setzen, wenn diese Form
+                            // bereits eine feste Füllung besitzt. Elemente mit
+                            // Verlauf oder SOC-Maske werden nicht verändert.
+                            const fill = outerShape.getAttribute?.('fill');
+                            if (
+                                fill &&
+                                fill !== 'none' &&
+                                !String(fill).startsWith('url(')
+                            ) {
+                                outerShape.setAttribute?.('fill', colour);
+                                outerShape.style?.setProperty(
+                                    'fill',
+                                    colour,
+                                    'important'
+                                );
+                            }
+                        }
+                    }
+
                     // Die statische Leitung.
                     container.querySelectorAll?.(
                         '.anim-line, .battery-line, .battery_line, ' +
