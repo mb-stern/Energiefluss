@@ -3962,97 +3962,112 @@ class Energiefluss extends IPSModuleStrict
         };
 
         for (const root of roots) {
-            const inverterContainers = new Set();
+            /*
+             * Ausschließlich echte Wechselrichter-Elemente anfassen.
+             * Smartmeter-/Grid-Container werden bewusst nicht mehr über
+             * breit gefasste Selektoren wie [id*="inverter"] oder ganze
+             * gemeinsame SVG-Gruppen eingefärbt.
+             */
+
+            const inverterGroups = new Set();
 
             [
-                '#inverter',
                 '#inverter_main',
                 '#inverter-main',
+                '#inverter_icon',
+                '#inverter-icon',
                 '#inverter_data',
                 '#inverter-data',
-                '[id*="inverter"]'
+                '#inverter_box',
+                '#inverter-box'
             ].forEach(selector => {
                 root.querySelectorAll?.(selector).forEach(node => {
-                    inverterContainers.add(node);
+                    inverterGroups.add(node);
                 });
             });
 
-            inverterContainers.forEach(container => {
-                const id = String(container.id || '').toLowerCase();
+            // Wechselrichtersymbol.
+            inverterGroups.forEach(group => {
+                const id = String(group.id || '').toLowerCase();
 
-                // Nur echte Wechselrichterbereiche, keine Sensornamen außerhalb
-                // der grafischen WR-Box.
                 if (
-                    id.includes('current') ||
-                    id.includes('voltage') ||
-                    id.includes('power')
+                    id.includes('icon') ||
+                    id === 'inverter_main' ||
+                    id === 'inverter-main'
                 ) {
-                    const tag = String(container.tagName || '').toLowerCase();
-
-                    if (tag === 'text' || tag === 'tspan') {
-                        colourText(container);
-                    }
-                }
-
-                // Rahmen der Leistungs-/Messwertboxen.
-                container.querySelectorAll?.(
-                    'rect, path, polygon, polyline'
-                ).forEach(shape => {
-                    const shapeId = String(shape.id || '').toLowerCase();
-                    const fill = String(
-                        shape.getAttribute?.('fill') || ''
-                    ).toLowerCase();
-
-                    const isBoxOrOutline =
-                        shapeId.includes('box') ||
-                        shapeId.includes('data') ||
-                        fill === 'none' ||
-                        fill === 'transparent';
-
-                    if (isBoxOrOutline) {
+                    group.querySelectorAll?.(
+                        'path, rect, polygon, polyline, circle, ellipse'
+                    ).forEach(shape => {
                         shape.setAttribute?.('stroke', inverterColour);
                         shape.style?.setProperty(
                             'stroke',
                             inverterColour,
                             'important'
                         );
-                    }
-                });
 
-                // Wechselrichtersymbol und seine Konturen.
-                container.querySelectorAll?.(
-                    '[id*="icon"] path, [id*="icon"] rect, ' +
-                    '[id*="icon"] polygon, [id*="icon"] polyline, ' +
-                    '.inverter-icon path, .inverter-icon rect, ' +
-                    '.inverter-icon polygon, .inverter-icon polyline'
-                ).forEach(shape => {
+                        const fill = shape.getAttribute?.('fill');
+                        if (
+                            fill &&
+                            fill !== 'none' &&
+                            !String(fill).startsWith('url(')
+                        ) {
+                            shape.setAttribute?.('fill', inverterColour);
+                            shape.style?.setProperty(
+                                'fill',
+                                inverterColour,
+                                'important'
+                            );
+                        }
+                    });
+                }
+            });
+
+            // Rahmen der echten WR-Datenbox.
+            [
+                '#inverter_data > rect',
+                '#inverter-data > rect',
+                '#inverter_box',
+                '#inverter-box'
+            ].forEach(selector => {
+                root.querySelectorAll?.(selector).forEach(shape => {
                     shape.setAttribute?.('stroke', inverterColour);
                     shape.style?.setProperty(
                         'stroke',
                         inverterColour,
                         'important'
                     );
-
-                    const fill = shape.getAttribute?.('fill');
-                    if (
-                        fill &&
-                        fill !== 'none' &&
-                        !String(fill).startsWith('url(')
-                    ) {
-                        shape.setAttribute?.('fill', inverterColour);
-                        shape.style?.setProperty(
-                            'fill',
-                            inverterColour,
-                            'important'
-                        );
-                    }
                 });
+            });
 
-                // Sämtliche Texte innerhalb der WR-Box:
-                // Leistung, Ströme, Spannungen und Beschriftungen.
-                container.querySelectorAll?.('text, tspan').forEach(node => {
+            // Nur eindeutig als Wechselrichterwerte identifizierte Texte.
+            // Smartmeter-Spannungen/-Ströme/-Frequenz werden nicht berührt.
+            [
+                '#inverter_power_175',
+                '#inverter-power-175',
+                '#symcon_inverter_power_overlay',
+                '#inverter_current_164',
+                '#inverter-current-164',
+                '#inverter_current_L2',
+                '#inverter-current-L2',
+                '#inverter_current_L3',
+                '#inverter-current-L3',
+                '#inverter_name',
+                '#inverter-name',
+                '#inverter_label',
+                '#inverter-label'
+            ].forEach(selector => {
+                root.querySelectorAll?.(selector).forEach(node => {
                     colourText(node);
                 });
+            });
+
+            // Falls die WR-Leistung direkt oberhalb der WR-Ströme als
+            // eigenes Symcon-Overlay erzeugt wurde, ebenfalls einfärben.
+            root.querySelectorAll?.(
+                '#symcon_inverter_power_overlay, ' +
+                '#symcon_inverter_power_fixed'
+            ).forEach(node => {
+                colourText(node);
             });
         }
     }
