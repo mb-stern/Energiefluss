@@ -406,7 +406,7 @@ class Energiefluss extends IPSModuleStrict
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'Netz & Wallbox',
+                    'caption' => 'Netz & Wechselrichter',
                     'items'   => [
                         ['type' => 'Label', 'caption' => 'Netz'],
                         ['type' => 'SelectVariable', 'name' => 'L1', 'caption' => 'Netzleistung (W)'],
@@ -429,14 +429,6 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'InverterCurrentL3', 'caption' => 'Wechselrichterstrom Phase L3 (A)'],
                         ['type' => 'SelectVariable', 'name' => 'HousePower', 'caption' => 'Hausverbrauch (W, optional; sonst berechnet)'],
 
-                        ['type' => 'ValidationTextBox', 'name' => 'WallboxName', 'caption' => 'Name'],
-                        ['type' => 'SelectVariable', 'name' => 'WallboxPower', 'caption' => 'Ladeleistung (W)'],
-                        ['type' => 'SelectVariable', 'name' => 'WallboxEnergy', 'caption' => 'Ladeenergie (optional)'],
-                        [
-                            'type'    => 'SelectObject',
-                            'name'    => 'WallboxSoC',
-                            'caption' => 'Fahrzeug-SOC (Variable oder Link)',
-                        ],
                     ],
                 ],
                 [
@@ -475,9 +467,23 @@ class Energiefluss extends IPSModuleStrict
                                 [
                                     'caption' => 'Icon',
                                     'name'    => 'Icon',
-                                    'width'   => '140px',
+                                    'width'   => '120px',
                                     'add'     => 'plug',
                                     'edit'    => ['type' => 'SelectIcon'],
+                                ],
+                                [
+                                    'caption' => 'Wallbox',
+                                    'name'    => 'IsWallbox',
+                                    'width'   => '75px',
+                                    'add'     => false,
+                                    'edit'    => ['type' => 'CheckBox'],
+                                ],
+                                [
+                                    'caption' => 'Fahrzeug-SOC',
+                                    'name'    => 'SoCObjectID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectObject'],
                                 ],
                             ],
                         ],
@@ -2866,23 +2872,8 @@ class Energiefluss extends IPSModuleStrict
         const hasGrid = entityAvailable(d, 'gridPower');
         const hasWallbox = !!d.hasWallbox;
 
-        // Die Wallbox ist ein normaler Verbraucher und wird gemeinsam mit
-        // allen anderen Verbrauchern nach der aktuellen Leistungsaufnahme
-        // angeordnet.
-        const wallboxConsumer = hasWallbox ? [{
-            name: wallbox?.name || 'Wallbox',
-            value: Number(wallbox?.value || 0),
-            hasPower: true,
-            dailyValue: Number(wallbox?.energyValue || 0),
-            hasDaily: !!wallbox?.hasEnergy,
-            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station'),
-            isWallbox: true
-        }] : [];
-
-        const configuredConsumers = [
-            ...groups.filter(group => group.hasPower),
-            ...wallboxConsumer
-        ];
+        // Die Wallbox befindet sich bereits in der normalen Verbraucherliste.
+        const configuredConsumers = groups.filter(group => group.hasPower);
 
         // Aktive Verbraucher zuerst, absteigend nach absoluter Leistung.
         // Absolute Werte berücksichtigen auch Messvariablen mit negativem
@@ -3006,7 +2997,11 @@ class Energiefluss extends IPSModuleStrict
         // über <ha-icon>. Deshalb merken wir die tatsächlich angezeigten Icons
         // und setzen sie nach dem Rendern direkt in die SVG-Verbraucherboxen.
         window.__symconVisibleConsumerIcons = activeGroups.map(group =>
-            normalizeConsumerIcon(group?.icon || 'mdi:power-plug')
+            normalizeConsumerIcon(
+                group?.isWallbox
+                    ? (group?.icon || 'mdi:ev-station')
+                    : (group?.icon || 'mdi:power-plug')
+            )
         );
 
         // Einheitliche Farbe für Haus, Hausverbrauch und Leitung zum Haus.
@@ -3178,20 +3173,7 @@ class Energiefluss extends IPSModuleStrict
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
         const hasWallbox = !!d.hasWallbox;
 
-        const wallboxConsumer = hasWallbox ? [{
-            name: wallbox?.name || 'Wallbox',
-            value: Number(wallbox?.value || 0),
-            hasPower: true,
-            dailyValue: Number(wallbox?.energyValue || 0),
-            hasDaily: !!wallbox?.hasEnergy,
-            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station'),
-            isWallbox: true
-        }] : [];
-
-        const configuredConsumers = [
-            ...groups.filter(group => group.hasPower),
-            ...wallboxConsumer
-        ];
+        const configuredConsumers = groups.filter(group => group.hasPower);
 
         const activeConsumers = configuredConsumers
             .filter(group => Math.abs(Number(group.value || 0)) > 0)
@@ -5073,21 +5055,12 @@ HTML;
             'InverterCurrent',
             'InverterFrequency',
             'InverterTemperature',
-            'WallboxPower',
-            'WallboxEnergy',
             'OutsideTemperature',
         ] as $property) {
             $id = $this->ReadPropertyInteger($property);
             if ($id > 0) {
                 $ids[] = $id;
             }
-
-        $wallboxSoCVariableID = $this->ResolveVariableID(
-            $this->ReadPropertyInteger('WallboxSoC')
-        );
-        if ($wallboxSoCVariableID > 0) {
-            $ids[] = $wallboxSoCVariableID;
-        }
 
         }
 
@@ -5145,6 +5118,16 @@ HTML;
                 $dailyVariableID = (int) ($group['DailyVariableID'] ?? 0);
                 if ($dailyVariableID > 0) {
                     $ids[] = $dailyVariableID;
+                }
+
+                if ((bool) ($group['IsWallbox'] ?? false)) {
+                    $socVariableID = $this->ResolveVariableID(
+                        (int) ($group['SoCObjectID'] ?? 0)
+                    );
+
+                    if ($socVariableID > 0) {
+                        $ids[] = $socVariableID;
+                    }
                 }
             }
         }
@@ -5531,19 +5514,6 @@ HTML;
             }
         }
 
-        // Wallbox.
-        $wallboxSoC = $this->ReadWallboxSoC();
-
-        $wallbox = [
-            'name'    => $this->ReadPropertyString('WallboxName'),
-            'value'   => $this->ReadVar('WallboxPower'),
-            'energy'  => $this->ReadVarFormatted('WallboxEnergy'),
-            'energyValue' => $this->ReadVar('WallboxEnergy'),
-            'hasEnergy' => ($this->ReadPropertyInteger('WallboxEnergy') > 0 && IPS_VariableExists($this->ReadPropertyInteger('WallboxEnergy'))),
-            'socText' => $wallboxSoC['socText'],
-            'hasSoc'  => $wallboxSoC['hasSoc'],
-        ];
-
         // Verbrauchergruppen.
         $groups = [];
         $decoded = json_decode($this->ReadPropertyString('Groups'), true);
@@ -5559,6 +5529,24 @@ HTML;
                 $daily = $hasDaily ? GetValueFormatted($dailyVariableID) : '';
                 $dailyValue = $hasDaily ? (float) GetValue($dailyVariableID) : 0.0;
 
+                $isWallbox = (bool) ($group['IsWallbox'] ?? false);
+                $socObjectID = (int) ($group['SoCObjectID'] ?? 0);
+                $socVariableID = $isWallbox
+                    ? $this->ResolveVariableID($socObjectID)
+                    : 0;
+
+                $hasSoc =
+                    $socVariableID > 0 &&
+                    IPS_VariableExists($socVariableID);
+
+                $socText = '';
+                if ($hasSoc) {
+                    $socValue = GetValue($socVariableID);
+                    $socText = is_bool($socValue)
+                        ? ($socValue ? 'true' : 'false')
+                        : (string) $socValue;
+                }
+
                 $groups[] = [
                     'name'  => (string) ($group['Name'] ?? ''),
                     'icon'  => (string) ($group['Icon'] ?? 'plug'),
@@ -5567,8 +5555,47 @@ HTML;
                     'daily' => $daily,
                     'dailyValue' => $dailyValue,
                     'hasDaily' => $hasDaily,
+                    'isWallbox' => $isWallbox,
+                    'socText' => $socText,
+                    'hasSoc' => $hasSoc,
                 ];
             }
+        }
+
+        // Die erste als Wallbox markierte Verbraucherzeile liefert zusätzlich
+        // die Wallboxdaten für die Hausgrafik. In der technischen Ansicht bleibt
+        // sie ein ganz normaler Verbraucher und wird nach Leistung sortiert.
+        $wallbox = [
+            'name'        => 'Wallbox',
+            'value'       => 0.0,
+            'energy'      => '',
+            'energyValue' => 0.0,
+            'hasEnergy'   => false,
+            'socText'     => '',
+            'hasSoc'      => false,
+        ];
+
+        $hasWallbox = false;
+
+        foreach ($groups as $group) {
+            if (!($group['isWallbox'] ?? false)) {
+                continue;
+            }
+
+            $wallbox = [
+                'name'        => trim((string) ($group['name'] ?? '')) !== ''
+                    ? (string) $group['name']
+                    : 'Wallbox',
+                'value'       => (float) ($group['value'] ?? 0.0),
+                'energy'      => (string) ($group['daily'] ?? ''),
+                'energyValue' => (float) ($group['dailyValue'] ?? 0.0),
+                'hasEnergy'   => (bool) ($group['hasDaily'] ?? false),
+                'socText'     => (string) ($group['socText'] ?? ''),
+                'hasSoc'      => (bool) ($group['hasSoc'] ?? false),
+            ];
+
+            $hasWallbox = (bool) ($group['hasPower'] ?? false);
+            break;
         }
 
 
@@ -5695,10 +5722,7 @@ HTML;
             'houseEnergy'       => $houseEnergy,
             'houseEnergyAvailable' => $houseEnergyAvailable,
             'wallbox'          => $wallbox,
-            'hasWallbox'       => (
-                $this->ReadPropertyInteger('WallboxPower') > 0
-                && IPS_VariableExists($this->ReadPropertyInteger('WallboxPower'))
-            ),
+            'hasWallbox'       => $hasWallbox,
             'groups'           => $groups,
             'flowSpeedPercent' => $this->ReadPropertyInteger('FlowSpeedPercent'),
             'solarMaxPower'    => max(
