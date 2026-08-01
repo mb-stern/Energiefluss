@@ -3834,6 +3834,54 @@ class Energiefluss extends IPSModuleStrict
         return map[key] || key || 'plug';
     }
 
+    function fontAwesomeGlyph(icon) {
+        const fa = consumerIconToFontAwesome(icon);
+
+        // Font-Awesome-6-Free-Unicodewerte für die in IP-Symcon häufig
+        // verwendeten Verbraucher-Icons.
+        const glyphs = {
+            'plug': '\uf1e6',
+            'bolt': '\uf0e7',
+            'fire-burner': '\ue4f1',
+            'shirt': '\uf553',
+            'wind': '\uf72e',
+            'sink': '\ue06d',
+            'water': '\uf773',
+            'snowflake': '\uf2dc',
+            'lightbulb': '\uf0eb',
+            'fan': '\uf863',
+            'person-swimming': '\uf5c4',
+            'shower': '\uf2cc',
+            'temperature-high': '\uf769',
+            'temperature-arrow-up': '\ue040',
+            'tv': '\uf26c',
+            'desktop': '\uf390',
+            'server': '\uf233',
+            'mug-hot': '\uf7b6',
+            'car': '\uf1b9',
+            'charging-station': '\uf5e7',
+            'house': '\uf015',
+            'pump-soap': '\ue06b',
+            'droplet': '\uf043',
+            'kitchen-set': '\ue51a',
+            'toilet': '\uf7d8',
+            'bed': '\uf236',
+            'door-open': '\uf52b',
+            'warehouse': '\uf494',
+            'screwdriver-wrench': '\uf7d9',
+            'wifi': '\uf1eb',
+            'camera': '\uf030',
+            'music': '\uf001',
+            'gamepad': '\uf11b',
+            'mobile-screen': '\uf3cf',
+            'laptop': '\uf109',
+            'print': '\uf02f',
+            'vacuum': '\ue04d'
+        };
+
+        return glyphs[fa] || glyphs.plug;
+    }
+
     function applyAdditionalLoadIcons(card) {
         if (!card || !card.shadowRoot) return;
 
@@ -3860,71 +3908,83 @@ class Energiefluss extends IPSModuleStrict
                     continue;
                 }
 
-                const svg = box.ownerSVGElement;
-                if (!svg) {
+                const parent = box.parentNode;
+                if (!parent) {
                     continue;
                 }
 
-                const overlayId = `symcon-load-icon-${i}`;
-                let foreignObject = svg.querySelector?.(`#${overlayId}`);
+                const iconId = `symcon-load-icon-${i}`;
 
-                if (!foreignObject) {
-                    foreignObject = document.createElementNS(
-                        'http://www.w3.org/2000/svg',
-                        'foreignObject'
-                    );
-                    foreignObject.id = overlayId;
-                    foreignObject.setAttribute('pointer-events', 'none');
+                // Alte foreignObject-Version entfernen.
+                const ownerSvg = box.ownerSVGElement;
+                ownerSvg?.querySelectorAll?.(`#${iconId}`).forEach(node => {
+                    node.remove();
+                });
+                parent.querySelectorAll?.(`#${iconId}`).forEach(node => {
+                    node.remove();
+                });
 
-                    const wrapper = document.createElementNS(
-                        'http://www.w3.org/1999/xhtml',
-                        'div'
-                    );
-                    wrapper.style.width = '100%';
-                    wrapper.style.height = '100%';
-                    wrapper.style.display = 'flex';
-                    wrapper.style.alignItems = 'center';
-                    wrapper.style.justifyContent = 'center';
-                    wrapper.style.color = AC.room;
-                    wrapper.style.fontSize = '20px';
-                    wrapper.style.lineHeight = '1';
-
-                    const iconElement = document.createElement('i');
-                    iconElement.className = 'fa-solid fa-plug';
-                    iconElement.setAttribute('aria-hidden', 'true');
-
-                    wrapper.appendChild(iconElement);
-                    foreignObject.appendChild(wrapper);
-                    svg.appendChild(foreignObject);
+                if (!icons[i - 1]) {
+                    continue;
                 }
 
-                // Icon im oberen Teil der Verbraucherbox platzieren, ohne Name
-                // oder Leistungswert zu überdecken.
-                foreignObject.setAttribute(
+                // SVG-Text direkt in derselben Gruppe wie die Verbraucherbox
+                // einfügen. Dadurch werden vorhandene Transformationen der
+                // Originalkarte automatisch übernommen.
+                const iconNode = document.createElementNS(
+                    'http://www.w3.org/2000/svg',
+                    'text'
+                );
+
+                iconNode.id = iconId;
+                iconNode.textContent = fontAwesomeGlyph(icons[i - 1]);
+                iconNode.setAttribute(
                     'x',
-                    String(bbox.x + (bbox.width / 2) - 12)
+                    String(bbox.x + (bbox.width / 2))
                 );
-                foreignObject.setAttribute(
+                iconNode.setAttribute(
                     'y',
-                    String(bbox.y + 5)
+                    String(bbox.y + 21)
                 );
-                foreignObject.setAttribute('width', '24');
-                foreignObject.setAttribute('height', '24');
+                iconNode.setAttribute('text-anchor', 'middle');
+                iconNode.setAttribute('dominant-baseline', 'middle');
+                iconNode.setAttribute('pointer-events', 'none');
+                iconNode.setAttribute('fill', AC.room);
+                iconNode.setAttribute('font-size', '18');
+                iconNode.setAttribute('font-weight', '900');
+                iconNode.setAttribute(
+                    'font-family',
+                    '"Font Awesome 6 Free", "Font Awesome 5 Free"'
+                );
 
-                const iconElement =
-                    foreignObject.querySelector?.('i');
+                iconNode.style.setProperty(
+                    'fill',
+                    AC.room,
+                    'important'
+                );
+                iconNode.style.setProperty(
+                    'color',
+                    AC.room,
+                    'important'
+                );
+                iconNode.style.setProperty(
+                    'font-family',
+                    '"Font Awesome 6 Free", "Font Awesome 5 Free"',
+                    'important'
+                );
+                iconNode.style.setProperty(
+                    'font-weight',
+                    '900',
+                    'important'
+                );
 
-                if (iconElement) {
-                    const fa = consumerIconToFontAwesome(
-                        icons[i - 1] || 'mdi:power-plug'
-                    );
-                    iconElement.className = `fa-solid fa-${fa}`;
-                    iconElement.style.color = AC.room;
-                    iconElement.style.fontSize = '20px';
+                // Direkt hinter der Box einfügen, damit das Symbol sichtbar
+                // bleibt, aber Name und Wattwert weiterhin darüber liegen.
+                if (box.nextSibling) {
+                    parent.insertBefore(iconNode, box.nextSibling);
+                } else {
+                    parent.appendChild(iconNode);
                 }
-
-                foreignObject.style.display =
-                    icons[i - 1] ? '' : 'none';
             }
         }
     }
