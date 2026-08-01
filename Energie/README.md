@@ -88,8 +88,7 @@ Beide Ansichten können direkt innerhalb der Visualisierung umgeschaltet werden.
 
 ### ☀️ Photovoltaik
 
-- mehrere PV-Anlagen
-- beliebig viele Strings
+- Bis zu **6 PV-Strings / PV-Eingänge**
 - aktuelle Leistung
 - Energie
 - Solarprognose
@@ -97,7 +96,7 @@ Beide Ansichten können direkt innerhalb der Visualisierung umgeschaltet werden.
 
 ### 🔋 Batteriespeicher
 
-- mehrere Batterien
+- Bis zu **2 Batteriespeicher**
 - Lade-/Entladeleistung
 - SOC
 - Lade- und Entladeenergie
