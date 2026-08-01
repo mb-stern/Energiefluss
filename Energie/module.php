@@ -3824,7 +3824,31 @@ class Energiefluss extends IPSModuleStrict
             'server': 'server',
             'coffee-maker': 'mug-hot',
             'car-electric': 'car',
-            'ev-station': 'charging-station'
+            'ev-station': 'charging-station',
+            'air-conditioner': 'wind',
+            'microwave': 'box',
+            'toaster': 'bread-slice',
+            'kettle': 'mug-hot',
+            'power-socket-eu': 'plug',
+            'lightning-bolt': 'bolt',
+            'water-thermometer': 'temperature-half',
+            'floor-lamp': 'lightbulb',
+            'ceiling-light': 'lightbulb',
+            'thermometer-high': 'temperature-high',
+            'laptop': 'laptop',
+            'printer': 'print',
+            'wifi': 'wifi',
+            'cctv': 'video',
+            'garage': 'warehouse',
+            'warehouse': 'warehouse',
+            'door-open': 'door-open',
+            'bed': 'bed',
+            'toilet': 'toilet',
+            'vacuum': 'broom',
+            'music': 'music',
+            'gamepad-variant': 'gamepad',
+            'home': 'house',
+            'home-outline': 'house'
         };
 
         if (raw.startsWith('symcon:')) {
@@ -3837,95 +3861,63 @@ class Energiefluss extends IPSModuleStrict
     function applyAdditionalLoadIcons(card) {
         if (!card || !card.shadowRoot) return;
 
-        const icons = Array.isArray(window.__symconVisibleConsumerIcons)
-            ? window.__symconVisibleConsumerIcons
-            : [];
-
         const roots = getOpenShadowRoots(card.shadowRoot);
 
         for (const root of roots) {
-            for (let i = 1; i <= 6; i++) {
-                const box =
-                    root.querySelector?.(`[id="es-load${i}"]`) ||
-                    root.querySelector?.(`[id="ess-load${i}"]`);
+            /*
+             * Sunsynk rendert MDI-Icons als <ha-icon> innerhalb eines
+             * SVG-foreignObject. In IP-Symcon fehlt jedoch der vollständige
+             * Home-Assistant-Iconrenderer. Darum ersetzen wir jedes gerenderte
+             * ha-icon durch ein normales Font-Awesome-Element aus /icons.js.
+             *
+             * Das geschieht erst NACH dem Sunsynk-Render und funktioniert
+             * deshalb in Compact, Lite, Full und den Wide-Ansichten.
+             */
+            root.querySelectorAll?.('ha-icon').forEach(haIcon => {
+                const rawIcon = String(
+                    haIcon.getAttribute?.('icon') ||
+                    haIcon.icon ||
+                    ''
+                ).trim();
 
-                if (!box || typeof box.getBBox !== 'function') {
-                    continue;
+                if (!rawIcon) {
+                    return;
                 }
 
-                let bbox;
-                try {
-                    bbox = box.getBBox();
-                } catch (_) {
-                    continue;
-                }
+                const faName = consumerIconToFontAwesome(rawIcon);
+                const replacement = document.createElement('span');
 
-                const svg = box.ownerSVGElement;
-                if (!svg) {
-                    continue;
-                }
+                replacement.className =
+                    `${haIcon.className || ''} symcon-ha-icon-replacement`;
 
-                const overlayId = `symcon-load-icon-${i}`;
-                let foreignObject = svg.querySelector?.(`#${overlayId}`);
+                replacement.setAttribute('data-icon', rawIcon);
+                replacement.style.display = 'flex';
+                replacement.style.alignItems = 'center';
+                replacement.style.justifyContent = 'center';
+                replacement.style.width = '100%';
+                replacement.style.height = '100%';
+                replacement.style.minWidth = '1em';
+                replacement.style.minHeight = '1em';
+                replacement.style.boxSizing = 'border-box';
+                replacement.style.color = 'inherit';
+                replacement.style.lineHeight = '1';
+                replacement.style.overflow = 'visible';
+                replacement.style.pointerEvents = 'none';
 
-                if (!foreignObject) {
-                    foreignObject = document.createElementNS(
-                        'http://www.w3.org/2000/svg',
-                        'foreignObject'
-                    );
-                    foreignObject.id = overlayId;
-                    foreignObject.setAttribute('pointer-events', 'none');
+                const icon = document.createElement('i');
+                icon.className = `fa-solid fa-${faName}`;
+                icon.setAttribute('aria-hidden', 'true');
+                icon.style.display = 'inline-block';
+                icon.style.fontSize = '24px';
+                icon.style.lineHeight = '1';
+                icon.style.color = 'inherit';
+                icon.style.width = '1em';
+                icon.style.height = '1em';
+                icon.style.textAlign = 'center';
 
-                    const wrapper = document.createElementNS(
-                        'http://www.w3.org/1999/xhtml',
-                        'div'
-                    );
-                    wrapper.style.width = '100%';
-                    wrapper.style.height = '100%';
-                    wrapper.style.display = 'flex';
-                    wrapper.style.alignItems = 'center';
-                    wrapper.style.justifyContent = 'center';
-                    wrapper.style.color = AC.room;
-                    wrapper.style.fontSize = '20px';
-                    wrapper.style.lineHeight = '1';
-
-                    const iconElement = document.createElement('i');
-                    iconElement.className = 'fa-solid fa-plug';
-                    iconElement.setAttribute('aria-hidden', 'true');
-
-                    wrapper.appendChild(iconElement);
-                    foreignObject.appendChild(wrapper);
-                    svg.appendChild(foreignObject);
-                }
-
-                // Icon im oberen Teil der Verbraucherbox platzieren, ohne Name
-                // oder Leistungswert zu überdecken.
-                foreignObject.setAttribute(
-                    'x',
-                    String(bbox.x + (bbox.width / 2) - 12)
-                );
-                foreignObject.setAttribute(
-                    'y',
-                    String(bbox.y + 5)
-                );
-                foreignObject.setAttribute('width', '24');
-                foreignObject.setAttribute('height', '24');
-
-                const iconElement =
-                    foreignObject.querySelector?.('i');
-
-                if (iconElement) {
-                    const fa = consumerIconToFontAwesome(
-                        icons[i - 1] || 'mdi:power-plug'
-                    );
-                    iconElement.className = `fa-solid fa-${fa}`;
-                    iconElement.style.color = AC.room;
-                    iconElement.style.fontSize = '20px';
-                }
-
-                foreignObject.style.display =
-                    icons[i - 1] ? '' : 'none';
-            }
+                replacement.appendChild(icon);
+                haIcon.replaceWith(replacement);
+            });
         }
     }
 
