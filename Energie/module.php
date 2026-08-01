@@ -26,6 +26,7 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyString('Producers', '[]');
         $this->RegisterPropertyString('Batteries', '[]');
         $this->RegisterPropertyInteger('OutsideTemperature', 0);
+        $this->RegisterPropertyInteger('SolarForecastRemaining', 0);
 
         // Netz.
         $this->RegisterPropertyInteger('L1', 0);
@@ -171,6 +172,11 @@ class Energiefluss extends IPSModuleStrict
                             'type'    => 'SelectVariable',
                             'name'    => 'OutsideTemperature',
                             'caption' => 'Außentemperatur (optional, Anzeige bei der Sonne)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'SolarForecastRemaining',
+                            'caption' => 'Solarprognose verbleibend heute (kWh, optional)',
                         ],
                         [
                             'type'     => 'List',
@@ -3070,7 +3076,16 @@ class Energiefluss extends IPSModuleStrict
             );
         });
 
-        if (activePvs.some(pv => pv.hasEnergy)) addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+        if (activePvs.some(pv => pv.hasEnergy)) {
+            addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
+        }
+
+        addEntity(
+            'remaining_solar',
+            'sensor.symcon_solar_forecast_remaining',
+            entityAvailable(d, 'solarForecastRemaining')
+        );
+
         addEntity(
             'environment_temp',
             'sensor.symcon_outside_temperature',
@@ -3149,7 +3164,7 @@ class Energiefluss extends IPSModuleStrict
                 // konfigurierten Maximalleistungen addiert.
                 max_power: Math.max(1, Number(d.solarMaxPower || 1)),
                 auto_scale: false,
-                display_mode: 1,
+                display_mode: entityAvailable(d, 'solarForecastRemaining') ? 2 : 1,
 
                 // Prozent-/Effizienzanzeige pro einzelner PV-Anlage.
                 // Die Originalkarte berechnet damit:
@@ -3319,6 +3334,10 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_wallbox': ssState(wallbox?.value || 0, 'W'),
             'sensor.symcon_wallbox_energy': ssState(wallbox?.energyValue || 0, 'kWh'),
             'sensor.symcon_pv_energy': ssState(pvEnergyTotal, 'kWh'),
+            'sensor.symcon_solar_forecast_remaining': ssState(
+                d.solarForecastRemaining || 0,
+                'kWh'
+            ),
             'sensor.symcon_outside_temperature': ssState(
                 d.outsideTemperature || 0,
                 '°C'
@@ -5195,6 +5214,7 @@ HTML;
             'InverterFrequency',
             'InverterTemperature',
             'OutsideTemperature',
+            'SolarForecastRemaining',
         ] as $property) {
             $id = $this->ReadPropertyInteger($property);
             if ($id > 0) {
@@ -5832,6 +5852,9 @@ HTML;
             'inverterCurrentL3' => $this->ReadVar('InverterCurrentL3'),
             'inverterPowerAvailable' => $inverterPowerAvailable,
             'outsideTemperature' => $this->ReadVar('OutsideTemperature'),
+            'solarForecastRemaining' => $this->ReadVar(
+                'SolarForecastRemaining'
+            ),
             'inverterVoltage'  => $this->ReadVar('InverterVoltage'),
             'inverterCurrent'  => $this->ReadVar('InverterCurrent'),
             'inverterFrequency'=> $this->ReadVar('InverterFrequency'),
@@ -5853,6 +5876,12 @@ HTML;
                 'outsideTemperature' => (
                     $this->ReadPropertyInteger('OutsideTemperature') > 0
                     && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
+                ),
+                'solarForecastRemaining' => (
+                    $this->ReadPropertyInteger('SolarForecastRemaining') > 0
+                    && IPS_VariableExists(
+                        $this->ReadPropertyInteger('SolarForecastRemaining')
+                    )
                 ),
             ],
             'gridImportEnergy' => $this->ReadVarFormatted('GridImportEnergy'),
