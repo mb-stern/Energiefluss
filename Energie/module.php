@@ -439,6 +439,11 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'InverterCurrentL2', 'caption' => 'Wechselrichterstrom Phase L2 (A)'],
                         ['type' => 'SelectVariable', 'name' => 'InverterCurrentL3', 'caption' => 'Wechselrichterstrom Phase L3 (A)'],
                         [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'InverterTemperature',
+                            'caption' => 'Wechselrichtertemperatur (°C, optional)',
+                        ],
+                        [
                             'type'    => 'Select',
                             'name'    => 'HouseCalculationMode',
                             'caption' => 'Berechnung Hausverbrauch',
@@ -3027,6 +3032,11 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_inverter',
             entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable
         );
+        addEntity(
+            'inverter_temp_91',
+            'sensor.symcon_inverter_temperature',
+            entityAvailable(d, 'inverterTemperature')
+        );
         addEntity('inverter_current_164', 'sensor.symcon_inverter_current_l1', entityAvailable(d, 'inverterCurrentL1'));
         addEntity('inverter_current_L2', 'sensor.symcon_inverter_current_l2', entityAvailable(d, 'inverterCurrentL2'));
         addEntity('inverter_current_L3', 'sensor.symcon_inverter_current_l3', entityAvailable(d, 'inverterCurrentL3'));
@@ -3342,6 +3352,10 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_grid_frequency': ssState(d.gridFrequency || 0, 'Hz'),
             'sensor.symcon_home': ssState(haus || 0, 'W'),
             'sensor.symcon_inverter': ssState(d.inverterPower || 0, 'W'),
+            'sensor.symcon_inverter_temperature': ssState(
+                d.inverterTemperature || 0,
+                '°C'
+            ),
             'sensor.symcon_inverter_current_l1': ssState(d.inverterCurrentL1 || 0, 'A'),
             'sensor.symcon_inverter_current_l2': ssState(d.inverterCurrentL2 || 0, 'A'),
             'sensor.symcon_inverter_current_l3': ssState(d.inverterCurrentL3 || 0, 'A'),
@@ -5890,6 +5904,12 @@ HTML;
                 'outsideTemperature' => (
                     $this->ReadPropertyInteger('OutsideTemperature') > 0
                     && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
+                ),
+                'inverterTemperature' => (
+                    $this->ReadPropertyInteger('InverterTemperature') > 0
+                    && IPS_VariableExists(
+                        $this->ReadPropertyInteger('InverterTemperature')
+                    )
                 ),
                 'solarForecastRemaining' => (
                     $this->ReadPropertyInteger('SolarForecastRemaining') > 0
