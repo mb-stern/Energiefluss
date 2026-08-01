@@ -1424,8 +1424,8 @@ class Energiefluss extends IPSModuleStrict
     </div>
 
     <div id="display-mode-bar">
-        <button id="technical-layout-button" type="button" title="Technikansicht wechseln" aria-label="Technikansicht wechseln">◫</button>
-        <button id="technical-wide-button" type="button" title="Wide-Ansicht umschalten" aria-label="Wide-Ansicht umschalten">↔</button>
+        <button id="technical-layout-button" type="button" title="Technikansicht wechseln" aria-label="Technikansicht wechseln">L</button>
+        <button id="technical-wide-button" type="button" title="Wide-Ansicht umschalten" aria-label="Wide-Ansicht umschalten">⬌</button>
         <button id="display-mode-button" type="button" title="Ansicht wechseln" aria-label="Ansicht wechseln">⇄</button>
     </div>
 </div>
@@ -4580,9 +4580,9 @@ class Energiefluss extends IPSModuleStrict
 
         if (layoutButton) {
             const labels = {
-                compact: '▣',
-                lite: '◫',
-                full: '⛶'
+                compact: 'C',
+                lite: 'L',
+                full: 'F'
             };
 
             layoutButton.textContent = labels[baseLayout] || 'Lite';
@@ -4598,7 +4598,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         if (wideButton) {
-            wideButton.textContent = '↔';
+            wideButton.textContent = '⬌';
             wideButton.classList.toggle('active', isWide);
             wideButton.title = isWide
                 ? 'Wide-Ansicht ausschalten'
