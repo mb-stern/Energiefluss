@@ -3240,7 +3240,7 @@ class Energiefluss extends IPSModuleStrict
                 auto_scale: false,
                 additional_loads: activeGroups.length,
                 aux_loads: 0,
-                essential_name: 'Hausverbrauch',
+                essential_name: 'Haus',
                 load1_name: activeGroups[0]?.name || '', load2_name: activeGroups[1]?.name || '',
                 load3_name: activeGroups[2]?.name || '', load4_name: activeGroups[3]?.name || '',
                 load5_name: activeGroups[4]?.name || '', load6_name: activeGroups[5]?.name || '',
