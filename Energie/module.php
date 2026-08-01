@@ -494,7 +494,7 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorGridExport', 'caption' => 'Netzeinspeisung', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryCharge', 'caption' => 'Batterie laden', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
-                        ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Weitere Verbraucher', 'allowTransparent' => false],
+                        ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Verbraucher', 'allowTransparent' => false],
                         [
                             'type' => 'HorizontalSlider',
                             'name' => 'FlowSpeedPercent',
@@ -3311,6 +3311,7 @@ class Energiefluss extends IPSModuleStrict
         applyAdditionalLoadIcons(card);
         applyTechnicalBatteryColours(card, d);
         applyHouseLoadWattColour(card, d);
+        applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
@@ -3325,6 +3326,10 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 applyHouseLoadWattColour(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyInverterVisualColour(
                     card,
                     card.__symconLastData || d
                 );
@@ -3352,6 +3357,10 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     applyHouseLoadWattColour(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyInverterVisualColour(
                         card,
                         card.__symconLastData || d
                     );
@@ -3919,6 +3928,135 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
+    function applyInverterVisualColour(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const inverterColour =
+            d.houseColors?.inverter ||
+            d.colors?.inverter ||
+            AC.inverter;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        const colourText = node => {
+            if (!node) return;
+
+            node.setAttribute?.('fill', inverterColour);
+            node.setAttribute?.('color', inverterColour);
+            node.style?.setProperty('fill', inverterColour, 'important');
+            node.style?.setProperty('color', inverterColour, 'important');
+
+            node.querySelectorAll?.('tspan').forEach(tspan => {
+                tspan.setAttribute?.('fill', inverterColour);
+                tspan.style?.setProperty(
+                    'fill',
+                    inverterColour,
+                    'important'
+                );
+                tspan.style?.setProperty(
+                    'color',
+                    inverterColour,
+                    'important'
+                );
+            });
+        };
+
+        for (const root of roots) {
+            const inverterContainers = new Set();
+
+            [
+                '#inverter',
+                '#inverter_main',
+                '#inverter-main',
+                '#inverter_data',
+                '#inverter-data',
+                '[id*="inverter"]'
+            ].forEach(selector => {
+                root.querySelectorAll?.(selector).forEach(node => {
+                    inverterContainers.add(node);
+                });
+            });
+
+            inverterContainers.forEach(container => {
+                const id = String(container.id || '').toLowerCase();
+
+                // Nur echte Wechselrichterbereiche, keine Sensornamen außerhalb
+                // der grafischen WR-Box.
+                if (
+                    id.includes('current') ||
+                    id.includes('voltage') ||
+                    id.includes('power')
+                ) {
+                    const tag = String(container.tagName || '').toLowerCase();
+
+                    if (tag === 'text' || tag === 'tspan') {
+                        colourText(container);
+                    }
+                }
+
+                // Rahmen der Leistungs-/Messwertboxen.
+                container.querySelectorAll?.(
+                    'rect, path, polygon, polyline'
+                ).forEach(shape => {
+                    const shapeId = String(shape.id || '').toLowerCase();
+                    const fill = String(
+                        shape.getAttribute?.('fill') || ''
+                    ).toLowerCase();
+
+                    const isBoxOrOutline =
+                        shapeId.includes('box') ||
+                        shapeId.includes('data') ||
+                        fill === 'none' ||
+                        fill === 'transparent';
+
+                    if (isBoxOrOutline) {
+                        shape.setAttribute?.('stroke', inverterColour);
+                        shape.style?.setProperty(
+                            'stroke',
+                            inverterColour,
+                            'important'
+                        );
+                    }
+                });
+
+                // Wechselrichtersymbol und seine Konturen.
+                container.querySelectorAll?.(
+                    '[id*="icon"] path, [id*="icon"] rect, ' +
+                    '[id*="icon"] polygon, [id*="icon"] polyline, ' +
+                    '.inverter-icon path, .inverter-icon rect, ' +
+                    '.inverter-icon polygon, .inverter-icon polyline'
+                ).forEach(shape => {
+                    shape.setAttribute?.('stroke', inverterColour);
+                    shape.style?.setProperty(
+                        'stroke',
+                        inverterColour,
+                        'important'
+                    );
+
+                    const fill = shape.getAttribute?.('fill');
+                    if (
+                        fill &&
+                        fill !== 'none' &&
+                        !String(fill).startsWith('url(')
+                    ) {
+                        shape.setAttribute?.('fill', inverterColour);
+                        shape.style?.setProperty(
+                            'fill',
+                            inverterColour,
+                            'important'
+                        );
+                    }
+                });
+
+                // Sämtliche Texte innerhalb der WR-Box:
+                // Leistung, Ströme, Spannungen und Beschriftungen.
+                container.querySelectorAll?.('text, tspan').forEach(node => {
+                    colourText(node);
+                });
+            });
+        }
+    }
+
     function applyHouseLoadWattColour(card, d) {
         if (!card || !card.shadowRoot || !d) return;
 
@@ -4106,14 +4244,14 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot) return;
 
         const roots = getOpenShadowRoots(card.shadowRoot);
-        const consumerColour = AC.room; // Konfiguration „Weitere Verbraucher“
+        const consumerColour = AC.room; // Konfiguration „Verbraucher“
 
         // Die zusätzlichen Verbraucher load1 ... load6 behalten ihre
-        // konfigurierte Farbe „Weitere Verbraucher“. Hausverbrauch und
+        // konfigurierte Farbe „Verbraucher“. Hausverbrauch und
         // Haussymbol werden separat dynamisch nach Hauptquelle eingefärbt.
         for (const root of roots) {
             // Nur die Watt-Leistungswerte in den Verbraucherboxen dauerhaft
-            // auf die konfigurierte Farbe „Weitere Verbraucher“ festlegen.
+            // auf die konfigurierte Farbe „Verbraucher“ festlegen.
             // Die Original-Card setzt diese Texte bei Aktualisierungen erneut,
             // deshalb erfolgt die Korrektur zusätzlich über eine lokale CSS-Regel.
             if (!root.getElementById?.('symcon-additional-load-watt-colours')) {
@@ -4157,7 +4295,7 @@ class Energiefluss extends IPSModuleStrict
                     const id = String(node.id || '');
 
                     // Die Wertebox bleibt ungefüllt; nur ihr Rahmen bekommt
-                    // die Farbe „Weitere Verbraucher“.
+                    // die Farbe „Verbraucher“.
                     if (tag === 'rect' && id === `es-load${i}`) {
                         node.setAttribute?.('fill', 'none');
                         node.style?.setProperty('fill', 'none', 'important');
