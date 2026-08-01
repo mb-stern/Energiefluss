@@ -3006,12 +3006,55 @@ class Energiefluss extends IPSModuleStrict
                     height / vbHeight
                 ) * iconScaleFactor;
 
+                // Kleiner vertikaler Abstand zur Leistungsbox:
+                // das Icon 3 px nach oben verschieben.
+                const iconOffsetY = -3;
+
+                /*
+                 * Icon horizontal auf die Mitte der zugehörigen Leistungsbox
+                 * ausrichten. Falls die Box nicht ermittelt werden kann,
+                 * bleibt die von Sunsynk vorgegebene Mitte erhalten.
+                 */
+                const iconCenterX = x + (width / 2);
+                let targetCenterX = iconCenterX;
+
+                const loadBoxes = Array.from(
+                    svgParent.querySelectorAll?.(
+                        'rect[id^="es-load"], rect[id^="ess-load"]'
+                    ) || []
+                );
+
+                let closestDistance = Number.POSITIVE_INFINITY;
+
+                loadBoxes.forEach(boxNode => {
+                    try {
+                        const box = boxNode.getBBox();
+                        const boxCenterX = box.x + (box.width / 2);
+                        const boxCenterY = box.y + (box.height / 2);
+                        const iconCenterY = y + (height / 2);
+
+                        const distance =
+                            Math.abs(boxCenterX - iconCenterX) +
+                            Math.abs(boxCenterY - iconCenterY);
+
+                        if (distance < closestDistance) {
+                            closestDistance = distance;
+                            targetCenterX = boxCenterX;
+                        }
+                    } catch (_) {
+                        // Ungültige SVG-Geometrien ignorieren.
+                    }
+                });
+
                 const translateX =
-                    x + ((width - (vbWidth * scale)) / 2) -
+                    targetCenterX -
+                    ((vbWidth * scale) / 2) -
                     (vbX * scale);
+
                 const translateY =
                     y + ((height - (vbHeight * scale)) / 2) -
-                    (vbY * scale);
+                    (vbY * scale) +
+                    iconOffsetY;
 
                 if (!foreignObject.dataset.symconIconId) {
                     foreignObject.dataset.symconIconId =
@@ -3635,6 +3678,7 @@ class Energiefluss extends IPSModuleStrict
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
+        alignConsumerNamesToPowerBoxes(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyTechnicalBatteryColours(card, d);
         applyHouseLoadWattColour(card, d);
@@ -3647,7 +3691,8 @@ class Energiefluss extends IPSModuleStrict
         // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
-                                applyAdditionalLoadWattColourByGeometry(card);
+                alignConsumerNamesToPowerBoxes(card);
+                applyAdditionalLoadWattColourByGeometry(card);
                         applyTechnicalBatteryColours(
                     card,
                     card.__symconLastData || d
@@ -3681,7 +3726,8 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
-                                            applyAdditionalLoadWattColourByGeometry(card);
+                    alignConsumerNamesToPowerBoxes(card);
+                    applyAdditionalLoadWattColourByGeometry(card);
                                 applyTechnicalBatteryColours(
                         card,
                         card.__symconLastData || d
@@ -4456,6 +4502,138 @@ class Energiefluss extends IPSModuleStrict
                 ) {
                     colourText(node);
                 }
+            });
+        }
+    }
+
+    function alignConsumerNamesToPowerBoxes(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            const boxes = [];
+
+            root.querySelectorAll?.(
+                'rect[id^="es-load"], rect[id^="ess-load"]'
+            ).forEach(rect => {
+                try {
+                    const box = rect.getBBox();
+
+                    if (box.width > 0 && box.height > 0) {
+                        boxes.push({
+                            node: rect,
+                            box,
+                            centerX: box.x + (box.width / 2)
+                        });
+                    }
+                } catch (_) {
+                    // Unsichtbare oder noch nicht aufgebaute SVG-Knoten.
+                }
+            });
+
+            if (!boxes.length) {
+                continue;
+            }
+
+            root.querySelectorAll?.('text').forEach(textNode => {
+                const value = String(
+                    textNode.textContent || ''
+                ).trim();
+
+                if (
+                    !value ||
+                    value === 'Haus' ||
+                    value === 'Hausverbrauch' ||
+                    /[-+]?\d[\d.,'’\s]*\s*(?:W|kW|kWh)$/i.test(value)
+                ) {
+                    return;
+                }
+
+                let textBox;
+
+                try {
+                    textBox = textNode.getBBox();
+                } catch (_) {
+                    return;
+                }
+
+                const textCenterX =
+                    textBox.x + (textBox.width / 2);
+                const textCenterY =
+                    textBox.y + (textBox.height / 2);
+
+                let closest = null;
+                let closestDistance =
+                    Number.POSITIVE_INFINITY;
+
+                boxes.forEach(candidate => {
+                    const box = candidate.box;
+
+                    // Nur Beschriftungen in einem sinnvollen Bereich
+                    // unmittelbar über oder unter der Verbraucherbox.
+                    const verticalDistance = Math.min(
+                        Math.abs(textCenterY - box.y),
+                        Math.abs(
+                            textCenterY -
+                            (box.y + box.height)
+                        )
+                    );
+
+                    const horizontalDistance = Math.abs(
+                        textCenterX - candidate.centerX
+                    );
+
+                    if (
+                        verticalDistance > 55 ||
+                        horizontalDistance > 90
+                    ) {
+                        return;
+                    }
+
+                    const distance =
+                        verticalDistance +
+                        horizontalDistance;
+
+                    if (distance < closestDistance) {
+                        closestDistance = distance;
+                        closest = candidate;
+                    }
+                });
+
+                if (!closest) {
+                    return;
+                }
+
+                textNode.setAttribute(
+                    'x',
+                    String(closest.centerX)
+                );
+                textNode.setAttribute(
+                    'text-anchor',
+                    'middle'
+                );
+                textNode.style?.setProperty(
+                    'text-anchor',
+                    'middle',
+                    'important'
+                );
+
+                textNode.querySelectorAll?.('tspan').forEach(tspan => {
+                    tspan.setAttribute(
+                        'x',
+                        String(closest.centerX)
+                    );
+                    tspan.setAttribute(
+                        'text-anchor',
+                        'middle'
+                    );
+                    tspan.style?.setProperty(
+                        'text-anchor',
+                        'middle',
+                        'important'
+                    );
+                });
             });
         }
     }
