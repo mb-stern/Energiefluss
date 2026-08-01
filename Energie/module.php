@@ -3834,6 +3834,54 @@ class Energiefluss extends IPSModuleStrict
         return map[key] || key || 'plug';
     }
 
+    function fontAwesomeGlyph(icon) {
+        const fa = consumerIconToFontAwesome(icon);
+
+        // Font-Awesome-6-Free-Unicodewerte für die in IP-Symcon häufig
+        // verwendeten Verbraucher-Icons.
+        const glyphs = {
+            'plug': '\uf1e6',
+            'bolt': '\uf0e7',
+            'fire-burner': '\ue4f1',
+            'shirt': '\uf553',
+            'wind': '\uf72e',
+            'sink': '\ue06d',
+            'water': '\uf773',
+            'snowflake': '\uf2dc',
+            'lightbulb': '\uf0eb',
+            'fan': '\uf863',
+            'person-swimming': '\uf5c4',
+            'shower': '\uf2cc',
+            'temperature-high': '\uf769',
+            'temperature-arrow-up': '\ue040',
+            'tv': '\uf26c',
+            'desktop': '\uf390',
+            'server': '\uf233',
+            'mug-hot': '\uf7b6',
+            'car': '\uf1b9',
+            'charging-station': '\uf5e7',
+            'house': '\uf015',
+            'pump-soap': '\ue06b',
+            'droplet': '\uf043',
+            'kitchen-set': '\ue51a',
+            'toilet': '\uf7d8',
+            'bed': '\uf236',
+            'door-open': '\uf52b',
+            'warehouse': '\uf494',
+            'screwdriver-wrench': '\uf7d9',
+            'wifi': '\uf1eb',
+            'camera': '\uf030',
+            'music': '\uf001',
+            'gamepad': '\uf11b',
+            'mobile-screen': '\uf3cf',
+            'laptop': '\uf109',
+            'print': '\uf02f',
+            'vacuum': '\ue04d'
+        };
+
+        return glyphs[fa] || glyphs.plug;
+    }
+
     function applyAdditionalLoadIcons(card) {
         if (!card || !card.shadowRoot) return;
 
@@ -3860,338 +3908,84 @@ class Energiefluss extends IPSModuleStrict
                     continue;
                 }
 
-                const svg = box.ownerSVGElement;
-                if (!svg) {
+                const parent = box.parentNode;
+                if (!parent) {
                     continue;
                 }
 
-                const overlayId = `symcon-load-icon-${i}`;
-                let foreignObject = svg.querySelector?.(`#${overlayId}`);
+                const iconId = `symcon-load-icon-${i}`;
 
-                if (!foreignObject) {
-                    foreignObject = document.createElementNS(
-                        'http://www.w3.org/2000/svg',
-                        'foreignObject'
-                    );
-                    foreignObject.id = overlayId;
-                    foreignObject.setAttribute('pointer-events', 'none');
+                // Alte foreignObject-Version entfernen.
+                const ownerSvg = box.ownerSVGElement;
+                ownerSvg?.querySelectorAll?.(`#${iconId}`).forEach(node => {
+                    node.remove();
+                });
+                parent.querySelectorAll?.(`#${iconId}`).forEach(node => {
+                    node.remove();
+                });
 
-                    const wrapper = document.createElementNS(
-                        'http://www.w3.org/1999/xhtml',
-                        'div'
-                    );
-                    wrapper.style.width = '100%';
-                    wrapper.style.height = '100%';
-                    wrapper.style.display = 'flex';
-                    wrapper.style.alignItems = 'center';
-                    wrapper.style.justifyContent = 'center';
-                    wrapper.style.color = AC.room;
-                    wrapper.style.fontSize = '20px';
-                    wrapper.style.lineHeight = '1';
-
-                    const iconElement = document.createElement('i');
-                    iconElement.className = 'fa-solid fa-plug';
-                    iconElement.setAttribute('aria-hidden', 'true');
-
-                    wrapper.appendChild(iconElement);
-                    foreignObject.appendChild(wrapper);
-                    svg.appendChild(foreignObject);
+                if (!icons[i - 1]) {
+                    continue;
                 }
 
-                // Icon im oberen Teil der Verbraucherbox platzieren, ohne Name
-                // oder Leistungswert zu überdecken.
-                foreignObject.setAttribute(
+                // SVG-Text direkt in derselben Gruppe wie die Verbraucherbox
+                // einfügen. Dadurch werden vorhandene Transformationen der
+                // Originalkarte automatisch übernommen.
+                const iconNode = document.createElementNS(
+                    'http://www.w3.org/2000/svg',
+                    'text'
+                );
+
+                iconNode.id = iconId;
+                iconNode.textContent = fontAwesomeGlyph(icons[i - 1]);
+                iconNode.setAttribute(
                     'x',
-                    String(bbox.x + (bbox.width / 2) - 12)
+                    String(bbox.x + (bbox.width / 2))
                 );
-                foreignObject.setAttribute(
+                iconNode.setAttribute(
                     'y',
-                    String(bbox.y + 5)
+                    String(bbox.y + 21)
                 );
-                foreignObject.setAttribute('width', '24');
-                foreignObject.setAttribute('height', '24');
+                iconNode.setAttribute('text-anchor', 'middle');
+                iconNode.setAttribute('dominant-baseline', 'middle');
+                iconNode.setAttribute('pointer-events', 'none');
+                iconNode.setAttribute('fill', AC.room);
+                iconNode.setAttribute('font-size', '18');
+                iconNode.setAttribute('font-weight', '900');
+                iconNode.setAttribute(
+                    'font-family',
+                    '"Font Awesome 6 Free", "Font Awesome 5 Free"'
+                );
 
-                const iconElement =
-                    foreignObject.querySelector?.('i');
+                iconNode.style.setProperty(
+                    'fill',
+                    AC.room,
+                    'important'
+                );
+                iconNode.style.setProperty(
+                    'color',
+                    AC.room,
+                    'important'
+                );
+                iconNode.style.setProperty(
+                    'font-family',
+                    '"Font Awesome 6 Free", "Font Awesome 5 Free"',
+                    'important'
+                );
+                iconNode.style.setProperty(
+                    'font-weight',
+                    '900',
+                    'important'
+                );
 
-                if (iconElement) {
-                    const fa = consumerIconToFontAwesome(
-                        icons[i - 1] || 'mdi:power-plug'
-                    );
-                    iconElement.className = `fa-solid fa-${fa}`;
-                    iconElement.style.color = AC.room;
-                    iconElement.style.fontSize = '20px';
+                // Direkt hinter der Box einfügen, damit das Symbol sichtbar
+                // bleibt, aber Name und Wattwert weiterhin darüber liegen.
+                if (box.nextSibling) {
+                    parent.insertBefore(iconNode, box.nextSibling);
+                } else {
+                    parent.appendChild(iconNode);
                 }
-
-                foreignObject.style.display =
-                    icons[i - 1] ? '' : 'none';
             }
-        }
-    }
-
-    function applyInverterVisualColour(card, d) {
-        if (!card || !card.shadowRoot || !d) return;
-
-        const inverterColour =
-            d.houseColors?.inverter ||
-            d.colors?.inverter ||
-            AC.inverter;
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        const colourText = node => {
-            if (!node) return;
-
-            node.setAttribute?.('fill', inverterColour);
-            node.setAttribute?.('color', inverterColour);
-            node.style?.setProperty('fill', inverterColour, 'important');
-            node.style?.setProperty('color', inverterColour, 'important');
-
-            node.querySelectorAll?.('tspan').forEach(tspan => {
-                tspan.setAttribute?.('fill', inverterColour);
-                tspan.style?.setProperty(
-                    'fill',
-                    inverterColour,
-                    'important'
-                );
-                tspan.style?.setProperty(
-                    'color',
-                    inverterColour,
-                    'important'
-                );
-            });
-        };
-
-        for (const root of roots) {
-            /*
-             * Ausschließlich echte Wechselrichter-Elemente anfassen.
-             * Smartmeter-/Grid-Container werden bewusst nicht mehr über
-             * breit gefasste Selektoren wie [id*="inverter"] oder ganze
-             * gemeinsame SVG-Gruppen eingefärbt.
-             */
-
-            const inverterGroups = new Set();
-
-            [
-                '#inverter_main',
-                '#inverter-main',
-                '#inverter_icon',
-                '#inverter-icon',
-                '#inverter_data',
-                '#inverter-data',
-                '#inverter_box',
-                '#inverter-box'
-            ].forEach(selector => {
-                root.querySelectorAll?.(selector).forEach(node => {
-                    inverterGroups.add(node);
-                });
-            });
-
-            // Wechselrichtersymbol.
-            inverterGroups.forEach(group => {
-                const id = String(group.id || '').toLowerCase();
-
-                if (
-                    id.includes('icon') ||
-                    id === 'inverter_main' ||
-                    id === 'inverter-main'
-                ) {
-                    group.querySelectorAll?.(
-                        'path, rect, polygon, polyline, circle, ellipse'
-                    ).forEach(shape => {
-                        shape.setAttribute?.('stroke', inverterColour);
-                        shape.style?.setProperty(
-                            'stroke',
-                            inverterColour,
-                            'important'
-                        );
-
-                        const fill = shape.getAttribute?.('fill');
-                        if (
-                            fill &&
-                            fill !== 'none' &&
-                            !String(fill).startsWith('url(')
-                        ) {
-                            shape.setAttribute?.('fill', inverterColour);
-                            shape.style?.setProperty(
-                                'fill',
-                                inverterColour,
-                                'important'
-                            );
-                        }
-                    });
-                }
-            });
-
-            // Rahmen der echten WR-Datenbox.
-            [
-                '#inverter_data > rect',
-                '#inverter-data > rect',
-                '#inverter_box',
-                '#inverter-box'
-            ].forEach(selector => {
-                root.querySelectorAll?.(selector).forEach(shape => {
-                    shape.setAttribute?.('stroke', inverterColour);
-                    shape.style?.setProperty(
-                        'stroke',
-                        inverterColour,
-                        'important'
-                    );
-                });
-            });
-
-            // Nur eindeutig als Wechselrichterwerte identifizierte Texte.
-            // Smartmeter-Spannungen/-Ströme/-Frequenz werden nicht berührt.
-            [
-                '#inverter_power_175',
-                '#inverter-power-175',
-                '#symcon_inverter_power_overlay',
-                '#inverter_current_164',
-                '#inverter-current-164',
-                '#inverter_current_L2',
-                '#inverter-current-L2',
-                '#inverter_current_L3',
-                '#inverter-current-L3',
-                '#inverter_name',
-                '#inverter-name',
-                '#inverter_label',
-                '#inverter-label'
-            ].forEach(selector => {
-                root.querySelectorAll?.(selector).forEach(node => {
-                    colourText(node);
-                });
-            });
-
-            // Falls die WR-Leistung direkt oberhalb der WR-Ströme als
-            // eigenes Symcon-Overlay erzeugt wurde, ebenfalls einfärben.
-            root.querySelectorAll?.(
-                '#symcon_inverter_power_overlay, ' +
-                '#symcon_inverter_power_fixed'
-            ).forEach(node => {
-                colourText(node);
-            });
-        }
-    }
-
-    function applyHouseLoadWattColour(card, d) {
-        if (!card || !card.shadowRoot || !d) return;
-
-        const houseColour = dominantHouseSourceColour(
-            Number(d.grid || 0),
-            Array.isArray(d.pvs) ? d.pvs : [],
-            Array.isArray(d.batteries) ? d.batteries : []
-        );
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        const colourText = node => {
-            if (!node) return;
-
-            node.setAttribute?.('fill', houseColour);
-            node.setAttribute?.('color', houseColour);
-            node.style?.setProperty('fill', houseColour, 'important');
-            node.style?.setProperty('color', houseColour, 'important');
-
-            node.querySelectorAll?.('tspan').forEach(tspan => {
-                tspan.setAttribute?.('fill', houseColour);
-                tspan.style?.setProperty(
-                    'fill',
-                    houseColour,
-                    'important'
-                );
-                tspan.style?.setProperty(
-                    'color',
-                    houseColour,
-                    'important'
-                );
-            });
-        };
-
-        for (const root of roots) {
-            const houseNodes = new Set();
-
-            // Bekannte IDs der Hauptlast. Zusätzliche Verbraucher load1 ... load6
-            // werden ausdrücklich nicht erfasst.
-            [
-                '#essential_power',
-                '#essential-power',
-                '#essential_load',
-                '#essential-load',
-                '#essential_name',
-                '#essential-name',
-                '#load_power',
-                '#load-power',
-                '#load_value',
-                '#load-value',
-                '#load_name',
-                '#load-name',
-                '#house_power',
-                '#house-power',
-                '#house_load',
-                '#house-load'
-            ].forEach(selector => {
-                root.querySelectorAll?.(selector).forEach(node => {
-                    houseNodes.add(node);
-                    node.querySelectorAll?.('text, tspan').forEach(child => {
-                        houseNodes.add(child);
-                    });
-                });
-            });
-
-            // Die sichtbare Bezeichnung „Hausverbrauch“ ist der zuverlässigste
-            // layoutunabhängige Anker. Nur ihre direkte SVG-Gruppe wird geprüft.
-            root.querySelectorAll?.('text, tspan').forEach(labelNode => {
-                const shown = String(labelNode.textContent || '').trim();
-
-                if (shown !== 'Hausverbrauch') {
-                    return;
-                }
-
-                houseNodes.add(labelNode);
-
-                const group = labelNode.closest?.('g');
-                if (!group) {
-                    return;
-                }
-
-                const groupId = String(group.id || '').toLowerCase();
-
-                if (
-                    /(?:load|ess)[-_]?[1-6]/.test(groupId) ||
-                    groupId.includes('aux') ||
-                    groupId.includes('nonessential')
-                ) {
-                    return;
-                }
-
-                group.querySelectorAll?.('text, tspan').forEach(node => {
-                    const value = String(node.textContent || '').trim();
-
-                    if (
-                        value === 'Hausverbrauch' ||
-                        /[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(value)
-                    ) {
-                        houseNodes.add(node);
-                    }
-                });
-            });
-
-            houseNodes.forEach(node => {
-                const tag = String(node.tagName || '').toLowerCase();
-
-                if (tag !== 'text' && tag !== 'tspan') {
-                    return;
-                }
-
-                const shown = String(node.textContent || '').trim();
-
-                if (
-                    shown === 'Hausverbrauch' ||
-                    /[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(shown)
-                ) {
-                    colourText(node);
-                }
-            });
         }
     }
 
