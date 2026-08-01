@@ -3011,38 +3011,89 @@ class Energiefluss extends IPSModuleStrict
                 const iconOffsetY = -3;
 
                 /*
-                 * Icon horizontal auf die Mitte der zugehörigen Leistungsbox
-                 * ausrichten. Falls die Box nicht ermittelt werden kann,
-                 * bleibt die von Sunsynk vorgegebene Mitte erhalten.
+                 * Icon horizontal exakt auf die Mitte der zugehörigen
+                 * Leistungsbox ausrichten.
+                 *
+                 * getBBox() allein ist in der Full-Ansicht unzuverlässig,
+                 * weil die beiden linken Verbraucher in transformierten
+                 * SVG-Gruppen liegen. Deshalb vergleichen wir die sichtbaren
+                 * Bildschirmkoordinaten und rechnen den gefundenen Mittelpunkt
+                 * anschließend in das lokale Koordinatensystem des
+                 * foreignObject-Elternelements zurück.
                  */
-                const iconCenterX = x + (width / 2);
-                let targetCenterX = iconCenterX;
+                const iconScreenBox =
+                    foreignObject.getBoundingClientRect();
+
+                const iconScreenCenterX =
+                    iconScreenBox.left +
+                    (iconScreenBox.width / 2);
+                const iconScreenCenterY =
+                    iconScreenBox.top +
+                    (iconScreenBox.height / 2);
+
+                let targetCenterX = x + (width / 2);
+                let closestDistance =
+                    Number.POSITIVE_INFINITY;
 
                 const loadBoxes = Array.from(
-                    svgParent.querySelectorAll?.(
-                        'rect[id^="es-load"], rect[id^="ess-load"]'
-                    ) || []
+                    foreignObject.ownerSVGElement
+                        ?.querySelectorAll?.(
+                            'rect[id^="es-load"], ' +
+                            'rect[id^="ess-load"]'
+                        ) || []
                 );
-
-                let closestDistance = Number.POSITIVE_INFINITY;
 
                 loadBoxes.forEach(boxNode => {
                     try {
-                        const box = boxNode.getBBox();
-                        const boxCenterX = box.x + (box.width / 2);
-                        const boxCenterY = box.y + (box.height / 2);
-                        const iconCenterY = y + (height / 2);
+                        const visibleBox =
+                            boxNode.getBoundingClientRect();
+
+                        if (
+                            visibleBox.width <= 0 ||
+                            visibleBox.height <= 0
+                        ) {
+                            return;
+                        }
+
+                        const boxScreenCenterX =
+                            visibleBox.left +
+                            (visibleBox.width / 2);
+                        const boxScreenCenterY =
+                            visibleBox.top +
+                            (visibleBox.height / 2);
 
                         const distance =
-                            Math.abs(boxCenterX - iconCenterX) +
-                            Math.abs(boxCenterY - iconCenterY);
+                            Math.abs(
+                                boxScreenCenterX -
+                                iconScreenCenterX
+                            ) +
+                            Math.abs(
+                                boxScreenCenterY -
+                                iconScreenCenterY
+                            );
 
-                        if (distance < closestDistance) {
-                            closestDistance = distance;
-                            targetCenterX = boxCenterX;
+                        if (distance >= closestDistance) {
+                            return;
                         }
+
+                        const parentMatrix =
+                            svgParent.getScreenCTM?.();
+
+                        if (!parentMatrix) {
+                            return;
+                        }
+
+                        const localPoint = new DOMPoint(
+                            boxScreenCenterX,
+                            boxScreenCenterY
+                        ).matrixTransform(
+                            parentMatrix.inverse()
+                        );
+
+                        closestDistance = distance;
+                        targetCenterX = localPoint.x;
                     } catch (_) {
-                        // Ungültige SVG-Geometrien ignorieren.
+                        // Noch nicht vollständig aufgebaute SVG-Geometrie.
                     }
                 });
 
