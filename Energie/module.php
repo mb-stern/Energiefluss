@@ -422,7 +422,6 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'GridVoltageL1', 'caption' => 'Spannung Phase L1 (V)'],
                         ['type' => 'SelectVariable', 'name' => 'GridVoltageL2', 'caption' => 'Spannung Phase L2 (V)'],
                         ['type' => 'SelectVariable', 'name' => 'GridVoltageL3', 'caption' => 'Spannung Phase L3 (V)'],
-                        ['type' => 'SelectVariable', 'name' => 'GridConnectedStatus', 'caption' => 'Netz verbunden / Status'],
                         ['type' => 'Label', 'caption' => 'Wechselrichter und Haus'],
                         ['type' => 'SelectVariable', 'name' => 'InverterPower', 'caption' => 'Wechselrichterleistung gesamt (W)'],
                         ['type' => 'SelectVariable', 'name' => 'InverterCurrentL1', 'caption' => 'Wechselrichterstrom Phase L1 (A)'],
@@ -430,7 +429,6 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectVariable', 'name' => 'InverterCurrentL3', 'caption' => 'Wechselrichterstrom Phase L3 (A)'],
                         ['type' => 'SelectVariable', 'name' => 'HousePower', 'caption' => 'Hausverbrauch (W, optional; sonst berechnet)'],
 
-                        ['type' => 'Label', 'caption' => 'Wallbox als AUX-Verbraucher'],
                         ['type' => 'ValidationTextBox', 'name' => 'WallboxName', 'caption' => 'Name'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxPower', 'caption' => 'Ladeleistung (W)'],
                         ['type' => 'SelectVariable', 'name' => 'WallboxEnergy', 'caption' => 'Ladeenergie (optional)'],
@@ -443,7 +441,7 @@ class Energiefluss extends IPSModuleStrict
                 ],
                 [
                     'type'    => 'ExpansionPanel',
-                    'caption' => 'Verbraucher (excl. Wallbox)',
+                    'caption' => 'Verbraucher',
                     'items'   => [
                         [
                             'type'     => 'List',
@@ -2868,24 +2866,27 @@ class Energiefluss extends IPSModuleStrict
         const hasGrid = entityAvailable(d, 'gridPower');
         const hasWallbox = !!d.hasWallbox;
 
-        // Die Wallbox wird als erster zusätzlicher Verbraucher eingereiht.
-        // Dadurch erhält sie in Compact/Lite den größeren Verbraucherplatz.
-        // Full/Full Wide zeigen insgesamt bis zu sechs Verbraucher inklusive
-        // Wallbox. Farblich wird sie wie alle übrigen Verbraucher behandelt.
-        const wallboxLoad = hasWallbox ? [{
+        // Die Wallbox ist ein normaler Verbraucher und wird gemeinsam mit
+        // allen anderen Verbrauchern nach der aktuellen Leistungsaufnahme
+        // angeordnet.
+        const wallboxConsumer = hasWallbox ? [{
             name: wallbox?.name || 'Wallbox',
             value: Number(wallbox?.value || 0),
             hasPower: true,
             dailyValue: Number(wallbox?.energyValue || 0),
             hasDaily: !!wallbox?.hasEnergy,
-            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station')
+            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station'),
+            isWallbox: true
         }] : [];
 
-        const configuredConsumers = groups.filter(group => group.hasPower);
+        const configuredConsumers = [
+            ...groups.filter(group => group.hasPower),
+            ...wallboxConsumer
+        ];
 
-        // Zuerst alle aktuell aktiven Verbraucher nach ihrer absoluten
-        // Leistungsaufnahme sortieren. Absolute Werte sind wichtig, weil manche
-        // Messvariablen Verbrauch negativ liefern.
+        // Aktive Verbraucher zuerst, absteigend nach absoluter Leistung.
+        // Absolute Werte berücksichtigen auch Messvariablen mit negativem
+        // Verbrauchsvorzeichen.
         const activeConsumers = configuredConsumers
             .filter(group => Math.abs(Number(group.value || 0)) > 0)
             .sort((a, b) =>
@@ -2893,24 +2894,15 @@ class Energiefluss extends IPSModuleStrict
                 Math.abs(Number(a.value || 0))
             );
 
-        // Danach die derzeit inaktiven Verbraucher in ihrer ursprünglichen
-        // Konfigurationsreihenfolge anhängen. Dadurch bleiben die verfügbaren
-        // Plätze gefüllt und es erscheinen nicht plötzlich weniger Geräte.
+        // Freie Plätze werden mit den inaktiven konfigurierten Verbrauchern
+        // aufgefüllt. Auch hier verhält sich die Wallbox wie jedes andere Gerät.
         const inactiveConsumers = configuredConsumers.filter(group =>
             Math.abs(Number(group.value || 0)) <= 0
         );
 
-        const sortedConsumers = [
+        const activeGroups = [
             ...activeConsumers,
             ...inactiveConsumers
-        ];
-
-        // Wallbox bleibt immer sichtbar und fest auf Position 1.
-        // Danach folgen zuerst die größten aktiven Verbraucher; freie Plätze
-        // werden mit den übrigen konfigurierten Verbrauchern aufgefüllt.
-        const activeGroups = [
-            ...wallboxLoad,
-            ...sortedConsumers
         ].slice(0, full ? 6 : 3);
         const threePhase = entityAvailable(d, 'gridPhaseL2') || entityAvailable(d, 'gridPhaseL3')
             || entityAvailable(d, 'inverterCurrentL2') || entityAvailable(d, 'inverterCurrentL3')
@@ -3186,16 +3178,20 @@ class Energiefluss extends IPSModuleStrict
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
         const hasWallbox = !!d.hasWallbox;
 
-        const wallboxLoad = hasWallbox ? [{
+        const wallboxConsumer = hasWallbox ? [{
             name: wallbox?.name || 'Wallbox',
             value: Number(wallbox?.value || 0),
             hasPower: true,
             dailyValue: Number(wallbox?.energyValue || 0),
             hasDaily: !!wallbox?.hasEnergy,
-            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station')
+            icon: normalizeConsumerIcon('ev-station', 'mdi:ev-station'),
+            isWallbox: true
         }] : [];
 
-        const configuredConsumers = groups.filter(group => group.hasPower);
+        const configuredConsumers = [
+            ...groups.filter(group => group.hasPower),
+            ...wallboxConsumer
+        ];
 
         const activeConsumers = configuredConsumers
             .filter(group => Math.abs(Number(group.value || 0)) > 0)
@@ -3208,15 +3204,10 @@ class Energiefluss extends IPSModuleStrict
             Math.abs(Number(group.value || 0)) <= 0
         );
 
-        const sortedConsumers = [
-            ...activeConsumers,
-            ...inactiveConsumers
-        ];
-
         // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
         const activeGroups = [
-            ...wallboxLoad,
-            ...sortedConsumers
+            ...activeConsumers,
+            ...inactiveConsumers
         ].slice(
             0,
             currentTechnicalLayout.startsWith('full') ? 6 : 3
