@@ -2998,10 +2998,13 @@ class Energiefluss extends IPSModuleStrict
                         ? viewBox[3]
                         : 512;
 
+                // Das Icon etwas kleiner als den von Sunsynk
+                // vorgesehenen Platzhalter darstellen und mittig halten.
+                const iconScaleFactor = 0.82;
                 const scale = Math.min(
                     width / vbWidth,
                     height / vbHeight
-                );
+                ) * iconScaleFactor;
 
                 const translateX =
                     x + ((width - (vbWidth * scale)) / 2) -
