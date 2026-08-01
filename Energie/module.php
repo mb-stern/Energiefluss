@@ -5742,30 +5742,51 @@ HTML;
     private function BuildPayload(): array
     {
         // Netzleistung:
-        // Hauptvariable = Bezug/Gesamtleistung.
-        // Optional kann Rücklieferung als separate positive Variable angegeben werden.
-        $gridBase = $this->ReadVar('L1');
+        //
+        // Variante A – zwei getrennte Variablen:
+        //   Bezug positiv, Überschuss/Einspeisung positiv
+        //   Ergebnis = Bezug - Überschuss
+        //
+        // Variante B – eine gemeinsame bidirektionale Variable:
+        //   bisherige Modulkonvention bleibt erhalten und wird intern
+        //   auf positiv = Bezug / negativ = Einspeisung normalisiert.
+        $gridBase = (float) $this->ReadVar('L1');
 
-        // Die konfigurierte Netzleistungsvariable liefert:
-        // positiv = Rücklieferung, negativ = Netzbezug.
-        // Intern verwenden beide Visualisierungen dagegen:
-        // positiv = Netzbezug, negativ = Rücklieferung.
-        // Deshalb wird ausschließlich die Netzleistungsvariable umgedreht.
-        $gridBase *= -1;
+        $gridExportPowerID =
+            $this->ReadPropertyInteger('GridExportPower');
 
-        // Die vorhandene Option erlaubt bei abweichenden Sensoren weiterhin
-        // eine zusätzliche manuelle Umkehrung.
-        if ($this->ReadPropertyBoolean('InvertGridPower')) {
-            $gridBase *= -1;
+        $hasSeparateExportPower =
+            $gridExportPowerID > 0 &&
+            IPS_VariableExists($gridExportPowerID);
+
+        if ($hasSeparateExportPower) {
+            // Bei getrennten Variablen ist L1 ausschließlich der Bezug.
+            // Die Option „Vorzeichen umkehren“ wirkt nur auf diese
+            // Bezugsvariable, falls der Sensor negative Werte liefert.
+            if ($this->ReadPropertyBoolean('InvertGridPower')) {
+                $gridBase *= -1;
+            }
+
+            $gridImportPower = max($gridBase, 0.0);
+            $gridExportPower = max(
+                (float) GetValue($gridExportPowerID),
+                0.0
+            );
+
+            // Wichtig: Überschuss wird vom Bezug abgezogen.
+            $grid = $gridImportPower - $gridExportPower;
+        } else {
+            // Eine gemeinsame Netzvariable:
+            // ursprüngliche Sensor-Konvention:
+            // positiv = Rücklieferung, negativ = Netzbezug.
+            // Interne Konvention:
+            // positiv = Netzbezug, negativ = Rücklieferung.
+            $grid = $gridBase * -1;
+
+            if ($this->ReadPropertyBoolean('InvertGridPower')) {
+                $grid *= -1;
+            }
         }
-
-        $gridExportPower = 0.0;
-        $gridExportPowerID = $this->ReadPropertyInteger('GridExportPower');
-        if ($gridExportPowerID > 0 && IPS_VariableExists($gridExportPowerID)) {
-            $gridExportPower = (float) GetValue($gridExportPowerID);
-        }
-
-        $grid = $gridBase - $gridExportPower;
 
         $pvs = [];
         $housePvs = [];
