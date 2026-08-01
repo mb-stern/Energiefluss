@@ -2822,7 +2822,6 @@ class Energiefluss extends IPSModuleStrict
                 constructor() {
                     super();
                     this._icon = '';
-                    this.attachShadow({ mode: 'open' });
                 }
 
                 connectedCallback() {
@@ -2843,10 +2842,6 @@ class Energiefluss extends IPSModuleStrict
                 }
 
                 render() {
-                    if (!this.shadowRoot) {
-                        return;
-                    }
-
                     const requested =
                         this._icon ||
                         this.getAttribute('icon') ||
@@ -2858,42 +2853,38 @@ class Energiefluss extends IPSModuleStrict
                         SYMCON_INLINE_ICONS.plug;
 
                     if (!definition) {
-                        this.shadowRoot.replaceChildren();
                         return;
                     }
+
+                    const size =
+                        getComputedStyle(this)
+                            .getPropertyValue('--mdc-icon-size')
+                            .trim() ||
+                        '24px';
+
+                    this.style.display = 'inline-flex';
+                    this.style.alignItems = 'center';
+                    this.style.justifyContent = 'center';
+                    this.style.width = size;
+                    this.style.height = size;
+                    this.style.minWidth = size;
+                    this.style.minHeight = size;
+                    this.style.color = this.style.color || 'inherit';
+                    this.style.lineHeight = '1';
+                    this.style.overflow = 'visible';
+                    this.style.boxSizing = 'border-box';
 
                     const paths = definition.paths
                         .map(path => `<path d="${path}"></path>`)
                         .join('');
 
-                    /*
-                     * Nur den sichtbaren SVG-Inhalt liefern.
-                     * Das ha-icon-Element selbst erhält keinerlei width,
-                     * height, position oder transform. Diese Werte kommen
-                     * ausschließlich von der originalen Sunsynk-Karte.
-                     */
-                    this.shadowRoot.innerHTML = `
-                        <style>
-                            :host {
-                                color: inherit;
-                            }
-
-                            svg {
-                                display: block;
-                                width: 100%;
-                                height: 100%;
-                                overflow: visible;
-                                fill: currentColor;
-                                color: inherit;
-                            }
-                        </style>
-                        <svg
-                            xmlns="http://www.w3.org/2000/svg"
-                            viewBox="${definition.viewBox}"
-                            preserveAspectRatio="xMidYMid meet"
-                            aria-hidden="true"
-                        >${paths}</svg>
-                    `;
+                    this.innerHTML =
+                        `<svg xmlns="http://www.w3.org/2000/svg" ` +
+                        `viewBox="${definition.viewBox}" ` +
+                        `width="100%" height="100%" ` +
+                        `style="display:block;overflow:visible;` +
+                        `fill:currentColor;color:inherit" ` +
+                        `aria-hidden="true">${paths}</svg>`;
                 }
             });
         }
@@ -3469,7 +3460,7 @@ class Energiefluss extends IPSModuleStrict
         // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
-                        applyConsumerIconColours(card);
+                applyConsumerIconColours(card);
                 applyAdditionalLoadWattColourByGeometry(card);
                         applyTechnicalBatteryColours(
                     card,
@@ -3504,7 +3495,7 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
-                                applyConsumerIconColours(card);
+                    applyConsumerIconColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                                 applyTechnicalBatteryColours(
                         card,
@@ -4315,28 +4306,30 @@ class Energiefluss extends IPSModuleStrict
                 });
 
                 candidates.forEach(icon => {
-                    // Nur die Farbe setzen; Position und Größe bleiben
-                    // vollständig bei Sunsynk.
                     icon.style.setProperty(
                         'color',
                         AC.room,
                         'important'
                     );
+                    icon.style.setProperty(
+                        '--symcon-icon-color',
+                        AC.room,
+                        'important'
+                    );
 
-                    icon.shadowRoot
-                        ?.querySelectorAll('svg, path')
-                        .forEach(node => {
-                            node.style?.setProperty(
-                                'color',
-                                AC.room,
-                                'important'
-                            );
-                            node.style?.setProperty(
-                                'fill',
-                                AC.room,
-                                'important'
-                            );
-                        });
+                    icon.querySelectorAll?.('svg, path').forEach(node => {
+                        node.style?.setProperty(
+                            'color',
+                            AC.room,
+                            'important'
+                        );
+                        node.style?.setProperty(
+                            'fill',
+                            AC.room,
+                            'important'
+                        );
+                        node.setAttribute?.('fill', AC.room);
+                    });
                 });
             }
         }
