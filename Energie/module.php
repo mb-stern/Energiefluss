@@ -71,7 +71,6 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('ColorBatteryCharge', 6600182);
         $this->RegisterPropertyInteger('ColorBatteryDischarge', 2733814);
         $this->RegisterPropertyInteger('ColorConsumers', 3123599);
-        $this->RegisterPropertyInteger('ColorHouseLoad', 5087231);
         $this->RegisterPropertyInteger('ColorInverter', 11776947);
 
         // Farben der Haus-Visualisierung.
@@ -495,7 +494,6 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorGridExport', 'caption' => 'Netzeinspeisung', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryCharge', 'caption' => 'Batterie laden', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
-                        ['type' => 'SelectColor', 'name' => 'ColorHouseLoad', 'caption' => 'Hausverbrauch', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Weitere Verbraucher', 'allowTransparent' => false],
                         [
                             'type' => 'HorizontalSlider',
@@ -1165,7 +1163,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     #pfc-home-main {
-        color: var(--ef-house-load, #4d9fff);
+        color: var(--ef-consumer, #2fa98f);
     }
 
     #pfc-wallbox-main {
@@ -2264,6 +2262,31 @@ class Energiefluss extends IPSModuleStrict
         return `Voll in ${formatBatteryDuration(missingKWh / powerKW)}`;
     }
 
+    function dominantHouseSourceColour(grid, pvs, batteries) {
+        const solarPower = pvs.reduce(
+            (sum, pv) => sum + Math.max(Number(pv.value || 0), 0),
+            0
+        );
+
+        const batteryPower = batteries.reduce(
+            (sum, battery) =>
+                sum + Math.max(Number(battery.value || 0), 0),
+            0
+        );
+
+        const gridPower = Math.max(Number(grid || 0), 0);
+
+        const sources = [
+            { power: solarPower, colour: AC.solar },
+            { power: batteryPower, colour: AC.discharge },
+            { power: gridPower, colour: AC.import }
+        ].sort((a, b) => b.power - a.power);
+
+        return sources[0].power > 0
+            ? sources[0].colour
+            : AC.room;
+    }
+
     function updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox) {
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -2308,6 +2331,19 @@ class Energiefluss extends IPSModuleStrict
 
         if (homeMain) {
             homeMain.textContent = fmt(haus);
+
+            const dynamicHouseColour = dominantHouseSourceColour(
+                grid,
+                pvs,
+                batteries
+            );
+
+            homeMain.style.color = dynamicHouseColour;
+
+            const homeInfo = document.getElementById('pfc-info-home');
+            if (homeInfo) {
+                homeInfo.style.borderColor = dynamicHouseColour;
+            }
         }
 
         if (homeEnergy) {
@@ -3086,11 +3122,13 @@ class Energiefluss extends IPSModuleStrict
                 invert_flow: false
             },
             load: {
-                colour: AC.home,
+                // Nur Fallbackfarbe. Bei dynamic_colour übernimmt die
+                // Originalkarte die Farbe der aktuell dominierenden Quelle.
+                colour: AC.room,
                 off_colour: '#9e9e9e',
 
-                // Haussymbol automatisch entsprechend der aktuellen Versorgung
-                // aus Solar, Batterie und Netz einfärben und anpassen.
+                // Haussymbol und Hausverbrauch folgen automatisch der
+                // Versorgung aus Solar, Batterie oder Netz.
                 dynamic_colour: true,
                 dynamic_icon: true,
                 show_daily: showEnergyDetails && d.houseEnergyAvailable,
@@ -4207,8 +4245,6 @@ class Energiefluss extends IPSModuleStrict
             // Die Wallbox verwendet überall dieselbe Farbe wie
             // „Weitere Verbraucher“.
             AC.wallbox = AC.room;
-
-            AC.home = d.colors.home || AC.home;
             AC.inverter = d.colors.inverter || AC.inverter;
         }
 
@@ -4224,7 +4260,6 @@ class Energiefluss extends IPSModuleStrict
         document.documentElement.style.setProperty('--ef-battery-discharge', AC.discharge);
         document.documentElement.style.setProperty('--ef-wallbox', AC.room);
         document.documentElement.style.setProperty('--ef-consumer', AC.room);
-        document.documentElement.style.setProperty('--ef-house-load', AC.home);
 
         const solarMain = document.getElementById('pfc-solar-main');
         const solarInfo = document.getElementById('pfc-info-solar');
@@ -4242,7 +4277,6 @@ class Energiefluss extends IPSModuleStrict
         if (gridInfo) gridInfo.style.borderColor = AC.import;
         if (wallboxMain) wallboxMain.style.color = AC.wallbox;
         if (wallboxInfo) wallboxInfo.style.borderColor = AC.wallbox;
-        if (homeMain) homeMain.style.color = AC.home;
     }
 
     function setState(d) {
@@ -5411,7 +5445,6 @@ HTML;
                 'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
                 'charge'    => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryCharge')),
                 'discharge' => $this->ColorToHex($this->ReadPropertyInteger('ColorBatteryDischarge')),
-                'home'      => $this->ColorToHex($this->ReadPropertyInteger('ColorHouseLoad')),
                 'room'      => $this->ColorToHex($this->ReadPropertyInteger('ColorConsumers')),
             ],
         ];
