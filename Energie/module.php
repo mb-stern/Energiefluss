@@ -495,9 +495,47 @@ class Energiefluss extends IPSModuleStrict
                                 [
                                     'caption' => 'Icon',
                                     'name'    => 'Icon',
-                                    'width'   => '120px',
-                                    'add'     => 'plug',
-                                    'edit'    => ['type' => 'SelectIcon'],
+                                    'width'   => '175px',
+                                    'add'     => 'mdi:power-plug',
+                                    'edit'    => [
+                                        'type'    => 'Select',
+                                        'options' => [
+                                            ['caption' => 'Stecker', 'value' => 'mdi:power-plug'],
+                                            ['caption' => 'Strom / Blitz', 'value' => 'mdi:flash'],
+                                            ['caption' => 'Herd / Backofen', 'value' => 'mdi:stove'],
+                                            ['caption' => 'Waschmaschine', 'value' => 'mdi:washing-machine'],
+                                            ['caption' => 'Trockner', 'value' => 'mdi:tumble-dryer'],
+                                            ['caption' => 'Geschirrspüler', 'value' => 'mdi:dishwasher'],
+                                            ['caption' => 'Boiler', 'value' => 'mdi:water-boiler'],
+                                            ['caption' => 'Wasser', 'value' => 'mdi:water'],
+                                            ['caption' => 'Kühlschrank', 'value' => 'mdi:fridge'],
+                                            ['caption' => 'Gefrierschrank', 'value' => 'mdi:fridge-outline'],
+                                            ['caption' => 'Licht', 'value' => 'mdi:lightbulb'],
+                                            ['caption' => 'Ventilator', 'value' => 'mdi:fan'],
+                                            ['caption' => 'Pumpe', 'value' => 'mdi:pump'],
+                                            ['caption' => 'Pool', 'value' => 'mdi:pool'],
+                                            ['caption' => 'Dusche', 'value' => 'mdi:shower'],
+                                            ['caption' => 'Heizung / Radiator', 'value' => 'mdi:radiator'],
+                                            ['caption' => 'Wärmepumpe', 'value' => 'mdi:heat-pump'],
+                                            ['caption' => 'Klimaanlage', 'value' => 'mdi:air-conditioner'],
+                                            ['caption' => 'Fernseher', 'value' => 'mdi:television'],
+                                            ['caption' => 'Computer', 'value' => 'mdi:desktop-tower-monitor'],
+                                            ['caption' => 'Laptop', 'value' => 'mdi:laptop'],
+                                            ['caption' => 'Server', 'value' => 'mdi:server'],
+                                            ['caption' => 'Kaffeemaschine', 'value' => 'mdi:coffee-maker'],
+                                            ['caption' => 'Mikrowelle', 'value' => 'mdi:microwave'],
+                                            ['caption' => 'Toaster', 'value' => 'mdi:toaster'],
+                                            ['caption' => 'Wallbox / Ladestation', 'value' => 'mdi:ev-station'],
+                                            ['caption' => 'Elektroauto', 'value' => 'mdi:car-electric'],
+                                            ['caption' => 'Garage', 'value' => 'mdi:garage'],
+                                            ['caption' => 'Haus', 'value' => 'mdi:home'],
+                                            ['caption' => 'Lager / Werkstatt', 'value' => 'mdi:warehouse'],
+                                            ['caption' => 'Tür', 'value' => 'mdi:door-open'],
+                                            ['caption' => 'Staubsauger', 'value' => 'mdi:vacuum'],
+                                            ['caption' => 'Kamera', 'value' => 'mdi:cctv'],
+                                            ['caption' => 'WLAN', 'value' => 'mdi:wifi'],
+                                        ],
+                                    ],
                                 ],
                                 [
                                     'caption' => 'Wallbox',
@@ -2805,7 +2843,7 @@ class Energiefluss extends IPSModuleStrict
                     this.style.height = size;
                     this.style.minWidth = size;
                     this.style.minHeight = size;
-                    this.style.color = 'inherit';
+                    this.style.color = this.style.color || 'inherit';
                     this.style.lineHeight = '1';
                     this.style.overflow = 'visible';
                     this.style.boxSizing = 'border-box';
@@ -3344,6 +3382,7 @@ class Energiefluss extends IPSModuleStrict
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
+        applyConsumerIconColours(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyTechnicalBatteryColours(card, d);
         applyHouseLoadWattColour(card, d);
@@ -3355,6 +3394,7 @@ class Energiefluss extends IPSModuleStrict
         // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
+                applyConsumerIconColours(card);
                 applyAdditionalLoadWattColourByGeometry(card);
                         applyTechnicalBatteryColours(
                     card,
@@ -3385,6 +3425,7 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
+                    applyConsumerIconColours(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                                 applyTechnicalBatteryColours(
                         card,
@@ -4095,6 +4136,66 @@ class Energiefluss extends IPSModuleStrict
                     colourText(node);
                 }
             });
+        }
+    }
+
+    function applyConsumerIconColours(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            for (let i = 1; i <= 6; i++) {
+                const box =
+                    root.querySelector?.(`[id="es-load${i}"]`) ||
+                    root.querySelector?.(`[id="ess-load${i}"]`);
+
+                if (!box) {
+                    continue;
+                }
+
+                const candidates = new Set();
+                const group = box.closest?.('g') || box.parentNode;
+
+                group?.querySelectorAll?.('ha-icon').forEach(icon => {
+                    candidates.add(icon);
+                });
+
+                // Je nach Layout liegt das foreignObject als Geschwisterelement
+                // innerhalb derselben übergeordneten Verbrauchergruppe.
+                group?.querySelectorAll?.(
+                    'foreignObject ha-icon, foreignobject ha-icon'
+                ).forEach(icon => {
+                    candidates.add(icon);
+                });
+
+                candidates.forEach(icon => {
+                    icon.style.setProperty(
+                        'color',
+                        AC.room,
+                        'important'
+                    );
+                    icon.style.setProperty(
+                        '--symcon-icon-color',
+                        AC.room,
+                        'important'
+                    );
+
+                    icon.querySelectorAll?.('svg, path').forEach(node => {
+                        node.style?.setProperty(
+                            'color',
+                            AC.room,
+                            'important'
+                        );
+                        node.style?.setProperty(
+                            'fill',
+                            AC.room,
+                            'important'
+                        );
+                        node.setAttribute?.('fill', AC.room);
+                    });
+                });
+            }
         }
     }
 
