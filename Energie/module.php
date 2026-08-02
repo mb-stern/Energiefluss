@@ -5277,22 +5277,20 @@ class Energiefluss extends IPSModuleStrict
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
 
-        let graphWidth = mode === 'house' ? 900 : 540;
+        let graphWidth;
 
-        if (mode !== 'house') {
-            const effectiveCount =
-                groupCount + ((hasWallbox && groupCount > 0) ? 1 : 0);
-            const columns = Math.ceil(effectiveCount / 2);
-
-            if (columns > 0) {
-                graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
-            }
-
-            if (hasWallbox && groupCount === 0) {
-                graphWidth = Math.max(graphWidth, 592);
-            }
-
-            graphWidth = Math.min(graphWidth, 1080);
+        if (mode === 'house') {
+            // Die Hausgrafik besitzt weiterhin ihre feste 900x640-Zeichenfläche.
+            graphWidth = 900;
+        } else {
+            // Die originale Sunsynk-Karte muss exakt dieselbe Breite besitzen
+            // wie der Bereich, der anschließend durch fit() skaliert wird.
+            // Zuvor blieb #stage immer 1080 px breit, während #fit häufig nur
+            // 540 px breit war. Dadurch wurde die rechte Hälfte abgeschnitten
+            // und die Karte wirkte in IP-Symcon falsch skaliert.
+            graphWidth = currentTechnicalLayout.endsWith('-wide')
+                ? 1080
+                : 540;
         }
 
         layoutWidth = graphWidth;
@@ -5302,6 +5300,12 @@ class Energiefluss extends IPSModuleStrict
 
         wrapEl.style.width = layoutWidth + 'px';
         rootEl.style.width = layoutWidth + 'px';
+
+        // Nur die technische Ansicht an die tatsächlich skalierte Breite
+        // angleichen. Die Hausansicht bleibt vollständig unverändert.
+        if (stage) {
+            stage.style.width = graphWidth + 'px';
+        }
 
         wrapEl.style.gap = '0px';
 
