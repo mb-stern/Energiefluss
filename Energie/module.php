@@ -4215,17 +4215,53 @@ class Energiefluss extends IPSModuleStrict
                     }
                 }
 
-                // 3. Sämtliche Texte der jeweiligen Batterie verwenden
-                // dieselbe richtungsabhängige Farbe. Das betrifft Leistung,
-                // SOC, Strom, Spannung, Temperatur und Energieangaben.
+                // 3. Nur tatsächlich sichtbare Texte der Batterie
+                // richtungsabhängig einfärben. Die Originalkarte enthält
+                // transparente bzw. ausgeblendete Hilfstexte. Werden diese
+                // pauschal über !important eingefärbt, erscheinen mehrere
+                // Textzeilen übereinander.
                 main.querySelectorAll?.('text, tspan').forEach(textNode => {
+                    const ownFill = String(
+                        textNode.getAttribute?.('fill') || ''
+                    ).trim().toLowerCase();
+                    const ownOpacity = Number(
+                        textNode.getAttribute?.('opacity') ?? 1
+                    );
+                    const styleOpacity = Number(
+                        textNode.style?.opacity || 1
+                    );
+                    const computed = window.getComputedStyle
+                        ? window.getComputedStyle(textNode)
+                        : null;
+                    const computedFill = String(
+                        computed?.fill || ''
+                    ).trim().toLowerCase();
+                    const hidden =
+                        ownFill === 'none' ||
+                        ownFill === 'transparent' ||
+                        computedFill === 'none' ||
+                        computedFill === 'transparent' ||
+                        ownOpacity === 0 ||
+                        styleOpacity === 0 ||
+                        computed?.display === 'none' ||
+                        computed?.visibility === 'hidden' ||
+                        Number(computed?.opacity ?? 1) === 0;
+
+                    if (hidden) {
+                        return;
+                    }
+
                     textNode.setAttribute?.('fill', colour);
-                    textNode.setAttribute?.('color', colour);
-                    textNode.style?.setProperty('fill', colour, 'important');
-                    textNode.style?.setProperty('color', colour, 'important');
+                    textNode.style?.setProperty(
+                        'fill',
+                        colour,
+                        'important'
+                    );
                 });
 
-                main.style?.setProperty('color', colour, 'important');
+                // Keine globale color-Eigenschaft am Batteriecontainer setzen:
+                // Sie würde auch versteckte Hilfstexte der Originalkarte
+                // wieder sichtbar machen.
 
                 // 4. Leitung.
                 main.querySelectorAll?.(
