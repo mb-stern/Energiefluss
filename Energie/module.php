@@ -3687,10 +3687,14 @@ class Energiefluss extends IPSModuleStrict
                 // äußeren Batterierahmen und den Flusspunkt. Deshalb wird
                 // nur diese Farbe richtungsabhängig gesetzt. charge_colour
                 // und die dynamische SOC-Füllung bleiben unverändert.
+                // Da invert_flow aktiv ist, müssen auch die beiden von
+                // Sunsynk verwendeten Richtungsfarben gegeneinander getauscht
+                // werden: Laden verwendet die konfigurierte Ladefarbe und
+                // Entladen die konfigurierte Entladefarbe.
                 colour: Number(activeBatteries[0]?.value || 0) < 0
-                    ? AC.charge
-                    : AC.discharge,
-                charge_colour: AC.charge,
+                    ? AC.discharge
+                    : AC.charge,
+                charge_colour: AC.discharge,
                 show_daily: showEnergyDetails && !!activeBatteries[0] && (activeBatteries[0].hasChargeEnergy || activeBatteries[0].hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
                 max_power: 10000,
@@ -3719,9 +3723,9 @@ class Energiefluss extends IPSModuleStrict
                 soc_end_of_charge: 100,
                 hide_soc: false,
                 colour: Number(activeBatteries[1]?.value || 0) < 0
-                    ? AC.charge
-                    : AC.discharge,
-                charge_colour: AC.charge,
+                    ? AC.discharge
+                    : AC.charge,
+                charge_colour: AC.discharge,
                 show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
                 show_absolute: true,
                 auto_scale: false,
