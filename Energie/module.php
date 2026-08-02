@@ -5259,11 +5259,16 @@ class Energiefluss extends IPSModuleStrict
         const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', socText: '', hasSoc: false };
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
-        const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
+        // Für die Hausverbrauchsbilanz ausschließlich den normalisierten
+        // Batteriewert verwenden. Der sichtbare Rohwert bleibt davon unberührt.
+        const batteryBalanceTotal = batteries.reduce(
+            (sum, bat) => sum + Number(bat.balanceValue ?? bat.value ?? 0),
+            0
+        );
 
         // Netzbezug positiv, Rücklieferung negativ.
         const calculatedHouseBalance = Math.max(
-            pvTotal + batteryTotal + grid,
+            pvTotal + batteryBalanceTotal + grid,
             0
         );
 
@@ -6116,7 +6121,14 @@ HTML;
                 // beeinflussen und niemals Laden/Entladen oder die
                 // Hausverbrauchsbilanz vertauschen.
                 $value = (float) GetValue($variableID);
-                $dischargeValue = max($value, 0.0);
+                $invertFlow = (bool) ($source['InvertFlow'] ?? false);
+
+                // Der Rohwert bleibt für die bestehende Visualisierung erhalten.
+                // Für Bilanz und Hauptenergielieferant wird das Vorzeichen
+                // entsprechend der konfigurierten Flussumkehr normalisiert:
+                // positiv = Entladen, negativ = Laden.
+                $balanceValue = $invertFlow ? -$value : $value;
+                $dischargeValue = max($balanceValue, 0.0);
 
                 $hasChargeEnergy =
                     $chargeEnergyVariableID > 0 &&
@@ -6131,12 +6143,15 @@ HTML;
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
                     'value'                => $value,
+                    // Normalisierter Wert nur für die Hausverbrauchsbilanz:
+                    // positiv = Entladen, negativ = Laden.
+                    'balanceValue'         => $balanceValue,
                     // Separater Lieferwert für Hausfarbe/Haussymbol:
                     // Nur Entladung zählt, Batterieladung niemals.
                     'dischargeValue'       => $dischargeValue,
                     'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
-                    'invertFlow'            => (bool) ($source['InvertFlow'] ?? false),
+                    'invertFlow'            => $invertFlow,
                     'soc'                  => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
                         ? (float) GetValue($socVariableID)
                         : 0.0,
