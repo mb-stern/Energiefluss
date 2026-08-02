@@ -4776,154 +4776,12 @@ class Energiefluss extends IPSModuleStrict
         // die Sunsynk-Karte selbst dar.
     }
 
-    function clampPercent(value) {
-        const number = Number(value);
-        if (!Number.isFinite(number)) {
-            return 0;
-        }
-
-        return Math.max(0, Math.min(100, Math.round(number)));
-    }
-
-    function applySunsynkRatios(
-        card,
-        d,
-        grid,
-        haus,
-        pvs,
-        attempt = 0
-    ) {
-        if (!card || !d) {
-            return;
-        }
-
-        const mode = ['power', 'energy', 'no'].includes(
-            d.autarkyCalculationMode
-        )
-            ? d.autarkyCalculationMode
-            : 'energy';
-
-        if (mode === 'no') {
-            return;
-        }
-
-        const root = card.shadowRoot;
-        if (!root) {
-            if (attempt < 20) {
-                setTimeout(
-                    () => applySunsynkRatios(
-                        card,
-                        d,
-                        grid,
-                        haus,
-                        pvs,
-                        attempt + 1
-                    ),
-                    50
-                );
-            }
-            return;
-        }
-
-        let autarky = 0;
-        let selfConsumption = 0;
-        let valueSuffix = mode === 'power' ? 'p' : 'e';
-
-        if (mode === 'power') {
-            const housePower = Math.max(Number(haus || 0), 0);
-            const gridPower = Number(grid || 0);
-            const gridImportPower = Math.max(gridPower, 0);
-            const gridExportPower = Math.max(-gridPower, 0);
-            const pvPower = (Array.isArray(pvs) ? pvs : []).reduce(
-                (sum, pv) => sum + Math.max(Number(pv?.value || 0), 0),
-                0
-            );
-
-            // Momentane Autarkie: Anteil des Hausverbrauchs, der aktuell
-            // nicht aus dem Netz bezogen wird.
-            autarky = housePower > 0
-                ? clampPercent(
-                    ((housePower - gridImportPower) / housePower) * 100
-                )
-                : 0;
-
-            // Momentaner Eigenverbrauch: Anteil der aktuellen PV-Leistung,
-            // der nicht ins Netz abgegeben wird.
-            selfConsumption = pvPower > 0
-                ? clampPercent(
-                    ((pvPower - gridExportPower) / pvPower) * 100
-                )
-                : 0;
-        } else {
-            const houseEnergy = Number(d.houseEnergy || 0);
-            const gridImportEnergy = Number(d.gridImportEnergyValue || 0);
-            const gridExportEnergy = Number(d.gridExportEnergyValue || 0);
-            const pvEnergy = Number(d.inverterDailyEnergy || 0);
-
-            // Tagesautarkie: Anteil des Tagesverbrauchs ohne Netzbezug.
-            autarky = houseEnergy > 0
-                ? clampPercent(
-                    ((houseEnergy - Math.max(gridImportEnergy, 0)) /
-                        houseEnergy) * 100
-                )
-                : 0;
-
-            // Tages-Eigenverbrauch: Anteil der Tagesproduktion, der nicht
-            // eingespeist wurde. Batterieladung zählt zum Eigenverbrauch.
-            selfConsumption = pvEnergy > 0
-                ? clampPercent(
-                    ((pvEnergy - Math.max(gridExportEnergy, 0)) /
-                        pvEnergy) * 100
-                )
-                : 0;
-        }
-
-        const autarkyValue = root.getElementById(
-            `autarky${valueSuffix}_value`
-        );
-        const ratioValue = root.getElementById(
-            `ratio${valueSuffix}_value`
-        );
-        const autarkyLabel = root.getElementById('autarky');
-        const ratioLabel = root.getElementById('ratio');
-
-        if (autarkyValue) {
-            autarkyValue.textContent = `${autarky}%`;
-        }
-        if (ratioValue) {
-            ratioValue.textContent = `${selfConsumption}%`;
-        }
-        if (autarkyLabel) {
-            autarkyLabel.textContent = 'Autarkie';
-        }
-        if (ratioLabel) {
-            ratioLabel.textContent = 'Eigenverbrauch';
-        }
-
-        // Lit kann unmittelbar nach unserem Zugriff nochmals rendern.
-        if ((!autarkyValue || !ratioValue) && attempt < 20) {
-            setTimeout(
-                () => applySunsynkRatios(
-                    card,
-                    d,
-                    grid,
-                    haus,
-                    pvs,
-                    attempt + 1
-                ),
-                50
-            );
-        }
-    }
-
-    function scheduleSunsynkRatios(card, d, grid, haus, pvs) {
-        [0, 40, 120, 300].forEach(delay => {
-            setTimeout(
-                () => applySunsynkRatios(card, d, grid, haus, pvs),
-                delay
-            );
-        });
-    }
+    // Autarkie und Eigenverbrauch werden ausschließlich von der originalen
+    // Sunsynk-Card berechnet. Das Modul liefert dafür nur die Rohwerte:
+    // - essential_power: nach HouseCalculationMode berechneter Hausverbrauch
+    // - inverter_power_175: konfigurierte Wechselrichter-Gesamtleistung
+    // - grid_power_169 / grid_ct_power_172: aktuelle Netzleistung
+    // - PV- und Tagesenergie-Sensoren
 
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
         if (sunsynkCard) return sunsynkCard;
@@ -4950,7 +4808,6 @@ class Energiefluss extends IPSModuleStrict
             sunsynkCard = card;
             card.__symconLastData = d;
             await applySunsynkViewOverrides(card, d);
-            scheduleSunsynkRatios(card, d, grid, haus, pvs);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
             document.getElementById('sunsynk-loading').style.display = 'none';
             if (sunsynkPending) {
@@ -4981,7 +4838,6 @@ class Energiefluss extends IPSModuleStrict
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
         sunsynkCard.__symconLastData = d;
         applySunsynkViewOverrides(sunsynkCard, d);
-        scheduleSunsynkRatios(sunsynkCard, d, grid, haus, pvs);
         updateSunsynkWallboxAuxInfo(sunsynkCard, d, wallbox);
     }
 
