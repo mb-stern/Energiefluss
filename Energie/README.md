@@ -269,7 +269,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ---
 
-## Versionen
+# Versionen
 
 ### Version 1.0
 - Initiale Version
