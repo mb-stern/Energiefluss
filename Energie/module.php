@@ -3744,6 +3744,7 @@ class Energiefluss extends IPSModuleStrict
         applyHouseLoadWattColour(card, d);
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
+        applyInverterTemperatureLabels(card, d);
         showInverterPowerAboveVoltages(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
@@ -3766,6 +3767,10 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 applyInverterVisualColour(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyInverterTemperatureLabels(
                     card,
                     card.__symconLastData || d
                 );
@@ -3801,6 +3806,10 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     applyInverterVisualColour(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyInverterTemperatureLabels(
                         card,
                         card.__symconLastData || d
                     );
@@ -3847,6 +3856,178 @@ class Energiefluss extends IPSModuleStrict
         };
         visit(root);
         return roots;
+    }
+
+    function applyInverterTemperatureLabels(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const inverters = Array.isArray(d.inverters) ? d.inverters : [];
+        const names = [
+            String(inverters[0]?.name || 'WR1').trim() || 'WR1',
+            String(inverters[1]?.name || 'WR2').trim() || 'WR2'
+        ];
+
+        const isFullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        // Die Entity-Namen radiator_temp_91 und dc_transformer_temp_90 sind
+        // keine DOM-IDs der Originalkarte. Darum werden die tatsächlich
+        // sichtbaren AC-/DC-Beschriftungen anhand ihres Textes gesucht.
+        const normalise = value => String(value || '')
+            .replace(/\s+/g, ' ')
+            .trim()
+            .toUpperCase();
+
+        const isVisible = element => {
+            if (!element || !element.isConnected) return false;
+            const style = getComputedStyle(element);
+            return style.display !== 'none' && style.visibility !== 'hidden';
+        };
+
+        const findLabel = (oldLabel, alreadyUsed = new Set()) => {
+            const exact = [];
+            const loose = [];
+
+            for (const root of roots) {
+                const elements = root.querySelectorAll?.(
+                    'text, tspan, span, div, p'
+                ) || [];
+
+                for (const element of elements) {
+                    if (alreadyUsed.has(element) || !isVisible(element)) continue;
+
+                    // Nur echte Blätter auswerten. Sonst würde bei HTML-Strukturen
+                    // unter Umständen ein kompletter übergeordneter Block ersetzt.
+                    if (element.children?.length > 0 &&
+                        !['text', 'tspan'].includes(element.tagName?.toLowerCase())) {
+                        continue;
+                    }
+
+                    const text = normalise(element.textContent);
+                    if (!text) continue;
+
+                    if (text === oldLabel) {
+                        exact.push(element);
+                    } else if (
+                        text === oldLabel + ':' ||
+                        text.startsWith(oldLabel + ' ') ||
+                        text.endsWith(' ' + oldLabel) ||
+                        text.includes(oldLabel + ' TEMP') ||
+                        text.includes(oldLabel + '-TEMP')
+                    ) {
+                        loose.push(element);
+                    }
+                }
+            }
+
+            return exact[0] || loose[0] || null;
+        };
+
+        const used = new Set();
+        const acLabel = findLabel('AC', used);
+        if (acLabel) used.add(acLabel);
+        const dcLabel = findLabel('DC', used);
+
+        const replaceText = (element, oldLabel, newLabel) => {
+            if (!element) return;
+
+            const original = String(element.textContent || '').trim();
+            const escaped = oldLabel.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
+            if (normalise(original) === oldLabel) {
+                element.textContent = newLabel;
+            } else {
+                element.textContent = original.replace(
+                    new RegExp('\\b' + escaped + '\\b', 'i'),
+                    newLabel
+                );
+            }
+
+            // Lange Wechselrichternamen dürfen nicht abgeschnitten werden.
+            if (element instanceof SVGTextElement) {
+                element.setAttribute('text-anchor', 'start');
+            }
+        };
+
+        replaceText(acLabel, 'AC', names[0]);
+        replaceText(dcLabel, 'DC', names[1]);
+
+        if (!isFullLayout || !acLabel || !dcLabel) return;
+
+        const nearestMovable = element => {
+            if (!element) return null;
+
+            if (element instanceof SVGElement) {
+                let node = element.closest?.('g') || element;
+
+                // Die kleinste sinnvolle SVG-Gruppe verwenden. Sie soll den
+                // Namen und den zugehörigen Temperaturwert enthalten, aber nicht
+                // den gesamten Wechselrichterblock.
+                for (let i = 0; node && i < 4; i++) {
+                    const textCount = node.querySelectorAll?.('text, tspan').length || 0;
+                    if (textCount >= 2 && textCount <= 6) return node;
+                    const parent = node.parentElement;
+                    node = parent?.tagName?.toLowerCase() === 'g' ? parent : null;
+                }
+
+                return element.closest?.('g') || element;
+            }
+
+            return element.parentElement || element;
+        };
+
+        const acGroup = nearestMovable(acLabel);
+        const dcGroup = nearestMovable(dcLabel);
+        if (!acGroup || !dcGroup || acGroup === dcGroup) return;
+
+        if (acGroup instanceof SVGGraphicsElement &&
+            dcGroup instanceof SVGGraphicsElement) {
+            if (!dcGroup.dataset.symconOriginalTransform) {
+                dcGroup.dataset.symconOriginalTransform =
+                    dcGroup.getAttribute('transform') || '__EMPTY__';
+            }
+
+            const original = dcGroup.dataset.symconOriginalTransform;
+            if (original === '__EMPTY__') {
+                dcGroup.removeAttribute('transform');
+            } else {
+                dcGroup.setAttribute('transform', original);
+            }
+
+            try {
+                const first = acGroup.getBBox();
+                const second = dcGroup.getBBox();
+                const dx = first.x - second.x;
+                const dy = (first.y + first.height + 5) - second.y;
+                const base = original === '__EMPTY__' ? '' : original;
+                dcGroup.setAttribute(
+                    'transform',
+                    `${base} translate(${dx} ${dy})`.trim()
+                );
+            } catch (e) {
+                // Ein späterer Render-Durchlauf versucht es erneut.
+            }
+            return;
+        }
+
+        // Fallback, falls eine Kartenversion die Werte als HTML statt SVG ausgibt.
+        if (!dcGroup.dataset.symconOriginalCssTransform) {
+            dcGroup.dataset.symconOriginalCssTransform =
+                dcGroup.style.transform || '__EMPTY__';
+        }
+
+        const originalCss = dcGroup.dataset.symconOriginalCssTransform;
+        dcGroup.style.transform = originalCss === '__EMPTY__' ? '' : originalCss;
+
+        const firstRect = acGroup.getBoundingClientRect();
+        const secondRect = dcGroup.getBoundingClientRect();
+        const dx = firstRect.left - secondRect.left;
+        const dy = firstRect.bottom + 5 - secondRect.top;
+        const baseCss = originalCss === '__EMPTY__' ? '' : originalCss;
+        dcGroup.style.transform = `${baseCss} translate(${dx}px, ${dy}px)`.trim();
     }
 
     function showInverterPowerAboveVoltages(card, d) {
