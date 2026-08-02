@@ -93,6 +93,9 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('HouseColorBattery', 858148);       // #0d1824
         $this->RegisterPropertyInteger('HouseColorBatteryAccent', 6868216);// #68ccf8
 
+        // JSON-Austauschfeld für Hausfarben-Presets.
+        $this->RegisterPropertyString('HouseColorJson', '');
+
         // Animationsgeschwindigkeit: 100 % entspricht dem bisherigen Verhalten.
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
@@ -644,6 +647,33 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'HouseColorBattery', 'caption' => 'Batterie Gehäuse', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'HouseColorBatteryAccent', 'caption' => 'Batterie Akzent', 'allowTransparent' => false],
                         [
+                            'type'    => 'Label',
+                            'caption' => 'Das Feld dient nur zum Import. Beim Export wird das JSON in einem Dialog angezeigt; nach einem erfolgreichen Import wird das Eingabefeld automatisch geleert. Vor dem Export geänderte Farben zuerst übernehmen.',
+                        ],
+                        [
+                            'type'        => 'ValidationTextBox',
+                            'name'        => 'HouseColorJson',
+                            'caption'     => 'JSON für Import einfügen',
+                            'multiline'   => true,
+                            'rowCount'    => 13,
+                            'placeholder' => '{ \"name\": \"Mein Design\", \"version\": 1, \"colors\": { ... } }',
+                        ],
+                        [
+                            'type'  => 'RowLayout',
+                            'items' => [
+                                [
+                                    'type'    => 'Button',
+                                    'caption' => 'Aktuelle Farben als JSON anzeigen',
+                                    'onClick' => 'echo ENERGIE_ExportHouseColors($id);',
+                                ],
+                                [
+                                    'type'    => 'Button',
+                                    'caption' => 'JSON-Farben übernehmen',
+                                    'onClick' => 'echo ENERGIE_ImportHouseColors($id, $HouseColorJson);',
+                                ],
+                            ],
+                        ],
+                        [
                             'type'    => 'Button',
                             'caption' => 'Standardfarben wiederherstellen',
                             'onClick' => 'ENERGIE_ResetHouseColors($id);',
@@ -722,6 +752,127 @@ class Energiefluss extends IPSModuleStrict
 
             return;
         }
+    }
+
+    public function ExportHouseColors(): string
+    {
+        try {
+            $colors = [];
+            foreach ($this->GetHouseColorProperties() as $property) {
+                $colors[$property] = $this->ReadPropertyInteger($property);
+            }
+
+            $json = json_encode(
+                [
+                    'name'    => 'Hausfarben',
+                    'version' => 1,
+                    'colors'  => $colors,
+                ],
+                JSON_THROW_ON_ERROR
+                | JSON_UNESCAPED_UNICODE
+                | JSON_UNESCAPED_SLASHES
+                | JSON_PRETTY_PRINT
+            );
+
+            // Das Export-JSON nur als Dialoginhalt zurückgeben.
+            // Dadurch wird das Eingabefeld nicht verändert und IP-Symcon
+            // erkennt keine ungespeicherte Konfigurationsänderung.
+            return $json;
+        } catch (Throwable $e) {
+            $this->LogMessage('ExportHouseColors: ' . $e->getMessage(), KL_ERROR);
+            return 'Fehler beim JSON-Export: ' . $e->getMessage();
+        }
+    }
+
+    public function ImportHouseColors(string $json): string
+    {
+        try {
+            $json = trim($json);
+            if ($json === '') {
+                return 'Bitte zuerst eine JSON-Farbkonfiguration einfügen.';
+            }
+
+            $decoded = json_decode($json, true, 32, JSON_THROW_ON_ERROR);
+            if (!is_array($decoded)) {
+                return 'Die JSON-Farbkonfiguration ist ungültig.';
+            }
+
+            // Unterstützt das dokumentierte Format mit "colors" sowie
+            // einfache JSON-Objekte, die die Farbnamen direkt enthalten.
+            $source = isset($decoded['colors']) && is_array($decoded['colors'])
+                ? $decoded['colors']
+                : $decoded;
+
+            $imported = 0;
+            foreach ($this->GetHouseColorProperties() as $property) {
+                if (!array_key_exists($property, $source)) {
+                    continue;
+                }
+
+                $color = $this->NormalizeImportedColor($source[$property]);
+                if ($color === null) {
+                    throw new InvalidArgumentException(
+                        sprintf('Ungültiger Farbwert bei %s.', $property)
+                    );
+                }
+
+                IPS_SetProperty($this->InstanceID, $property, $color);
+                $imported++;
+            }
+
+            if ($imported === 0) {
+                return 'Im JSON wurden keine bekannten Hausfarben gefunden.';
+            }
+
+            // Das JSON ist nur eine vorübergehende Eingabe und soll nicht
+            // dauerhaft in der Instanzkonfiguration gespeichert bleiben.
+            IPS_SetProperty($this->InstanceID, 'HouseColorJson', '');
+            IPS_ApplyChanges($this->InstanceID);
+
+            // Auch den aktuell geöffneten Formulareditor sofort leeren.
+            $this->UpdateFormField('HouseColorJson', 'value', '');
+            $this->ReloadForm();
+
+            return sprintf('%d Hausfarben wurden übernommen.', $imported);
+        } catch (JsonException $e) {
+            return 'Ungültiges JSON: ' . $e->getMessage();
+        } catch (Throwable $e) {
+            $this->LogMessage('ImportHouseColors: ' . $e->getMessage(), KL_ERROR);
+            return 'Fehler beim JSON-Import: ' . $e->getMessage();
+        }
+    }
+
+    private function GetHouseColorProperties(): array
+    {
+        return [
+            'HouseColorFacade',
+            'HouseColorRoof',
+            'HouseColorRoofSecondary',
+            'HouseColorWindows',
+            'HouseColorSolarPanels',
+            'HouseColorInverter',
+            'HouseColorCar',
+            'HouseColorCarDetails',
+            'HouseColorBattery',
+            'HouseColorBatteryAccent',
+        ];
+    }
+
+    private function NormalizeImportedColor(mixed $value): ?int
+    {
+        if (is_int($value) || (is_string($value) && preg_match('/^\d+$/', trim($value)) === 1)) {
+            $color = (int) $value;
+            return ($color >= 0 && $color <= 0xFFFFFF) ? $color : null;
+        }
+
+        if (is_string($value)) {
+            $hex = ltrim(trim($value), '#');
+            if (preg_match('/^[0-9a-fA-F]{6}$/', $hex) === 1) {
+                return hexdec($hex);
+            }
+        }
+
+        return null;
     }
 
     public function ResetHouseColors(): void
@@ -2423,7 +2574,13 @@ class Energiefluss extends IPSModuleStrict
 
         const batteryPower = batteries.reduce(
             (sum, battery) =>
-                sum + Math.max(Number(battery.value || 0), 0),
+                sum + Math.max(
+                    Number(
+                        battery.dischargeValue ??
+                        Math.max(Number(battery.value || 0), 0)
+                    ),
+                    0
+                ),
             0
         );
 
@@ -3536,10 +3693,14 @@ class Energiefluss extends IPSModuleStrict
                 // äußeren Batterierahmen und den Flusspunkt. Deshalb wird
                 // nur diese Farbe richtungsabhängig gesetzt. charge_colour
                 // und die dynamische SOC-Füllung bleiben unverändert.
+                // Da invert_flow aktiv ist, müssen auch die beiden von
+                // Sunsynk verwendeten Richtungsfarben gegeneinander getauscht
+                // werden: Laden verwendet die konfigurierte Ladefarbe und
+                // Entladen die konfigurierte Entladefarbe.
                 colour: Number(activeBatteries[0]?.value || 0) < 0
-                    ? AC.charge
-                    : AC.discharge,
-                charge_colour: AC.charge,
+                    ? AC.discharge
+                    : AC.charge,
+                charge_colour: AC.discharge,
                 show_daily: showEnergyDetails && !!activeBatteries[0] && (activeBatteries[0].hasChargeEnergy || activeBatteries[0].hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
                 max_power: 10000,
@@ -3568,9 +3729,9 @@ class Energiefluss extends IPSModuleStrict
                 soc_end_of_charge: 100,
                 hide_soc: false,
                 colour: Number(activeBatteries[1]?.value || 0) < 0
-                    ? AC.charge
-                    : AC.discharge,
-                charge_colour: AC.charge,
+                    ? AC.discharge
+                    : AC.charge,
+                charge_colour: AC.discharge,
                 show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
                 show_absolute: true,
                 auto_scale: false,
@@ -5098,11 +5259,16 @@ class Energiefluss extends IPSModuleStrict
         const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', socText: '', hasSoc: false };
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
-        const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
+        // Für die Hausverbrauchsbilanz ausschließlich den normalisierten
+        // Batteriewert verwenden. Der sichtbare Rohwert bleibt davon unberührt.
+        const batteryBalanceTotal = batteries.reduce(
+            (sum, bat) => sum + Number(bat.balanceValue ?? bat.value ?? 0),
+            0
+        );
 
         // Netzbezug positiv, Rücklieferung negativ.
         const calculatedHouseBalance = Math.max(
-            pvTotal + batteryTotal + grid,
+            pvTotal + batteryBalanceTotal + grid,
             0
         );
 
@@ -5950,10 +6116,19 @@ HTML;
                 $temperatureVariableID = (int) ($source['TemperatureVariableID'] ?? 0);
                 $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
 
+                // Der Messwert bleibt für Berechnungen unverändert.
+                // "Fluss umkehren" darf ausschließlich die Animation
+                // beeinflussen und niemals Laden/Entladen oder die
+                // Hausverbrauchsbilanz vertauschen.
                 $value = (float) GetValue($variableID);
-                if ((bool) ($source['InvertFlow'] ?? false)) {
-                    $value *= -1;
-                }
+                $invertFlow = (bool) ($source['InvertFlow'] ?? false);
+
+                // Der Rohwert bleibt für die bestehende Visualisierung erhalten.
+                // Für Bilanz und Hauptenergielieferant wird das Vorzeichen
+                // entsprechend der konfigurierten Flussumkehr normalisiert:
+                // positiv = Entladen, negativ = Laden.
+                $balanceValue = $invertFlow ? -$value : $value;
+                $dischargeValue = max($balanceValue, 0.0);
 
                 $hasChargeEnergy =
                     $chargeEnergyVariableID > 0 &&
@@ -5968,9 +6143,15 @@ HTML;
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
                     'value'                => $value,
+                    // Normalisierter Wert nur für die Hausverbrauchsbilanz:
+                    // positiv = Entladen, negativ = Laden.
+                    'balanceValue'         => $balanceValue,
+                    // Separater Lieferwert für Hausfarbe/Haussymbol:
+                    // Nur Entladung zählt, Batterieladung niemals.
+                    'dischargeValue'       => $dischargeValue,
                     'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
-                    'invertFlow'            => (bool) ($source['InvertFlow'] ?? false),
+                    'invertFlow'            => $invertFlow,
                     'soc'                  => ($socVariableID > 0 && IPS_VariableExists($socVariableID))
                         ? (float) GetValue($socVariableID)
                         : 0.0,
