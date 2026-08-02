@@ -4933,15 +4933,17 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
-        const housePvs = Array.isArray(d.housePvs) && d.housePvs.length
-            ? d.housePvs
-            : pvs;
-
+        // Die originale Hausgrafik benötigt nur die aufsummierte Leistung.
+        // updatePowerFlowCard() summiert die übergebenen Strings selbst.
+        // Deshalb werden hier die einzelnen PV-Strings weitergereicht, damit
+        // die Infokachel ab 601 px Name, Leistung und Energie je String zeigen
+        // kann. Bis 600 px bleibt die Anzeige weiterhin auf die Gesamtsumme
+        // reduziert.
         updatePowerFlowCard(
             d,
             grid,
             haus,
-            housePvs,
+            pvs,
             batteries,
             wallbox
         );
