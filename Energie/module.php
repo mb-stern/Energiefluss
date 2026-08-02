@@ -3549,7 +3549,10 @@ class Energiefluss extends IPSModuleStrict
                 animate: true,
                 show_absolute: true,
                 invert_power: !!activeBatteries[0]?.invertFlow,
-                invert_flow: false
+                // Beim Laden (negative Modulleistung) muss die Animation
+                // vom Wechselrichter zur Batterie laufen. Die Farbe war
+                // bereits korrekt; nur die Flussrichtung wird umgekehrt.
+                invert_flow: Number(activeBatteries[0]?.value || 0) < 0
             },
             battery2: {
                 // Auch Batterie 2: Kapazität in Wh. 0 blendet die Zeit aus.
@@ -3572,7 +3575,8 @@ class Energiefluss extends IPSModuleStrict
                 linear_gradient: true,
                 animate: true,
                 invert_power: !!activeBatteries[1]?.invertFlow,
-                invert_flow: false
+                // Batterie 2 verwendet dieselbe Vorzeichenkonvention.
+                invert_flow: Number(activeBatteries[1]?.value || 0) < 0
             },
             load: {
                 // Hauszweig, Haussymbol, Bezeichnung und Leistungsbox verwenden
