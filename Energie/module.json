@@ -4,10 +4,11 @@
     "type": 3,
     "vendor": "",
     "aliases": [
-        "Energiefluss",
+        "Energiefluss"
     ],
     "parentRequirements": [],
     "childRequirements": [],
     "implemented": [],
-    "prefix": "ENERGIE"
+    "prefix": "ENERGIE",
+    "url": "https://github.com/mb-stern/Energiefluss/tree/beta"
 }
