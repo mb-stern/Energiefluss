@@ -4791,6 +4791,7 @@ class Energiefluss extends IPSModuleStrict
         grid,
         haus,
         pvs,
+        batteries,
         attempt = 0
     ) {
         if (!card || !d) {
@@ -4817,6 +4818,7 @@ class Energiefluss extends IPSModuleStrict
                         grid,
                         haus,
                         pvs,
+                        batteries,
                         attempt + 1
                     ),
                     50
@@ -4847,11 +4849,21 @@ class Energiefluss extends IPSModuleStrict
                 )
                 : 0;
 
-            // Momentaner Eigenverbrauch: Anteil der aktuellen PV-Leistung,
-            // der nicht ins Netz abgegeben wird.
-            selfConsumption = pvPower > 0
+            const batteryDischargePower = (
+                Array.isArray(batteries) ? batteries : []
+            ).reduce(
+                (sum, battery) =>
+                    sum + Math.max(Number(battery?.value || 0), 0),
+                0
+            );
+            const ownPower = pvPower + batteryDischargePower;
+
+            // Momentaner Eigenverbrauch im Hybridsystem: PV-Leistung plus
+            // Batterieentladung gelten als eigene Leistung. Nur die aktuelle
+            // Netzeinspeisung vermindert den Eigenverbrauch.
+            selfConsumption = ownPower > 0
                 ? clampPercent(
-                    ((pvPower - gridExportPower) / pvPower) * 100
+                    ((ownPower - gridExportPower) / ownPower) * 100
                 )
                 : 0;
         } else {
@@ -4868,12 +4880,22 @@ class Energiefluss extends IPSModuleStrict
                 )
                 : 0;
 
-            // Tages-Eigenverbrauch: Anteil der Tagesproduktion, der nicht
-            // eingespeist wurde. Batterieladung zählt zum Eigenverbrauch.
-            selfConsumption = pvEnergy > 0
+            const batteryDischargeEnergy = (
+                Array.isArray(batteries) ? batteries : []
+            ).reduce(
+                (sum, battery) =>
+                    sum + Math.max(Number(battery?.dischargeEnergy || 0), 0),
+                0
+            );
+            const ownEnergy = pvEnergy + batteryDischargeEnergy;
+
+            // Tages-Eigenverbrauch im Hybridsystem: PV-Tagesenergie plus
+            // Batterieentladung gelten als eigene Energie. Nur die ins Netz
+            // eingespeiste Energie vermindert den Eigenverbrauch.
+            selfConsumption = ownEnergy > 0
                 ? clampPercent(
-                    ((pvEnergy - Math.max(gridExportEnergy, 0)) /
-                        pvEnergy) * 100
+                    ((ownEnergy - Math.max(gridExportEnergy, 0)) /
+                        ownEnergy) * 100
                 )
                 : 0;
         }
@@ -4909,6 +4931,7 @@ class Energiefluss extends IPSModuleStrict
                     grid,
                     haus,
                     pvs,
+                    batteries,
                     attempt + 1
                 ),
                 50
@@ -4916,10 +4939,24 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-    function scheduleSunsynkRatios(card, d, grid, haus, pvs) {
+    function scheduleSunsynkRatios(
+        card,
+        d,
+        grid,
+        haus,
+        pvs,
+        batteries
+    ) {
         [0, 40, 120, 300].forEach(delay => {
             setTimeout(
-                () => applySunsynkRatios(card, d, grid, haus, pvs),
+                () => applySunsynkRatios(
+                    card,
+                    d,
+                    grid,
+                    haus,
+                    pvs,
+                    batteries
+                ),
                 delay
             );
         });
@@ -4950,7 +4987,7 @@ class Energiefluss extends IPSModuleStrict
             sunsynkCard = card;
             card.__symconLastData = d;
             await applySunsynkViewOverrides(card, d);
-            scheduleSunsynkRatios(card, d, grid, haus, pvs);
+            scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
             document.getElementById('sunsynk-loading').style.display = 'none';
             if (sunsynkPending) {
@@ -4981,7 +5018,7 @@ class Energiefluss extends IPSModuleStrict
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
         sunsynkCard.__symconLastData = d;
         applySunsynkViewOverrides(sunsynkCard, d);
-        scheduleSunsynkRatios(sunsynkCard, d, grid, haus, pvs);
+        scheduleSunsynkRatios(sunsynkCard, d, grid, haus, pvs, batteries);
         updateSunsynkWallboxAuxInfo(sunsynkCard, d, wallbox);
     }
 
