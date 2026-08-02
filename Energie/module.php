@@ -3544,12 +3544,17 @@ class Energiefluss extends IPSModuleStrict
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
                 max_power: 10000,
                 auto_scale: false,
-                dynamic_colour: true,
+                dynamic_colour: false,
                 linear_gradient: true,
                 animate: true,
                 show_absolute: true,
-                invert_power: !!activeBatteries[0]?.invertFlow,
-                // Nur die Animationsrichtung der Sunsynk-Batterielinie umkehren.
+                // Der PHP-Payload enthält bereits die normalisierte Leistung:
+                // negativ = Laden, positiv = Entladen. Deshalb darf die
+                // Sunsynk-Karte das Vorzeichen nicht nochmals umkehren.
+                invert_power: false,
+                // Deine Batterie liefert bereits das korrekte Vorzeichen,
+                // die Sunsynk-Animation benötigt in Symcon jedoch die
+                // umgekehrte Darstellungsrichtung.
                 invert_flow: true
             },
             battery2: {
@@ -3569,11 +3574,14 @@ class Energiefluss extends IPSModuleStrict
                 show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
                 show_absolute: true,
                 auto_scale: false,
-                dynamic_colour: true,
+                dynamic_colour: false,
                 linear_gradient: true,
                 animate: true,
-                invert_power: !!activeBatteries[1]?.invertFlow,
-                // Nur die Animationsrichtung der Sunsynk-Batterielinie umkehren.
+                // Auch Batterie 2 ist im Payload bereits normalisiert.
+                invert_power: false,
+                // Deine Batterie liefert bereits das korrekte Vorzeichen,
+                // die Sunsynk-Animation benötigt in Symcon jedoch die
+                // umgekehrte Darstellungsrichtung.
                 invert_flow: true
             },
             load: {
@@ -3773,7 +3781,6 @@ class Energiefluss extends IPSModuleStrict
         applyAdditionalLoadColours(card);
         alignConsumerNamesToPowerBoxes(card);
         applyAdditionalLoadWattColourByGeometry(card);
-        applyTechnicalBatteryColours(card, d);
         applyHouseLoadWattColour(card, d);
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
@@ -3786,10 +3793,6 @@ class Energiefluss extends IPSModuleStrict
             setTimeout(() => {
                 alignConsumerNamesToPowerBoxes(card);
                 applyAdditionalLoadWattColourByGeometry(card);
-                        applyTechnicalBatteryColours(
-                    card,
-                    card.__symconLastData || d
-                );
                 applyHouseLoadWattColour(
                     card,
                     card.__symconLastData || d
@@ -3821,10 +3824,6 @@ class Energiefluss extends IPSModuleStrict
                     applyAdditionalLoadColours(card);
                     alignConsumerNamesToPowerBoxes(card);
                     applyAdditionalLoadWattColourByGeometry(card);
-                                applyTechnicalBatteryColours(
-                        card,
-                        card.__symconLastData || d
-                    );
                     applyHouseLoadWattColour(
                         card,
                         card.__symconLastData || d
@@ -4001,277 +4000,6 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
     }
-
-    function applyTechnicalBatteryColours(card, d) {
-        if (!card || !card.shadowRoot || !d) return;
-
-        const batteries = Array.isArray(d.batteries)
-            ? d.batteries
-            : [];
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        batteries.slice(0, 2).forEach((battery, index) => {
-            const batteryNo = index + 1;
-            const power = Number(battery?.value || 0);
-            const soc = Math.max(
-                0,
-                Math.min(100, Number(battery?.soc || 0))
-            );
-
-            // Modulkonvention:
-            // negativ = Laden, positiv = Entladen.
-            const colour = power < 0
-                ? AC.charge
-                : AC.discharge;
-
-            for (const root of roots) {
-                // Je nach Layout verwendet die Originalkarte andere
-                // Container-IDs. Compact/Lite und Full/Full Wide werden
-                // deshalb gemeinsam berücksichtigt.
-                const mainSelectors = batteryNo === 1
-                    ? [
-                        '#battery_main',
-                        '#battery',
-                        '#full_battery',
-                        '#full-battery',
-                        '#battery_full',
-                        '#battery-full',
-                        '[id*="battery"][id*="full"]:not([id*="battery2"])'
-                    ]
-                    : [
-                        '#battery2_main',
-                        '#battery2',
-                        '#full_battery2',
-                        '#full-battery2',
-                        '#battery2_full',
-                        '#battery2-full',
-                        '[id*="battery2"][id*="full"]'
-                    ];
-
-                const mains = new Set();
-
-                mainSelectors.forEach(selector => {
-                    root.querySelectorAll?.(selector).forEach(node => {
-                        mains.add(node);
-                    });
-                });
-
-                if (!mains.size) {
-                    continue;
-                }
-
-                for (const main of mains) {
-
-                // 1. Box um die Batterieleistung.
-                const batteryData = main.querySelector?.(
-                    batteryNo === 1
-                        ? '#battery_data'
-                        : '#battery2_data'
-                );
-
-                if (batteryData) {
-                    Array.from(
-                        batteryData.querySelectorAll?.(':scope > rect') || []
-                    ).slice(0, 2).forEach(rect => {
-                        rect.setAttribute?.('stroke', colour);
-                        rect.style?.setProperty(
-                            'stroke',
-                            colour,
-                            'important'
-                        );
-                    });
-                }
-
-                // 2. Batteriesymbol:
-                // Der äußere Batteriepfad wird über einen SVG-Gradienten
-                // eingefärbt. Wir ändern nur die FARBE des bereits gefüllten
-                // SOC-Bereichs. Die Stop-Positionen und damit der sichtbare
-                // Ladezustand bleiben vollständig unverändert.
-                const outerIconSelectors = batteryNo === 1
-                    ? [
-                        '#battery_icon #bat_outter',
-                        '#battery_icon',
-                        '#bat_outter',
-                        '#bat-outer',
-                        '[id*="battery"][id*="icon"]:not([id*="battery2"])',
-                        '[id*="bat"][id*="outter"]',
-                        '[id*="bat"][id*="outer"]'
-                    ]
-                    : [
-                        '#battery2_icon',
-                        '#bat2_outter',
-                        '#bat2-outer',
-                        '[id*="battery2"][id*="icon"]',
-                        '[id*="bat2"][id*="outter"]',
-                        '[id*="bat2"][id*="outer"]'
-                    ];
-
-                let outerIcon = null;
-
-                for (const selector of outerIconSelectors) {
-                    outerIcon = main.querySelector?.(selector) || null;
-                    if (outerIcon) {
-                        break;
-                    }
-                }
-
-                if (outerIcon) {
-                    const gradientSelectors = batteryNo === 1
-                        ? [
-                            '#bLg-bat1',
-                            '#battery-gradient',
-                            '#battery_gradient',
-                            'linearGradient[id*="bat1"]',
-                            'linearGradient[id*="battery"]:not([id*="battery2"])'
-                        ]
-                        : [
-                            '#b2Lg',
-                            '#b2Lg-bat2',
-                            '#battery2-gradient',
-                            '#battery2_gradient',
-                            'linearGradient[id*="bat2"]',
-                            'linearGradient[id*="battery2"]'
-                        ];
-
-                    let gradient = null;
-
-                    for (const selector of gradientSelectors) {
-                        gradient =
-                            outerIcon.querySelector?.(selector) ||
-                            main.querySelector?.(selector) ||
-                            null;
-
-                        if (gradient) {
-                            break;
-                        }
-                    }
-
-                    if (gradient) {
-                        // Das komplette Batteriesymbol erhält eine einheitliche
-                        // Farbe entsprechend der aktuellen Flussrichtung:
-                        // Laden = konfigurierte Ladefarbe
-                        // Entladen = konfigurierte Entladefarbe
-                        //
-                        // Der SOC-Wert selbst und seine Textanzeige bleiben
-                        // unverändert. Nur die Symbolfarbe wird vereinheitlicht.
-                        const stops = Array.from(
-                            gradient.querySelectorAll?.('stop') || []
-                        );
-
-                        if (stops.length) {
-                            stops.forEach(stop => {
-                                stop.setAttribute('stop-color', colour);
-                                stop.style.setProperty(
-                                    'stop-color',
-                                    colour,
-                                    'important'
-                                );
-                            });
-                        } else {
-                            const createStop = offset => {
-                                const stop = document.createElementNS(
-                                    'http://www.w3.org/2000/svg',
-                                    'stop'
-                                );
-
-                                stop.setAttribute('offset', `${offset}%`);
-                                stop.setAttribute('stop-color', colour);
-                                stop.style.setProperty(
-                                    'stop-color',
-                                    colour,
-                                    'important'
-                                );
-
-                                return stop;
-                            };
-
-                            gradient.appendChild(createStop(0));
-                            gradient.appendChild(createStop(100));
-                        }
-                    }
-
-                    // Falls die verwendete Karten-Version keinen Gradienten
-                    // mit bekannten IDs nutzt, nur den äußeren Pfad einfärben.
-                    // Der innere Ladeanimationspfad bleibt unangetastet.
-                    const outerPath = outerIcon.querySelector?.(
-                        ':scope > path'
-                    );
-
-                    if (
-                        outerPath &&
-                        !String(
-                            outerPath.getAttribute?.('fill') || ''
-                        ).startsWith('url(')
-                    ) {
-                        outerPath.setAttribute?.('fill', colour);
-                        outerPath.style?.setProperty(
-                            'fill',
-                            colour,
-                            'important'
-                        );
-                    }
-                }
-
-                // 3. Leitung.
-                main.querySelectorAll?.(
-                    '.anim-line, [class*="anim-line"], ' +
-                    '[class*="battery-line"], [class*="battery_line"], ' +
-                    'path[id*="line"], line[id*="line"], ' +
-                    'polyline[id*="line"]'
-                ).forEach(line => {
-                    line.setAttribute?.('stroke', colour);
-                    line.style?.setProperty(
-                        'stroke',
-                        colour,
-                        'important'
-                    );
-                    line.style?.setProperty(
-                        'color',
-                        colour,
-                        'important'
-                    );
-                });
-
-                // 4. Fließende Punkte direkt über ihre echten IDs erfassen.
-                main.querySelectorAll?.(
-                    '#power-dot-charge, #power-dot-discharge, ' +
-                    '[id="power-dot-charge"], [id="power-dot-discharge"], ' +
-                    'circle[id="bat"]'
-                ).forEach(dot => {
-                    const id = String(dot.id || '');
-
-                    // Unsichtbare Gegenrichtung transparent lassen.
-                    if (
-                        (id.includes('charge') && power >= 0) ||
-                        (id.includes('discharge') && power < 0)
-                    ) {
-                        return;
-                    }
-
-                    dot.setAttribute?.('fill', colour);
-                    dot.setAttribute?.('stroke', colour);
-                    dot.style?.setProperty(
-                        'fill',
-                        colour,
-                        'important'
-                    );
-                    dot.style?.setProperty(
-                        'stroke',
-                        colour,
-                        'important'
-                    );
-                    dot.style?.setProperty(
-                        'color',
-                        colour,
-                        'important'
-                    );
-                });
-                }
-            }
-        });
-    }
-
 
     function applyInverterVisualColour(card, d) {
         if (!card || !card.shadowRoot || !d) return;
@@ -5279,22 +5007,20 @@ class Energiefluss extends IPSModuleStrict
         const wrapEl = document.getElementById('wrap');
         const rootEl = document.getElementById('scale-root');
 
-        let graphWidth = mode === 'house' ? 900 : 540;
+        let graphWidth;
 
-        if (mode !== 'house') {
-            const effectiveCount =
-                groupCount + ((hasWallbox && groupCount > 0) ? 1 : 0);
-            const columns = Math.ceil(effectiveCount / 2);
-
-            if (columns > 0) {
-                graphWidth = Math.max(graphWidth, 650 + ((columns - 1) * COLW));
-            }
-
-            if (hasWallbox && groupCount === 0) {
-                graphWidth = Math.max(graphWidth, 592);
-            }
-
-            graphWidth = Math.min(graphWidth, 1080);
+        if (mode === 'house') {
+            // Die Hausgrafik besitzt weiterhin ihre feste 900x640-Zeichenfläche.
+            graphWidth = 900;
+        } else {
+            // Die originale Sunsynk-Karte muss exakt dieselbe Breite besitzen
+            // wie der Bereich, der anschließend durch fit() skaliert wird.
+            // Zuvor blieb #stage immer 1080 px breit, während #fit häufig nur
+            // 540 px breit war. Dadurch wurde die rechte Hälfte abgeschnitten
+            // und die Karte wirkte in IP-Symcon falsch skaliert.
+            graphWidth = currentTechnicalLayout.endsWith('-wide')
+                ? 1080
+                : 540;
         }
 
         layoutWidth = graphWidth;
@@ -5304,6 +5030,12 @@ class Energiefluss extends IPSModuleStrict
 
         wrapEl.style.width = layoutWidth + 'px';
         rootEl.style.width = layoutWidth + 'px';
+
+        // Nur die technische Ansicht an die tatsächlich skalierte Breite
+        // angleichen. Die Hausansicht bleibt vollständig unverändert.
+        if (stage) {
+            stage.style.width = graphWidth + 'px';
+        }
 
         wrapEl.style.gap = '0px';
 
