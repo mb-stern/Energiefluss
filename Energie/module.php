@@ -6166,10 +6166,10 @@ HTML;
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
                     'value'                => $value,
-                    // Für die Hausgrafik exakt denselben bereits über
-                    // InvertFlow normalisierten Batteriewert verwenden wie
+                    // Für die Hausgrafik denselben bereits anhand der
+                    // Konfiguration korrigierten Batteriewert verwenden wie
                     // für die funktionierende Hausverbrauchsbilanz.
-                    // Positiv = Entladen, negativ = Laden.
+                    // Positiv = Entladen zum Haus, negativ = Laden.
                     'dischargeValue'       => max($value, 0.0),
                     'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
