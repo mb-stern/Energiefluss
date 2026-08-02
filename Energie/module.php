@@ -3544,15 +3544,15 @@ class Energiefluss extends IPSModuleStrict
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
                 max_power: 10000,
                 auto_scale: false,
-                dynamic_colour: true,
+                dynamic_colour: false,
                 linear_gradient: true,
                 animate: true,
                 show_absolute: true,
-                invert_power: !!activeBatteries[0]?.invertFlow,
-                // Beim Laden (negative Modulleistung) muss die Animation
-                // vom Wechselrichter zur Batterie laufen. Die Farbe war
-                // bereits korrekt; nur die Flussrichtung wird umgekehrt.
-                invert_flow: Number(activeBatteries[0]?.value || 0) < 0
+                // Der PHP-Payload enthält bereits die normalisierte Leistung:
+                // negativ = Laden, positiv = Entladen. Deshalb darf die
+                // Sunsynk-Karte das Vorzeichen nicht nochmals umkehren.
+                invert_power: false,
+                invert_flow: false
             },
             battery2: {
                 // Auch Batterie 2: Kapazität in Wh. 0 blendet die Zeit aus.
@@ -3571,12 +3571,12 @@ class Energiefluss extends IPSModuleStrict
                 show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
                 show_absolute: true,
                 auto_scale: false,
-                dynamic_colour: true,
+                dynamic_colour: false,
                 linear_gradient: true,
                 animate: true,
-                invert_power: !!activeBatteries[1]?.invertFlow,
-                // Batterie 2 verwendet dieselbe Vorzeichenkonvention.
-                invert_flow: Number(activeBatteries[1]?.value || 0) < 0
+                // Auch Batterie 2 ist im Payload bereits normalisiert.
+                invert_power: false,
+                invert_flow: false
             },
             load: {
                 // Hauszweig, Haussymbol, Bezeichnung und Leistungsbox verwenden
@@ -3775,7 +3775,6 @@ class Energiefluss extends IPSModuleStrict
         applyAdditionalLoadColours(card);
         alignConsumerNamesToPowerBoxes(card);
         applyAdditionalLoadWattColourByGeometry(card);
-        applyTechnicalBatteryColours(card, d);
         applyHouseLoadWattColour(card, d);
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
@@ -3788,10 +3787,6 @@ class Energiefluss extends IPSModuleStrict
             setTimeout(() => {
                 alignConsumerNamesToPowerBoxes(card);
                 applyAdditionalLoadWattColourByGeometry(card);
-                        applyTechnicalBatteryColours(
-                    card,
-                    card.__symconLastData || d
-                );
                 applyHouseLoadWattColour(
                     card,
                     card.__symconLastData || d
@@ -3823,10 +3818,6 @@ class Energiefluss extends IPSModuleStrict
                     applyAdditionalLoadColours(card);
                     alignConsumerNamesToPowerBoxes(card);
                     applyAdditionalLoadWattColourByGeometry(card);
-                                applyTechnicalBatteryColours(
-                        card,
-                        card.__symconLastData || d
-                    );
                     applyHouseLoadWattColour(
                         card,
                         card.__symconLastData || d
@@ -4003,314 +3994,6 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
     }
-
-    function applyTechnicalBatteryColours(card, d) {
-        if (!card || !card.shadowRoot || !d) return;
-
-        const batteries = Array.isArray(d.batteries)
-            ? d.batteries
-            : [];
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        batteries.slice(0, 2).forEach((battery, index) => {
-            const batteryNo = index + 1;
-            const power = Number(battery?.value || 0);
-            const soc = Math.max(
-                0,
-                Math.min(100, Number(battery?.soc || 0))
-            );
-
-            // Modulkonvention:
-            // negativ = Laden, positiv = Entladen.
-            const colour = power < 0
-                ? AC.charge
-                : AC.discharge;
-
-            for (const root of roots) {
-                // Je nach Layout verwendet die Originalkarte andere
-                // Container-IDs. Compact/Lite und Full/Full Wide werden
-                // deshalb gemeinsam berücksichtigt.
-                const mainSelectors = batteryNo === 1
-                    ? [
-                        '#battery_main',
-                        '#battery',
-                        '#full_battery',
-                        '#full-battery',
-                        '#battery_full',
-                        '#battery-full',
-                        '[id*="battery"][id*="full"]:not([id*="battery2"])'
-                    ]
-                    : [
-                        '#battery2_main',
-                        '#battery2',
-                        '#full_battery2',
-                        '#full-battery2',
-                        '#battery2_full',
-                        '#battery2-full',
-                        '[id*="battery2"][id*="full"]'
-                    ];
-
-                const mains = new Set();
-
-                mainSelectors.forEach(selector => {
-                    root.querySelectorAll?.(selector).forEach(node => {
-                        mains.add(node);
-                    });
-                });
-
-                if (!mains.size) {
-                    continue;
-                }
-
-                for (const main of mains) {
-
-                // 1. Box um die Batterieleistung.
-                const batteryData = main.querySelector?.(
-                    batteryNo === 1
-                        ? '#battery_data'
-                        : '#battery2_data'
-                );
-
-                if (batteryData) {
-                    Array.from(
-                        batteryData.querySelectorAll?.(':scope > rect') || []
-                    ).slice(0, 2).forEach(rect => {
-                        rect.setAttribute?.('stroke', colour);
-                        rect.style?.setProperty(
-                            'stroke',
-                            colour,
-                            'important'
-                        );
-                    });
-                }
-
-                // 2. Batteriesymbol:
-                // Der äußere Batteriepfad wird über einen SVG-Gradienten
-                // eingefärbt. Wir ändern nur die FARBE des bereits gefüllten
-                // SOC-Bereichs. Die Stop-Positionen und damit der sichtbare
-                // Ladezustand bleiben vollständig unverändert.
-                const outerIconSelectors = batteryNo === 1
-                    ? [
-                        '#battery_icon #bat_outter',
-                        '#battery_icon',
-                        '#bat_outter',
-                        '#bat-outer',
-                        '[id*="battery"][id*="icon"]:not([id*="battery2"])',
-                        '[id*="bat"][id*="outter"]',
-                        '[id*="bat"][id*="outer"]'
-                    ]
-                    : [
-                        '#battery2_icon',
-                        '#bat2_outter',
-                        '#bat2-outer',
-                        '[id*="battery2"][id*="icon"]',
-                        '[id*="bat2"][id*="outter"]',
-                        '[id*="bat2"][id*="outer"]'
-                    ];
-
-                let outerIcon = null;
-
-                for (const selector of outerIconSelectors) {
-                    outerIcon = main.querySelector?.(selector) || null;
-                    if (outerIcon) {
-                        break;
-                    }
-                }
-
-                if (outerIcon) {
-                    const gradientSelectors = batteryNo === 1
-                        ? [
-                            '#bLg-bat1',
-                            '#battery-gradient',
-                            '#battery_gradient',
-                            'linearGradient[id*="bat1"]',
-                            'linearGradient[id*="battery"]:not([id*="battery2"])'
-                        ]
-                        : [
-                            '#b2Lg',
-                            '#b2Lg-bat2',
-                            '#battery2-gradient',
-                            '#battery2_gradient',
-                            'linearGradient[id*="bat2"]',
-                            'linearGradient[id*="battery2"]'
-                        ];
-
-                    let gradient = null;
-
-                    for (const selector of gradientSelectors) {
-                        gradient =
-                            outerIcon.querySelector?.(selector) ||
-                            main.querySelector?.(selector) ||
-                            null;
-
-                        if (gradient) {
-                            break;
-                        }
-                    }
-
-                    if (gradient) {
-                        // Das komplette Batteriesymbol erhält eine einheitliche
-                        // Farbe entsprechend der aktuellen Flussrichtung:
-                        // Laden = konfigurierte Ladefarbe
-                        // Entladen = konfigurierte Entladefarbe
-                        //
-                        // Der SOC-Wert selbst und seine Textanzeige bleiben
-                        // unverändert. Nur die Symbolfarbe wird vereinheitlicht.
-                        const stops = Array.from(
-                            gradient.querySelectorAll?.('stop') || []
-                        );
-
-                        if (stops.length) {
-                            stops.forEach(stop => {
-                                stop.setAttribute('stop-color', colour);
-                                stop.style.setProperty(
-                                    'stop-color',
-                                    colour,
-                                    'important'
-                                );
-                            });
-                        } else {
-                            const createStop = offset => {
-                                const stop = document.createElementNS(
-                                    'http://www.w3.org/2000/svg',
-                                    'stop'
-                                );
-
-                                stop.setAttribute('offset', `${offset}%`);
-                                stop.setAttribute('stop-color', colour);
-                                stop.style.setProperty(
-                                    'stop-color',
-                                    colour,
-                                    'important'
-                                );
-
-                                return stop;
-                            };
-
-                            gradient.appendChild(createStop(0));
-                            gradient.appendChild(createStop(100));
-                        }
-                    }
-
-                    // Falls die verwendete Karten-Version keinen Gradienten
-                    // mit bekannten IDs nutzt, nur den äußeren Pfad einfärben.
-                    // Der innere Ladeanimationspfad bleibt unangetastet.
-                    const outerPath = outerIcon.querySelector?.(
-                        ':scope > path'
-                    );
-
-                    if (
-                        outerPath &&
-                        !String(
-                            outerPath.getAttribute?.('fill') || ''
-                        ).startsWith('url(')
-                    ) {
-                        outerPath.setAttribute?.('fill', colour);
-                        outerPath.style?.setProperty(
-                            'fill',
-                            colour,
-                            'important'
-                        );
-                    }
-                }
-
-                // 3. Nur tatsächlich sichtbare Texte der Batterie
-                // richtungsabhängig einfärben. Die Originalkarte enthält
-                // transparente bzw. ausgeblendete Hilfstexte. Werden diese
-                // pauschal über !important eingefärbt, erscheinen mehrere
-                // Textzeilen übereinander.
-                main.querySelectorAll?.('text, tspan').forEach(textNode => {
-                    const ownFill = String(
-                        textNode.getAttribute?.('fill') || ''
-                    ).trim().toLowerCase();
-                    const ownOpacity = Number(
-                        textNode.getAttribute?.('opacity') ?? 1
-                    );
-                    const styleOpacity = Number(
-                        textNode.style?.opacity || 1
-                    );
-                    const computed = window.getComputedStyle
-                        ? window.getComputedStyle(textNode)
-                        : null;
-                    const computedFill = String(
-                        computed?.fill || ''
-                    ).trim().toLowerCase();
-                    const hidden =
-                        ownFill === 'none' ||
-                        ownFill === 'transparent' ||
-                        computedFill === 'none' ||
-                        computedFill === 'transparent' ||
-                        ownOpacity === 0 ||
-                        styleOpacity === 0 ||
-                        computed?.display === 'none' ||
-                        computed?.visibility === 'hidden' ||
-                        Number(computed?.opacity ?? 1) === 0;
-
-                    if (hidden) {
-                        return;
-                    }
-
-                    textNode.setAttribute?.('fill', colour);
-                    textNode.style?.setProperty(
-                        'fill',
-                        colour,
-                        'important'
-                    );
-                });
-
-                // Keine globale color-Eigenschaft am Batteriecontainer setzen:
-                // Sie würde auch versteckte Hilfstexte der Originalkarte
-                // wieder sichtbar machen.
-
-                // 4. Leitung.
-                main.querySelectorAll?.(
-                    '.anim-line, [class*="anim-line"], ' +
-                    '[class*="battery-line"], [class*="battery_line"], ' +
-                    'path[id*="line"], line[id*="line"], ' +
-                    'polyline[id*="line"]'
-                ).forEach(line => {
-                    line.setAttribute?.('stroke', colour);
-                    line.style?.setProperty(
-                        'stroke',
-                        colour,
-                        'important'
-                    );
-                    line.style?.setProperty(
-                        'color',
-                        colour,
-                        'important'
-                    );
-                });
-
-                // 5. Fließende Punkte. Einige Kartenlayouts legen die
-                // Punkte außerhalb des eigentlichen Batterie-Containers ab.
-                // Deshalb sowohl im Batterieelement als auch im jeweiligen
-                // Shadow-Root suchen und beide Richtungs-Punkte einfärben.
-                const dotSelectors = batteryNo === 1
-                    ? '#power-dot-charge, #power-dot-discharge, ' +
-                      '[id="power-dot-charge"], [id="power-dot-discharge"], ' +
-                      'circle[id="bat"], [id*="battery"] circle[class*="dot"]'
-                    : '#power-dot2-charge, #power-dot2-discharge, ' +
-                      '[id="power-dot2-charge"], [id="power-dot2-discharge"], ' +
-                      'circle[id="bat2"], [id*="battery2"] circle[class*="dot"]';
-
-                const dots = new Set();
-                main.querySelectorAll?.(dotSelectors).forEach(dot => dots.add(dot));
-                root.querySelectorAll?.(dotSelectors).forEach(dot => dots.add(dot));
-
-                dots.forEach(dot => {
-                    dot.setAttribute?.('fill', colour);
-                    dot.setAttribute?.('stroke', colour);
-                    dot.style?.setProperty('fill', colour, 'important');
-                    dot.style?.setProperty('stroke', colour, 'important');
-                    dot.style?.setProperty('color', colour, 'important');
-                });
-                }
-            }
-        });
-    }
-
 
     function applyInverterVisualColour(card, d) {
         if (!card || !card.shadowRoot || !d) return;
