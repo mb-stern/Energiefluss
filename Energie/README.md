@@ -13,6 +13,20 @@ Beide Ansichten können direkt innerhalb der Visualisierung umgeschaltet werden.
 
 Dieses Modul integriert und erweitert zwei hervorragende Open-Source-Projekte für die Verwendung innerhalb von **IP-Symcon**.
 
+## Third-Party Components
+
+Dieses Modul verwendet folgende Open-Source-Komponenten:
+
+| Komponente | Lizenz | Verwendung |
+|------------|---------|------------|
+| Sunsynk Power Flow Card | MIT | Technische Energieflussdarstellung (Compact, Lite, Full) |
+| Power Flow Card (LordGuenni) | MIT | Hausgrafik |
+| Lit (Google LLC) | BSD-3-Clause | Web Components Framework |
+
+Die vollständigen Lizenztexte befinden sich im Verzeichnis `licenses/`.
+
+Alle Rechte an den jeweiligen Drittkomponenten verbleiben bei deren ursprünglichen Autoren.
+
 ## 🏠 Power Flow Card
 
 **Projekt:** https://github.com/LordGuenni/power-flow-card

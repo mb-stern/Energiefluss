@@ -20,3 +20,17 @@ Für die Visualisierung stehen **zwei unterschiedliche Ansichten** zur Verfügun
 2. **Grafische Hausansicht**
 
 Die Werte werden automatisch aktualisiert, sobald sich eine der verwendeten IP-Symcon-Variablen ändert.
+
+## Third-Party Components
+
+Dieses Modul verwendet folgende Open-Source-Komponenten:
+
+| Komponente | Lizenz | Verwendung |
+|------------|---------|------------|
+| Sunsynk Power Flow Card | MIT | Technische Energieflussdarstellung (Compact, Lite, Full) |
+| Power Flow Card (LordGuenni) | MIT | Hausgrafik |
+| Lit (Google LLC) | BSD-3-Clause | Web Components Framework |
+
+Die vollständigen Lizenztexte befinden sich im Verzeichnis `licenses/`.
+
+Alle Rechte an den jeweiligen Drittkomponenten verbleiben bei deren ursprünglichen Autoren.
