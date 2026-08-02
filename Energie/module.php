@@ -2578,7 +2578,13 @@ class Energiefluss extends IPSModuleStrict
         // Im Modul bedeutet positive Batterieleistung: Entladen zum Haus.
         const batteryDischarge = batteries.reduce(
             (sum, battery) =>
-                sum + Math.max(Number(battery.value || 0), 0),
+                // Für das Haussymbol zählt ausschließlich die tatsächliche
+                // Entladeleistung. Die für die Flussanimation eventuell
+                // invertierte Leistung darf hier nicht verwendet werden.
+                sum + Math.max(
+                    Number(battery.dischargeValue || 0),
+                    0
+                ),
             0
         );
 
@@ -6137,7 +6143,12 @@ HTML;
                 $temperatureVariableID = (int) ($source['TemperatureVariableID'] ?? 0);
                 $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
 
-                $value = (float) GetValue($variableID);
+                // Rohwert getrennt behalten: positiv bedeutet Entladen,
+                // negativ bedeutet Laden. Die optionale Flussumkehr darf
+                // nur die Darstellung beeinflussen, nicht die Bewertung
+                // des Hauptenergielieferanten für das Haussymbol.
+                $rawBatteryValue = (float) GetValue($variableID);
+                $value = $rawBatteryValue;
                 if ((bool) ($source['InvertFlow'] ?? false)) {
                     $value *= -1;
                 }
@@ -6155,6 +6166,9 @@ HTML;
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
                     'value'                => $value,
+                    // Ausschließlich die reale Entladeleistung für die
+                    // Ermittlung des Hauptenergielieferanten am Haus.
+                    'dischargeValue'       => max($rawBatteryValue, 0.0),
                     'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
                     'invertFlow'            => (bool) ($source['InvertFlow'] ?? false),
