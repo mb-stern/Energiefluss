@@ -6143,18 +6143,15 @@ HTML;
                 $temperatureVariableID = (int) ($source['TemperatureVariableID'] ?? 0);
                 $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
 
-                // Batterieleistung einmal zentral normalisieren.
-                // Nach dieser Stelle gilt im gesamten Modul eindeutig:
-                //   positiv = Batterie entlädt
-                //   negativ = Batterie lädt
-                //
-                // Diese normalisierte Leistung wird unverändert für
-                // Hausverbrauchsbilanz, Sunsynk-Anzeige, Hausgrafik und
-                // die Ermittlung des Hauptenergielieferanten verwendet.
+                // Rohwert getrennt behalten: positiv bedeutet Entladen,
+                // negativ bedeutet Laden. Die optionale Flussumkehr darf
+                // nur die Darstellung beeinflussen, nicht die Bewertung
+                // des Hauptenergielieferanten für das Haussymbol.
                 $rawBatteryValue = (float) GetValue($variableID);
-                $value = (bool) ($source['InvertFlow'] ?? false)
-                    ? -$rawBatteryValue
-                    : $rawBatteryValue;
+                $value = $rawBatteryValue;
+                if ((bool) ($source['InvertFlow'] ?? false)) {
+                    $value *= -1;
+                }
 
                 $hasChargeEnergy =
                     $chargeEnergyVariableID > 0 &&
@@ -6169,12 +6166,11 @@ HTML;
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
                     'value'                => $value,
-                    // Zustände immer aus demselben normalisierten Wert
-                    // ableiten, den auch die Hausverbrauchsbilanz nutzt.
+                    // Für die Hausgrafik exakt denselben bereits über
+                    // InvertFlow normalisierten Batteriewert verwenden wie
+                    // für die funktionierende Hausverbrauchsbilanz.
+                    // Positiv = Entladen, negativ = Laden.
                     'dischargeValue'       => max($value, 0.0),
-                    'chargeValue'          => max(-$value, 0.0),
-                    'isDischarging'        => ($value > 0.0),
-                    'isCharging'           => ($value < 0.0),
                     'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
                     'invertFlow'            => (bool) ($source['InvertFlow'] ?? false),
