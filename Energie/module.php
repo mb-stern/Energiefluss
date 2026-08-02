@@ -25,6 +25,7 @@ class Energiefluss extends IPSModuleStrict
         // Dynamische Anlagen.
         $this->RegisterPropertyString('Producers', '[]');
         $this->RegisterPropertyString('Batteries', '[]');
+        $this->RegisterPropertyString('Inverters', '[]');
         $this->RegisterPropertyInteger('OutsideTemperature', 0);
         $this->RegisterPropertyInteger('SolarForecastRemaining', 0);
 
@@ -432,32 +433,74 @@ class Energiefluss extends IPSModuleStrict
                     'items'   => [
                         [
                             'type'    => 'Label',
-                            'caption' => 'Wechselrichter',
+                            'caption' => 'Die Werte mehrerer Wechselrichter werden addiert und als Gesamtsumme angezeigt.',
                         ],
                         [
-                            'type'    => 'SelectVariable',
-                            'name'    => 'InverterPower',
-                            'caption' => 'Wechselrichterleistung gesamt (W)',
-                        ],
-                        [
-                            'type'    => 'SelectVariable',
-                            'name'    => 'InverterCurrentL1',
-                            'caption' => 'Wechselrichterstrom Phase L1 (A)',
-                        ],
-                        [
-                            'type'    => 'SelectVariable',
-                            'name'    => 'InverterCurrentL2',
-                            'caption' => 'Wechselrichterstrom Phase L2 (A)',
-                        ],
-                        [
-                            'type'    => 'SelectVariable',
-                            'name'    => 'InverterCurrentL3',
-                            'caption' => 'Wechselrichterstrom Phase L3 (A)',
-                        ],
-                        [
-                            'type'    => 'SelectVariable',
-                            'name'    => 'InverterTemperature',
-                            'caption' => 'Wechselrichtertemperatur (°C, optional)',
+                            'type'        => 'List',
+                            'name'        => 'Inverters',
+                            'caption'     => 'Wechselrichter (maximal 2 berücksichtigt)',
+                            'rowCount'    => 2,
+                            'add'         => true,
+                            'delete'      => true,
+                            'changeOrder' => true,
+                            'columns'     => [
+                                [
+                                    'caption' => 'Name',
+                                    'name'    => 'Name',
+                                    'width'   => '130px',
+                                    'add'     => '',
+                                    'edit'    => ['type' => 'ValidationTextBox'],
+                                ],
+                                [
+                                    'caption' => 'Leistung (W)',
+                                    'name'    => 'PowerVariableID',
+                                    'width'   => '190px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Strom L1 (A)',
+                                    'name'    => 'CurrentL1VariableID',
+                                    'width'   => '165px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Strom L2 (A)',
+                                    'name'    => 'CurrentL2VariableID',
+                                    'width'   => '165px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Strom L3 (A)',
+                                    'name'    => 'CurrentL3VariableID',
+                                    'width'   => '165px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Temperatur (°C)',
+                                    'name'    => 'TemperatureVariableID',
+                                    'width'   => '175px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Tagesenergie (kWh)',
+                                    'name'    => 'DailyEnergyVariableID',
+                                    'width'   => '180px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Gesamtenergie (kWh)',
+                                    'name'    => 'TotalEnergyVariableID',
+                                    'width'   => '185px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                            ],
                         ],
                         [
                             'type'    => 'Label',
@@ -3285,6 +3328,12 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_inverter_temperature',
             entityAvailable(d, 'inverterTemperature')
         );
+        // Zweites Temperaturfeld der Originalkarte wird für WR2 verwendet.
+        addEntity(
+            'dc_transformer_temp_90',
+            'sensor.symcon_inverter2_temperature',
+            entityAvailable(d, 'inverter2Temperature')
+        );
         addEntity('inverter_current_164', 'sensor.symcon_inverter_current_l1', entityAvailable(d, 'inverterCurrentL1'));
         addEntity('inverter_current_L2', 'sensor.symcon_inverter_current_l2', entityAvailable(d, 'inverterCurrentL2'));
         addEntity('inverter_current_L3', 'sensor.symcon_inverter_current_l3', entityAvailable(d, 'inverterCurrentL3'));
@@ -3609,6 +3658,10 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_inverter': ssState(d.inverterPower || 0, 'W'),
             'sensor.symcon_inverter_temperature': ssState(
                 d.inverterTemperature || 0,
+                '°C'
+            ),
+            'sensor.symcon_inverter2_temperature': ssState(
+                d.inverter2Temperature || 0,
                 '°C'
             ),
             'sensor.symcon_inverter_current_l1': ssState(d.inverterCurrentL1 || 0, 'A'),
@@ -5714,6 +5767,26 @@ HTML;
             }
         }
 
+        $inverters = json_decode($this->ReadPropertyString('Inverters'), true);
+        if (is_array($inverters)) {
+            foreach (array_slice($inverters, 0, 2) as $inverter) {
+                foreach ([
+                    'PowerVariableID',
+                    'CurrentL1VariableID',
+                    'CurrentL2VariableID',
+                    'CurrentL3VariableID',
+                    'TemperatureVariableID',
+                    'DailyEnergyVariableID',
+                    'TotalEnergyVariableID',
+                ] as $key) {
+                    $variableID = (int) ($inverter[$key] ?? 0);
+                    if ($variableID > 0) {
+                        $ids[] = $variableID;
+                    }
+                }
+            }
+        }
+
         $batteries = json_decode($this->ReadPropertyString('Batteries'), true);
         if (is_array($batteries)) {
             foreach (array_slice($batteries, 0, 2) as $battery) {
@@ -6214,12 +6287,146 @@ HTML;
                 $batteryChargeEnergyTotal;
         }
 
+        // Wechselrichter: Bis zu zwei Einträge werden zu Gesamtwerten addiert.
+        // Die beiden Temperaturwerte bleiben getrennt: WR1 wird auf dem
+        // bisherigen AC-Temperaturfeld, WR2 auf dem DC-Temperaturfeld der
+        // Sunsynk-Karte dargestellt. So geht keine Gerätetemperatur verloren.
+        // Sind noch keine Listeneinträge konfiguriert, bleiben die bisherigen
+        // Einzel-Eigenschaften als abwärtskompatibler Fallback aktiv.
+        $inverterPower = 0.0;
+        $inverterCurrentL1 = 0.0;
+        $inverterCurrentL2 = 0.0;
+        $inverterCurrentL3 = 0.0;
+        $inverterDailyEnergy = 0.0;
+        $inverterTotalEnergy = 0.0;
+        $inverterPowerAvailable = false;
+        $inverterCurrentL1Available = false;
+        $inverterCurrentL2Available = false;
+        $inverterCurrentL3Available = false;
+        $inverterDailyEnergyAvailable = false;
+        $inverterTotalEnergyAvailable = false;
+        $hasConfiguredInverterList = false;
+        $inverterDetails = [];
+
+        $decodedInverters = json_decode(
+            $this->ReadPropertyString('Inverters'),
+            true
+        );
+
+        if (is_array($decodedInverters)) {
+            foreach (array_slice($decodedInverters, 0, 2) as $index => $source) {
+                $ids = [
+                    'power' => (int) ($source['PowerVariableID'] ?? 0),
+                    'l1'    => (int) ($source['CurrentL1VariableID'] ?? 0),
+                    'l2'    => (int) ($source['CurrentL2VariableID'] ?? 0),
+                    'l3'    => (int) ($source['CurrentL3VariableID'] ?? 0),
+                    'temp'  => (int) ($source['TemperatureVariableID'] ?? 0),
+                    'daily' => (int) ($source['DailyEnergyVariableID'] ?? 0),
+                    'total' => (int) ($source['TotalEnergyVariableID'] ?? 0),
+                ];
+
+                if (max($ids) > 0) {
+                    $hasConfiguredInverterList = true;
+                }
+
+                $powerAvailable = $ids['power'] > 0 && IPS_VariableExists($ids['power']);
+                $l1Available = $ids['l1'] > 0 && IPS_VariableExists($ids['l1']);
+                $l2Available = $ids['l2'] > 0 && IPS_VariableExists($ids['l2']);
+                $l3Available = $ids['l3'] > 0 && IPS_VariableExists($ids['l3']);
+                $temperatureAvailable = $ids['temp'] > 0 && IPS_VariableExists($ids['temp']);
+                $dailyAvailable = $ids['daily'] > 0 && IPS_VariableExists($ids['daily']);
+                $totalAvailable = $ids['total'] > 0 && IPS_VariableExists($ids['total']);
+
+                $power = $powerAvailable ? (float) GetValue($ids['power']) : 0.0;
+                $currentL1 = $l1Available ? (float) GetValue($ids['l1']) : 0.0;
+                $currentL2 = $l2Available ? (float) GetValue($ids['l2']) : 0.0;
+                $currentL3 = $l3Available ? (float) GetValue($ids['l3']) : 0.0;
+                $temperature = $temperatureAvailable ? (float) GetValue($ids['temp']) : 0.0;
+                $dailyEnergy = $dailyAvailable ? (float) GetValue($ids['daily']) : 0.0;
+                $totalEnergy = $totalAvailable ? (float) GetValue($ids['total']) : 0.0;
+
+                $inverterPower += $power;
+                $inverterCurrentL1 += $currentL1;
+                $inverterCurrentL2 += $currentL2;
+                $inverterCurrentL3 += $currentL3;
+                $inverterDailyEnergy += $dailyEnergy;
+                $inverterTotalEnergy += $totalEnergy;
+
+                $inverterPowerAvailable = $inverterPowerAvailable || $powerAvailable;
+                $inverterCurrentL1Available = $inverterCurrentL1Available || $l1Available;
+                $inverterCurrentL2Available = $inverterCurrentL2Available || $l2Available;
+                $inverterCurrentL3Available = $inverterCurrentL3Available || $l3Available;
+                $inverterDailyEnergyAvailable = $inverterDailyEnergyAvailable || $dailyAvailable;
+                $inverterTotalEnergyAvailable = $inverterTotalEnergyAvailable || $totalAvailable;
+
+                $inverterDetails[] = [
+                    'name' => trim((string) ($source['Name'] ?? '')) ?: ('WR' . ($index + 1)),
+                    'power' => $power,
+                    'currentL1' => $currentL1,
+                    'currentL2' => $currentL2,
+                    'currentL3' => $currentL3,
+                    'temperature' => $temperature,
+                    'dailyEnergy' => $dailyEnergy,
+                    'totalEnergy' => $totalEnergy,
+                    'hasPower' => $powerAvailable,
+                    'hasCurrentL1' => $l1Available,
+                    'hasCurrentL2' => $l2Available,
+                    'hasCurrentL3' => $l3Available,
+                    'hasTemperature' => $temperatureAvailable,
+                    'hasDailyEnergy' => $dailyAvailable,
+                    'hasTotalEnergy' => $totalAvailable,
+                ];
+            }
+        }
+
+        if (!$hasConfiguredInverterList) {
+            $legacyPowerID = $this->ReadPropertyInteger('InverterPower');
+            $legacyL1ID = $this->ReadPropertyInteger('InverterCurrentL1');
+            $legacyL2ID = $this->ReadPropertyInteger('InverterCurrentL2');
+            $legacyL3ID = $this->ReadPropertyInteger('InverterCurrentL3');
+            $legacyTemperatureID = $this->ReadPropertyInteger('InverterTemperature');
+
+            $inverterPowerAvailable = $legacyPowerID > 0 && IPS_VariableExists($legacyPowerID);
+            $inverterCurrentL1Available = $legacyL1ID > 0 && IPS_VariableExists($legacyL1ID);
+            $inverterCurrentL2Available = $legacyL2ID > 0 && IPS_VariableExists($legacyL2ID);
+            $inverterCurrentL3Available = $legacyL3ID > 0 && IPS_VariableExists($legacyL3ID);
+            $legacyTemperatureAvailable = $legacyTemperatureID > 0 && IPS_VariableExists($legacyTemperatureID);
+
+            $inverterPower = $inverterPowerAvailable ? (float) GetValue($legacyPowerID) : 0.0;
+            $inverterCurrentL1 = $inverterCurrentL1Available ? (float) GetValue($legacyL1ID) : 0.0;
+            $inverterCurrentL2 = $inverterCurrentL2Available ? (float) GetValue($legacyL2ID) : 0.0;
+            $inverterCurrentL3 = $inverterCurrentL3Available ? (float) GetValue($legacyL3ID) : 0.0;
+
+            $inverterDetails = [[
+                'name' => 'WR1',
+                'power' => $inverterPower,
+                'currentL1' => $inverterCurrentL1,
+                'currentL2' => $inverterCurrentL2,
+                'currentL3' => $inverterCurrentL3,
+                'temperature' => $legacyTemperatureAvailable ? (float) GetValue($legacyTemperatureID) : 0.0,
+                'dailyEnergy' => 0.0,
+                'totalEnergy' => 0.0,
+                'hasPower' => $inverterPowerAvailable,
+                'hasCurrentL1' => $inverterCurrentL1Available,
+                'hasCurrentL2' => $inverterCurrentL2Available,
+                'hasCurrentL3' => $inverterCurrentL3Available,
+                'hasTemperature' => $legacyTemperatureAvailable,
+                'hasDailyEnergy' => false,
+                'hasTotalEnergy' => false,
+            ]];
+        }
+
+        $inverter1 = $inverterDetails[0] ?? [];
+        $inverter2 = $inverterDetails[1] ?? [];
+        $inverterTemperature = (float) ($inverter1['temperature'] ?? 0.0);
+        $inverterTemperatureAvailable = (bool) ($inverter1['hasTemperature'] ?? false);
+        $inverter2Temperature = (float) ($inverter2['temperature'] ?? 0.0);
+        $inverter2TemperatureAvailable = (bool) ($inverter2['hasTemperature'] ?? false);
+
         $gridConnectedRaw = $this->ReadPropertyInteger('GridConnectedStatus') > 0
             ? $this->ReadVar('GridConnectedStatus')
             : 1.0;
         $gridConnectedStatus = ((float) $gridConnectedRaw) != 0.0 ? 'on-grid' : 'off-grid';
-        $inverterPowerID = $this->ReadPropertyInteger('InverterPower');
-        $inverterPowerAvailable = $inverterPowerID > 0 && IPS_VariableExists($inverterPowerID);
 
         return [
             'displayMode'      => $this->ReadPropertyString('DisplayMode'),
@@ -6241,11 +6448,15 @@ HTML;
             'houseCalculationMode' => $this->ReadPropertyString(
                 'HouseCalculationMode'
             ),
-            'inverterPower'    => $this->ReadVar('InverterPower'),
-            'inverterCurrentL1' => $this->ReadVar('InverterCurrentL1'),
-            'inverterCurrentL2' => $this->ReadVar('InverterCurrentL2'),
-            'inverterCurrentL3' => $this->ReadVar('InverterCurrentL3'),
+            'inverterPower'    => $inverterPower,
+            'inverterCurrentL1' => $inverterCurrentL1,
+            'inverterCurrentL2' => $inverterCurrentL2,
+            'inverterCurrentL3' => $inverterCurrentL3,
             'inverterPowerAvailable' => $inverterPowerAvailable,
+            'inverters' => $inverterDetails,
+            'inverterDailyEnergy' => $inverterDailyEnergy,
+            'inverterTotalEnergy' => $inverterTotalEnergy,
+            'inverter2Temperature' => $inverter2Temperature,
             'outsideTemperature' => $this->ReadVar('OutsideTemperature'),
             'solarForecastRemaining' => $this->ReadVar(
                 'SolarForecastRemaining'
@@ -6253,7 +6464,7 @@ HTML;
             'inverterVoltage'  => $this->ReadVar('InverterVoltage'),
             'inverterCurrent'  => $this->ReadVar('InverterCurrent'),
             'inverterFrequency'=> $this->ReadVar('InverterFrequency'),
-            'inverterTemperature' => $this->ReadVar('InverterTemperature'),
+            'inverterTemperature' => $inverterTemperature,
             'available' => [
                 'gridPower' => ($this->ReadPropertyInteger('L1') > 0 && IPS_VariableExists($this->ReadPropertyInteger('L1'))),
                 'gridPhaseL2' => ($this->ReadPropertyInteger('GridPhaseL2') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridPhaseL2'))),
@@ -6264,20 +6475,18 @@ HTML;
                 'gridVoltageL3' => ($this->ReadPropertyInteger('GridVoltageL3') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridVoltageL3'))),
                 'gridStatus' => ($this->ReadPropertyInteger('GridConnectedStatus') > 0 && IPS_VariableExists($this->ReadPropertyInteger('GridConnectedStatus'))),
                 'inverterPower' => $inverterPowerAvailable,
-                'inverterCurrentL1' => ($this->ReadPropertyInteger('InverterCurrentL1') > 0 && IPS_VariableExists($this->ReadPropertyInteger('InverterCurrentL1'))),
-                'inverterCurrentL2' => ($this->ReadPropertyInteger('InverterCurrentL2') > 0 && IPS_VariableExists($this->ReadPropertyInteger('InverterCurrentL2'))),
-                'inverterCurrentL3' => ($this->ReadPropertyInteger('InverterCurrentL3') > 0 && IPS_VariableExists($this->ReadPropertyInteger('InverterCurrentL3'))),
+                'inverterCurrentL1' => $inverterCurrentL1Available,
+                'inverterCurrentL2' => $inverterCurrentL2Available,
+                'inverterCurrentL3' => $inverterCurrentL3Available,
                 'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
                 'outsideTemperature' => (
                     $this->ReadPropertyInteger('OutsideTemperature') > 0
                     && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
                 ),
-                'inverterTemperature' => (
-                    $this->ReadPropertyInteger('InverterTemperature') > 0
-                    && IPS_VariableExists(
-                        $this->ReadPropertyInteger('InverterTemperature')
-                    )
-                ),
+                'inverterTemperature' => $inverterTemperatureAvailable,
+                'inverter2Temperature' => $inverter2TemperatureAvailable,
+                'inverterDailyEnergy' => $inverterDailyEnergyAvailable,
+                'inverterTotalEnergy' => $inverterTotalEnergyAvailable,
                 'solarForecastRemaining' => (
                     $this->ReadPropertyInteger('SolarForecastRemaining') > 0
                     && IPS_VariableExists(
