@@ -4832,12 +4832,27 @@ class Energiefluss extends IPSModuleStrict
         if (mode === 'power') {
             const housePower = Math.max(Number(haus || 0), 0);
             const gridPower = Number(grid || 0);
-            const gridImportPower = Math.max(gridPower, 0);
-            const gridExportPower = Math.max(-gridPower, 0);
-            const pvPower = (Array.isArray(pvs) ? pvs : []).reduce(
-                (sum, pv) => sum + Math.max(Number(pv?.value || 0), 0),
+
+            // Für Autarkie und Eigenverbrauch die bereits serverseitig
+            // getrennt ermittelten Netzwerte verwenden. Nur bei älteren
+            // Payloads ohne diese Felder auf den Netto-Netzwert zurückfallen.
+            const gridImportPower = Number.isFinite(Number(d.gridImportPower))
+                ? Math.max(Number(d.gridImportPower), 0)
+                : Math.max(gridPower, 0);
+            const gridExportPower = Number.isFinite(Number(d.gridExportPower))
+                ? Math.max(Number(d.gridExportPower), 0)
+                : Math.max(-gridPower, 0);
+            // PV-Sensoren können je nach Gerät positiv oder negativ liefern.
+            // Für den Eigenverbrauch zählt immer der Betrag der erzeugten
+            // PV-Leistung. Falls keine Stringleistung vorhanden ist, wird
+            // die aufsummierte Wechselrichterleistung verwendet.
+            const pvStringPower = (Array.isArray(pvs) ? pvs : []).reduce(
+                (sum, pv) => sum + Math.abs(Number(pv?.value || 0)),
                 0
             );
+            const pvPower = pvStringPower > 0
+                ? pvStringPower
+                : Math.abs(Number(d.inverterPower || 0));
 
             // Momentane Autarkie: Anteil des Hausverbrauchs, der aktuell
             // nicht aus dem Netz bezogen wird.
@@ -4851,7 +4866,7 @@ class Energiefluss extends IPSModuleStrict
             // der nicht ins Netz abgegeben wird.
             selfConsumption = pvPower > 0
                 ? clampPercent(
-                    ((pvPower - gridExportPower) / pvPower) * 100
+                    100 - ((gridExportPower / pvPower) * 100)
                 )
                 : 0;
         } else {
@@ -6464,6 +6479,16 @@ HTML;
             : 1.0;
         $gridConnectedStatus = ((float) $gridConnectedRaw) != 0.0 ? 'on-grid' : 'off-grid';
 
+        // Die getrennten Werte zusätzlich an die Visualisierung geben.
+        // Der Netto-Wert $grid bleibt für Flussrichtung und bestehende
+        // Darstellungen unverändert erhalten.
+        $gridImportPowerValue = $hasSeparateExportPower
+            ? $gridImportPower
+            : max($grid, 0.0);
+        $gridExportPowerValue = $hasSeparateExportPower
+            ? $gridExportPower
+            : max(-$grid, 0.0);
+
         return [
             'displayMode'      => $this->ReadPropertyString('DisplayMode'),
             'technicalLayout'  => $this->ReadPropertyString('TechnicalLayout'),
@@ -6471,6 +6496,8 @@ HTML;
             'housePvs'         => $housePvs,
             'batteries'        => $batteries,
             'grid'             => $grid,
+            'gridImportPower'  => $gridImportPowerValue,
+            'gridExportPower'  => $gridExportPowerValue,
             'gridPhaseL1'     => $this->ReadVar('GridPhaseL1'),
             'gridPhaseL2'     => $this->ReadVar('GridPhaseL2'),
             'gridPhaseL3'     => $this->ReadVar('GridPhaseL3'),
