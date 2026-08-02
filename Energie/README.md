@@ -269,6 +269,13 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ---
 
+## Versionen
+
+# Version 1
+- Initiale Version
+
+---
+
 # 📄 Lizenz
 
 Dieses Projekt steht unter der **MIT-Lizenz**.
