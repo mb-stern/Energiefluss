@@ -1,17 +1,14 @@
 <?php
 
 /*
- * Integriert die Open-Source-Karte:
- * LordGuenni/power-flow-card
- * https://github.com/LordGuenni/power-flow-card
- *
- * Autor: Florian Stamer
- * Lizenz: MIT (laut package.json des Projekts)
- *
- * power-flow-card.js und Lit liegen versioniert im Modulbaum unter
- * assets/vendor/ und werden von ApplyChanges() lediglich in den
- * Web-Pfad /user/Energiefluss/vendor/ veröffentlicht.
- */
+ * ## Third-Party Components
+
+* Komponente | Lizenz | Verwendung |
+ * ------------|---------|------------|
+* Sunsynk Power Flow Card | Apache License 2.0 | Technische Energieflussdarstellung |
+* Power Flow Card (LordGuenni) | MIT | Hausgrafik |
+* Lit (Google LLC) | BSD-3-Clause | Web Components Framework |
+*/
 
 declare(strict_types=1);
 
