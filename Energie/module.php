@@ -2566,29 +2566,52 @@ class Energiefluss extends IPSModuleStrict
         return `Voll in ${formatBatteryDuration(missingKWh / powerKW)}`;
     }
 
-    function dominantHouseSourceColour(grid, pvs, batteries) {
-        const solarPower = pvs.reduce(
+    function getDominantHouseSource(grid, pvs, batteries) {
+        const solarTotal = pvs.reduce(
             (sum, pv) => sum + Math.max(Number(pv.value || 0), 0),
             0
         );
 
-        const batteryPower = batteries.reduce(
+        // Modulkonvention:
+        // positiv = Batterie entlädt und versorgt das Haus
+        // negativ = Batterie wird geladen
+        const batteryDischarge = batteries.reduce(
             (sum, battery) =>
                 sum + Math.max(Number(battery.value || 0), 0),
             0
         );
+        const batteryCharge = batteries.reduce(
+            (sum, battery) =>
+                sum + Math.max(-Number(battery.value || 0), 0),
+            0
+        );
 
-        const gridPower = Math.max(Number(grid || 0), 0);
+        // Netz positiv = Bezug, negativ = Einspeisung.
+        const gridImport = Math.max(Number(grid || 0), 0);
+        const gridExport = Math.max(-Number(grid || 0), 0);
+
+        // Nur der PV-Anteil, der nach Batterieladung und Einspeisung noch
+        // übrig bleibt, versorgt tatsächlich das Haus. Zuvor wurde die
+        // komplette PV-Leistung verglichen; dadurch galt PV auch dann als
+        // Hauptlieferant, wenn der größte Teil in Batterie oder Netz floss.
+        const solarToHouse = Math.max(
+            solarTotal - batteryCharge - gridExport,
+            0
+        );
 
         const sources = [
-            { power: solarPower, colour: AC.solar },
-            { power: batteryPower, colour: AC.discharge },
-            { power: gridPower, colour: AC.import }
+            { type: 'solar', power: solarToHouse, colour: AC.solar },
+            { type: 'battery', power: batteryDischarge, colour: AC.discharge },
+            { type: 'grid', power: gridImport, colour: AC.import }
         ].sort((a, b) => b.power - a.power);
 
         return sources[0].power > 0
-            ? sources[0].colour
-            : AC.room;
+            ? sources[0]
+            : { type: 'normal', power: 0, colour: AC.room };
+    }
+
+    function dominantHouseSourceColour(grid, pvs, batteries) {
+        return getDominantHouseSource(grid, pvs, batteries).colour;
     }
 
     function updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox) {
@@ -4306,30 +4329,13 @@ class Energiefluss extends IPSModuleStrict
         const pvs = Array.isArray(d.pvs) ? d.pvs : [];
         const batteries = Array.isArray(d.batteries) ? d.batteries : [];
 
-        const solarPower = pvs.reduce(
-            (sum, pv) => sum + Math.max(Number(pv.value || 0), 0),
-            0
-        );
-
-        // Im Modul bedeutet positive Batterieleistung: Entladen zum Haus.
-        const batteryPower = batteries.reduce(
-            (sum, battery) =>
-                sum + Math.max(Number(battery.value || 0), 0),
-            0
-        );
-
-        // Netz positiv = Bezug, negativ = Einspeisung.
-        const gridPower = Math.max(Number(d.grid || 0), 0);
-
-        const sources = [
-            { type: 'solar', power: solarPower },
-            { type: 'battery', power: batteryPower },
-            { type: 'grid', power: gridPower }
-        ].sort((a, b) => b.power - a.power);
-
-        const source = sources[0].power > 0
-            ? sources[0].type
-            : 'normal';
+        // Für Symbol und Farbe dieselbe, um Lade-/Exportanteile bereinigte
+        // Ermittlung des tatsächlichen Hauptlieferanten verwenden.
+        const source = getDominantHouseSource(
+            Number(d.grid || 0),
+            pvs,
+            batteries
+        ).type;
 
         // Originale Pfade der Sunsynk-Karte.
         const paths = {
