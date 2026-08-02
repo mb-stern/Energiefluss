@@ -6143,15 +6143,15 @@ HTML;
                 $temperatureVariableID = (int) ($source['TemperatureVariableID'] ?? 0);
                 $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
 
-                // Rohwert getrennt behalten: positiv bedeutet Entladen,
-                // negativ bedeutet Laden. Die optionale Flussumkehr darf
-                // nur die Darstellung beeinflussen, nicht die Bewertung
-                // des Hauptenergielieferanten für das Haussymbol.
+                // Batteriewert einmal zentral normalisieren. Genau dieser Wert
+                // wird anschließend von Sunsynk, der Hausverbrauchsbilanz und
+                // der Hausgrafik verwendet. Nach der optionalen Umkehr gilt:
+                // positiv = Leistung geht aus der Batterie (Entladen)
+                // negativ = Leistung geht in die Batterie (Laden).
                 $rawBatteryValue = (float) GetValue($variableID);
-                $value = $rawBatteryValue;
-                if ((bool) ($source['InvertFlow'] ?? false)) {
-                    $value *= -1;
-                }
+                $value = (bool) ($source['InvertFlow'] ?? false)
+                    ? -$rawBatteryValue
+                    : $rawBatteryValue;
 
                 $hasChargeEnergy =
                     $chargeEnergyVariableID > 0 &&
@@ -6166,10 +6166,9 @@ HTML;
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
                     'value'                => $value,
-                    // Für die Hausgrafik denselben bereits anhand der
-                    // Konfiguration korrigierten Batteriewert verwenden wie
-                    // für die funktionierende Hausverbrauchsbilanz.
-                    // Positiv = Entladen zum Haus, negativ = Laden.
+                    // Für das Haussymbol zählt ausschließlich der Anteil,
+                    // der nach derselben Sunsynk-Normalisierung aus der Batterie
+                    // herausfließt. Laden ergibt hier immer 0 W.
                     'dischargeValue'       => max($value, 0.0),
                     'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
