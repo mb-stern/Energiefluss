@@ -271,7 +271,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ## Versionen
 
-# Version 1
+# Version 1.0
 - Initiale Version
 
 ---
