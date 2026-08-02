@@ -3229,22 +3229,26 @@ class Energiefluss extends IPSModuleStrict
         const hasWallbox = !!d.hasWallbox;
 
         // Die Wallbox befindet sich bereits in der normalen Verbraucherliste.
-        const configuredConsumers = groups.filter(group => group.hasPower);
+        // Verbraucher sind reine Lasten; negative Werte werden in der
+        // Sunsynk-Ansicht deshalb auf 0 W begrenzt.
+        const configuredConsumers = groups
+            .filter(group => group.hasPower)
+            .map(group => ({
+                ...group,
+                value: Math.max(Number(group.value || 0), 0)
+            }));
 
-        // Aktive Verbraucher zuerst, absteigend nach absoluter Leistung.
-        // Absolute Werte berücksichtigen auch Messvariablen mit negativem
-        // Verbrauchsvorzeichen.
+        // Aktive Verbraucher zuerst, absteigend nach Leistung.
         const activeConsumers = configuredConsumers
-            .filter(group => Math.abs(Number(group.value || 0)) > 0)
+            .filter(group => Number(group.value || 0) > 0)
             .sort((a, b) =>
-                Math.abs(Number(b.value || 0)) -
-                Math.abs(Number(a.value || 0))
+                Number(b.value || 0) -
+                Number(a.value || 0)
             );
 
-        // Freie Plätze werden mit den inaktiven konfigurierten Verbrauchern
-        // aufgefüllt. Auch hier verhält sich die Wallbox wie jedes andere Gerät.
+        // Freie Plätze werden mit inaktiven Verbrauchern aufgefüllt.
         const inactiveConsumers = configuredConsumers.filter(group =>
-            Math.abs(Number(group.value || 0)) <= 0
+            Number(group.value || 0) <= 0
         );
 
         const activeGroups = [
@@ -3545,17 +3549,24 @@ class Energiefluss extends IPSModuleStrict
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
         const hasWallbox = !!d.hasWallbox;
 
-        const configuredConsumers = groups.filter(group => group.hasPower);
+        // Auch im virtuellen Home-Assistant-Datenmodell negative
+        // Verbraucherwerte konsequent auf 0 W begrenzen.
+        const configuredConsumers = groups
+            .filter(group => group.hasPower)
+            .map(group => ({
+                ...group,
+                value: Math.max(Number(group.value || 0), 0)
+            }));
 
         const activeConsumers = configuredConsumers
-            .filter(group => Math.abs(Number(group.value || 0)) > 0)
+            .filter(group => Number(group.value || 0) > 0)
             .sort((a, b) =>
-                Math.abs(Number(b.value || 0)) -
-                Math.abs(Number(a.value || 0))
+                Number(b.value || 0) -
+                Number(a.value || 0)
             );
 
         const inactiveConsumers = configuredConsumers.filter(group =>
-            Math.abs(Number(group.value || 0)) <= 0
+            Number(group.value || 0) <= 0
         );
 
         // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
@@ -5246,8 +5257,27 @@ class Energiefluss extends IPSModuleStrict
             }
         }
 
-        // Hausansicht V2.
-        buildHouseView(d, grid, haus, pvs, batteries, wallbox);
+        // Hausansicht V2:
+        // Die Wallbox wird separat dargestellt. Ihre positive Ladeleistung
+        // wird deshalb vom Hausverbrauch abgezogen, damit sie nicht doppelt
+        // als Hausverbrauch und Wallbox erscheint.
+        const houseViewPower = Math.max(
+            haus - (
+                d.hasWallbox
+                    ? Math.max(Number(wallbox.value || 0), 0)
+                    : 0
+            ),
+            0
+        );
+
+        buildHouseView(
+            d,
+            grid,
+            houseViewPower,
+            pvs,
+            batteries,
+            wallbox
+        );
         applyDisplayMode(d.displayMode || 'flow');
 
         updateLayout(
