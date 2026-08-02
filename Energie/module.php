@@ -5286,22 +5286,11 @@ class Energiefluss extends IPSModuleStrict
         const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', socText: '', hasSoc: false };
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
-        // Exakt dieselbe Vorzeichenlogik wie die konfigurierte Sunsynk-Karte:
-        // Bei invert_flow: true gilt dort:
-        //   positiv = Laden (Leistung fliesst in die Batterie)
-        //   negativ = Entladen (Leistung fliesst aus der Batterie)
-        //
-        // Für die Hausbilanz muss deshalb das Vorzeichen umgedreht werden:
-        //   positiv = Batterie liefert ans Haus
-        //   negativ = Batterie wird geladen
-        const batteryHouseContribution = batteries.reduce(
-            (sum, bat) => sum - Number(bat.value || 0),
-            0
-        );
+        const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
 
         // Netzbezug positiv, Rücklieferung negativ.
         const calculatedHouseBalance = Math.max(
-            pvTotal + batteryHouseContribution + grid,
+            pvTotal + batteryTotal + grid,
             0
         );
 
@@ -6180,11 +6169,7 @@ HTML;
                     // Für das Haussymbol zählt ausschließlich der Anteil,
                     // der nach derselben Sunsynk-Normalisierung aus der Batterie
                     // herausfließt. Laden ergibt hier immer 0 W.
-                    // Die Sunsynk-Konfiguration verwendet invert_flow: true.
-                    // Dadurch bedeutet ein negativer Sunsynk-Wert Entladen.
-                    // Nur dieser aus der Batterie herausfliessende Anteil zählt
-                    // als Lieferant für die Hausgrafik.
-                    'dischargeValue'       => max(-$value, 0.0),
+                    'dischargeValue'       => max($value, 0.0),
                     'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
                     'invertFlow'            => (bool) ($source['InvertFlow'] ?? false),
