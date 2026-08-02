@@ -3744,6 +3744,7 @@ class Energiefluss extends IPSModuleStrict
         applyHouseLoadWattColour(card, d);
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
+        applyInverterTemperatureLabels(card, d);
         showInverterPowerAboveVoltages(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
@@ -3766,6 +3767,10 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 applyInverterVisualColour(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyInverterTemperatureLabels(
                     card,
                     card.__symconLastData || d
                 );
@@ -3801,6 +3806,10 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     applyInverterVisualColour(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyInverterTemperatureLabels(
                         card,
                         card.__symconLastData || d
                     );
@@ -3847,6 +3856,130 @@ class Energiefluss extends IPSModuleStrict
         };
         visit(root);
         return roots;
+    }
+
+    function applyInverterTemperatureLabels(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const inverters = Array.isArray(d.inverters) ? d.inverters : [];
+        const names = [
+            String(inverters[0]?.name || 'WR1').trim() || 'WR1',
+            String(inverters[1]?.name || 'WR2').trim() || 'WR2'
+        ];
+
+        const isFullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        const findTemperatureGroup = (root, selectors) => {
+            let valueNode = null;
+            for (const selector of selectors) {
+                valueNode = root.querySelector?.(selector) || null;
+                if (valueNode) break;
+            }
+            if (!valueNode) return null;
+
+            let group = valueNode.closest?.('g') || null;
+            let candidate = group;
+
+            // Möglichst die kleinste Gruppe wählen, die nur Beschriftung und
+            // Temperaturwert enthält. Dadurch verschieben wir in Full nicht
+            // versehentlich den gesamten Wechselrichterblock.
+            for (let i = 0; candidate && i < 4; i++) {
+                const textCount = candidate.querySelectorAll?.('text')?.length || 0;
+                if (textCount >= 2 && textCount <= 5) {
+                    group = candidate;
+                    break;
+                }
+                candidate = candidate.parentElement?.closest?.('g') || null;
+            }
+
+            return { valueNode, group };
+        };
+
+        const replaceLabel = (entry, oldLabel, newLabel) => {
+            if (!entry?.group) return;
+
+            const texts = Array.from(
+                entry.group.querySelectorAll?.('text, tspan') || []
+            );
+
+            let labelNode = texts.find(node =>
+                String(node.textContent || '').trim().toUpperCase() === oldLabel
+            );
+
+            if (!labelNode) {
+                labelNode = texts.find(node => {
+                    const text = String(node.textContent || '').trim();
+                    return text && !/[0-9]/.test(text) && text.length <= 20;
+                }) || null;
+            }
+
+            if (labelNode) {
+                labelNode.textContent = newLabel;
+            }
+        };
+
+        for (const root of roots) {
+            const wr1 = findTemperatureGroup(root, [
+                '#radiator_temp_91',
+                '[id="radiator_temp_91"]',
+                '[id*="radiator_temp_91"]'
+            ]);
+            const wr2 = findTemperatureGroup(root, [
+                '#dc_transformer_temp_90',
+                '[id="dc_transformer_temp_90"]',
+                '[id*="dc_transformer_temp_90"]'
+            ]);
+
+            replaceLabel(wr1, 'AC', names[0]);
+            replaceLabel(wr2, 'DC', names[1]);
+
+            // Compact und Lite sind bereits korrekt untereinander angeordnet.
+            // Nur Full/Full Wide erhält eine Geometriekorrektur.
+            if (!isFullLayout || !wr1?.group || !wr2?.group) {
+                continue;
+            }
+
+            if (!wr2.group.dataset.symconOriginalTransform) {
+                wr2.group.dataset.symconOriginalTransform =
+                    wr2.group.getAttribute('transform') || '';
+            }
+
+            // Zuerst immer auf die Originalposition zurücksetzen, damit sich
+            // die Verschiebung bei wiederholtem Lit-Rendern nicht aufsummiert.
+            const originalTransform = wr2.group.dataset.symconOriginalTransform;
+            if (originalTransform) {
+                wr2.group.setAttribute('transform', originalTransform);
+            } else {
+                wr2.group.removeAttribute('transform');
+            }
+
+            try {
+                const box1 = wr1.group.getBBox();
+                const box2 = wr2.group.getBBox();
+
+                if (
+                    Number.isFinite(box1.x) && Number.isFinite(box1.y) &&
+                    Number.isFinite(box2.x) && Number.isFinite(box2.y)
+                ) {
+                    const targetX = box1.x;
+                    const targetY = box1.y + box1.height + 4;
+                    const dx = targetX - box2.x;
+                    const dy = targetY - box2.y;
+
+                    wr2.group.setAttribute(
+                        'transform',
+                        `${originalTransform} translate(${dx} ${dy})`.trim()
+                    );
+                }
+            } catch (e) {
+                // Bei einem noch nicht vollständig gerenderten SVG übernimmt
+                // einer der zeitversetzten Durchläufe die Positionierung.
+            }
+        }
     }
 
     function showInverterPowerAboveVoltages(card, d) {
