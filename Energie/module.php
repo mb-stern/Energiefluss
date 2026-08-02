@@ -1,3 +1,134 @@
+ChatGPT Plus
+
+
+
+
+heute 16:58
+
+Eingefügter Text(112).txt
+Dokument
+das modul skaiert nicht richtig in der kachel aber nur das sunsynk, die ahasugrafik ist gut
+
+
+Eingefügter Text(113).txt
+Dokument
+Prüfe hier einfach mal ob überhaupt der Konfigurierte mindest SOC angezeigt wird
+
+
+Eingefügter Text(114).txt
+Dokument
+du musst hiervon ausgehen und das richtig zuornden wie du erwähnt hst
+
+43s nachgedacht
+Der Fehler war tatsächlich die Kopplung von „Fluss umkehren“ und Batterieleistungswert.
+
+Jetzt gilt wieder sauber:
+
+Die Batterieleistung bleibt für die Berechnung unverändert.
+
+PV + Batterie + Netzbezug − Netzeinspeisung verwendet wieder den echten Batteriewert.
+
+InvertFlow ändert ausschließlich die Animationsrichtung.
+
+Für Hausfarbe und Haussymbol zählt separat nur dischargeValue.
+
+Batterieladung wird nicht als Energielieferant des Hauses gewertet.
+
+PHP-Syntax wurde geprüft.
+
+Grundlage ist exakt deine zuletzt hochgeladene Datei. 
+
+
+module_hausverbrauch_batteriewert_korrigiert.php
+
+
+module_hausverbrauch_batteriewert_korrigiert.php
+Code
+
+
+
+Eingefügter Text(115).txt
+Dokument
+Immer noch nicht 
+
+1m 5s nachgedacht
+Jetzt ist die Ursache sauber behoben.
+
+In deiner aktuellen Datei wurde für die Bilanz weiterhin der rohe Batteriewert verwendet. Bei aktivierter Flussumkehr hat dieser aber das entgegengesetzte Vorzeichen. Deshalb wurde beim Entladen ein negativer Wert addiert und die Berechnung anschließend auf 0 begrenzt.
+
+Ich habe es jetzt getrennt:
+
+value bleibt unverändert für die bestehende Visualisierung.
+
+balanceValue wird nur für die Hausverbrauchsberechnung normalisiert.
+
+Positiv bedeutet dort immer Entladen.
+
+Negativ bedeutet dort immer Laden.
+
+dischargeValue für das Haussymbol basiert ebenfalls auf diesem normalisierten Wert.
+
+Die Formel lautet wieder korrekt:
+PV + Batterie + Netzbezug − Netzeinspeisung
+
+Farben, Sunsynk-Darstellung und JSON-Funktion wurden nicht verändert.
+
+PHP-Syntax ist fehlerfrei.
+
+Grundlage ist deine zuletzt hochgeladene Datei. 
+
+
+module_hausverbrauch_bilanz_vorzeichen_korrigiert.php
+
+
+module_hausverbrauch_bilanz_vorzeichen_korrigiert.php
+Code
+
+
+
+Eingefügter Text(116).txt
+Dokument
+hier hat die Berchnung noc hfunktioniert. Schau einfach dass due das Laden und entladen der Batteri korrekt umsetzt und auch zur Steuerung der Hausgrafik die richtigen Werte herbieziehst
+
+43s nachgedacht
+Ich habe genau die Version verwendet, bei der deine Hausverbrauchsberechnung noch funktioniert hat. 
+
+
+Geändert wurde nur die Batterie-Zuordnung:
+
+$value ist jetzt der zentrale, normalisierte Batteriewert.
+
+Positiv = Entladen
+
+Negativ = Laden
+
+Die Hausverbrauchsberechnung verwendet weiterhin exakt diesen Wert:
+PV + Batterie + Netzbezug − Netzeinspeisung
+
+Für das Haussymbol wird nun ebenfalls derselbe Wert verwendet:
+
+dischargeValue = max($value, 0)
+
+Ladeleistung zählt nicht als Hauslieferant.
+
+Zusätzlich werden chargeValue, isCharging und isDischarging eindeutig mitgegeben.
+
+Der rohe Batteriewert wird nicht mehr separat zur Steuerung der Hausgrafik verwendet.
+
+PHP-Syntax ist fehlerfrei.
+
+module_batterielogik_hausgrafik_korrigiert.php
+
+
+module_batterielogik_hausgrafik_korrigiert.php
+Code
+
+
+Bibliothek
+/
+module_batterielogik_hausgrafik_korrigiert.php
+
+
 <?php
 
 /*
@@ -6143,15 +6274,18 @@ HTML;
                 $temperatureVariableID = (int) ($source['TemperatureVariableID'] ?? 0);
                 $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
 
-                // Rohwert getrennt behalten: positiv bedeutet Entladen,
-                // negativ bedeutet Laden. Die optionale Flussumkehr darf
-                // nur die Darstellung beeinflussen, nicht die Bewertung
-                // des Hauptenergielieferanten für das Haussymbol.
+                // Batterieleistung einmal zentral normalisieren.
+                // Nach dieser Stelle gilt im gesamten Modul eindeutig:
+                //   positiv = Batterie entlädt
+                //   negativ = Batterie lädt
+                //
+                // Diese normalisierte Leistung wird unverändert für
+                // Hausverbrauchsbilanz, Sunsynk-Anzeige, Hausgrafik und
+                // die Ermittlung des Hauptenergielieferanten verwendet.
                 $rawBatteryValue = (float) GetValue($variableID);
-                $value = $rawBatteryValue;
-                if ((bool) ($source['InvertFlow'] ?? false)) {
-                    $value *= -1;
-                }
+                $value = (bool) ($source['InvertFlow'] ?? false)
+                    ? -$rawBatteryValue
+                    : $rawBatteryValue;
 
                 $hasChargeEnergy =
                     $chargeEnergyVariableID > 0 &&
@@ -6166,9 +6300,12 @@ HTML;
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
                     'value'                => $value,
-                    // Ausschließlich die reale Entladeleistung für die
-                    // Ermittlung des Hauptenergielieferanten am Haus.
-                    'dischargeValue'       => max($rawBatteryValue, 0.0),
+                    // Zustände immer aus demselben normalisierten Wert
+                    // ableiten, den auch die Hausverbrauchsbilanz nutzt.
+                    'dischargeValue'       => max($value, 0.0),
+                    'chargeValue'          => max(-$value, 0.0),
+                    'isDischarging'        => ($value > 0.0),
+                    'isCharging'           => ($value < 0.0),
                     'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
                     'invertFlow'            => (bool) ($source['InvertFlow'] ?? false),
