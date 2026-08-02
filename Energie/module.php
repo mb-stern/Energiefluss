@@ -4834,17 +4834,10 @@ class Energiefluss extends IPSModuleStrict
             const gridPower = Number(grid || 0);
             const gridImportPower = Math.max(gridPower, 0);
             const gridExportPower = Math.max(-gridPower, 0);
-            // PV-Sensoren können je nach Gerät positiv oder negativ liefern.
-            // Für den Eigenverbrauch zählt immer der Betrag der erzeugten
-            // PV-Leistung. Falls keine Stringleistung vorhanden ist, wird
-            // die aufsummierte Wechselrichterleistung verwendet.
-            const pvStringPower = (Array.isArray(pvs) ? pvs : []).reduce(
-                (sum, pv) => sum + Math.abs(Number(pv?.value || 0)),
+            const pvPower = (Array.isArray(pvs) ? pvs : []).reduce(
+                (sum, pv) => sum + Math.max(Number(pv?.value || 0), 0),
                 0
             );
-            const pvPower = pvStringPower > 0
-                ? pvStringPower
-                : Math.abs(Number(d.inverterPower || 0));
 
             // Momentane Autarkie: Anteil des Hausverbrauchs, der aktuell
             // nicht aus dem Netz bezogen wird.
@@ -4858,7 +4851,7 @@ class Energiefluss extends IPSModuleStrict
             // der nicht ins Netz abgegeben wird.
             selfConsumption = pvPower > 0
                 ? clampPercent(
-                    100 - ((gridExportPower / pvPower) * 100)
+                    ((pvPower - gridExportPower) / pvPower) * 100
                 )
                 : 0;
         } else {
@@ -4907,12 +4900,8 @@ class Energiefluss extends IPSModuleStrict
             ratioLabel.textContent = 'Eigenverbrauch';
         }
 
-        // Lit rendert die Sunsynk-Karte nach Datenänderungen mehrfach neu
-        // und überschreibt dabei insbesondere den Eigenverbrauch wieder mit
-        // der internen Berechnung der Originalkarte. Deshalb werden unsere
-        // bereits korrekt berechneten Werte während der kurzen Renderphase
-        // unabhängig davon erneut gesetzt, ob die Elemente schon existieren.
-        if (attempt < 20) {
+        // Lit kann unmittelbar nach unserem Zugriff nochmals rendern.
+        if ((!autarkyValue || !ratioValue) && attempt < 20) {
             setTimeout(
                 () => applySunsynkRatios(
                     card,
