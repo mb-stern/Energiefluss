@@ -2566,81 +2566,29 @@ class Energiefluss extends IPSModuleStrict
         return `Voll in ${formatBatteryDuration(missingKWh / powerKW)}`;
     }
 
-    function getHouseSourceShares(grid, pvs, batteries, housePower) {
-        const house = Math.max(Number(housePower || 0), 0);
-
-        // Nur der tatsächliche Netzbezug kann das Haus versorgen.
-        const gridToHouse = Math.min(
-            Math.max(Number(grid || 0), 0),
-            house
+    function dominantHouseSourceColour(grid, pvs, batteries) {
+        const solarPower = pvs.reduce(
+            (sum, pv) => sum + Math.max(Number(pv.value || 0), 0),
+            0
         );
 
-        // Im Modul bedeutet positive Batterieleistung: Entladen zum Haus.
-        const batteryDischarge = batteries.reduce(
+        const batteryPower = batteries.reduce(
             (sum, battery) =>
-                // Für das Haussymbol zählt ausschließlich die tatsächliche
-                // Entladeleistung. Die für die Flussanimation eventuell
-                // invertierte Leistung darf hier nicht verwendet werden.
-                sum + Math.max(
-                    Number(battery.dischargeValue || 0),
-                    0
-                ),
+                sum + Math.max(Number(battery.value || 0), 0),
             0
         );
 
-        // Die Batterie kann höchstens den nach dem Netzbezug verbleibenden
-        // Hausverbrauch decken.
-        const batteryToHouse = Math.min(
-            batteryDischarge,
-            Math.max(house - gridToHouse, 0)
-        );
+        const gridPower = Math.max(Number(grid || 0), 0);
 
-        // Der verbleibende Hausverbrauch stammt aus PV. Dadurch wird nicht
-        // mehr die gesamte PV-Erzeugung gewertet, sondern nur der Anteil,
-        // der tatsächlich ins Haus fliesst. Einspeisung und Batterieladung
-        // werden automatisch nicht als Hausversorgung gezählt.
-        const solarToHouse = Math.max(
-            house - gridToHouse - batteryToHouse,
-            0
-        );
-
-        return {
-            solar: solarToHouse,
-            battery: batteryToHouse,
-            grid: gridToHouse
-        };
-    }
-
-    function dominantHouseSource(grid, pvs, batteries, housePower) {
-        const shares = getHouseSourceShares(
-            grid,
-            pvs,
-            batteries,
-            housePower
-        );
-
-        // Feste Reihenfolge bei Gleichstand verhindert Flackern:
-        // PV vor Batterie vor Netz.
         const sources = [
-            { type: 'solar', power: shares.solar, colour: AC.solar },
-            { type: 'battery', power: shares.battery, colour: AC.discharge },
-            { type: 'grid', power: shares.grid, colour: AC.import }
-        ];
+            { power: solarPower, colour: AC.solar },
+            { power: batteryPower, colour: AC.discharge },
+            { power: gridPower, colour: AC.import }
+        ].sort((a, b) => b.power - a.power);
 
-        return sources.reduce((largest, current) =>
-            current.power > largest.power ? current : largest
-        );
-    }
-
-    function dominantHouseSourceColour(grid, pvs, batteries, housePower) {
-        const source = dominantHouseSource(
-            grid,
-            pvs,
-            batteries,
-            housePower
-        );
-
-        return source.power > 0 ? source.colour : AC.room;
+        return sources[0].power > 0
+            ? sources[0].colour
+            : AC.room;
     }
 
     function updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox) {
@@ -2690,8 +2638,7 @@ class Energiefluss extends IPSModuleStrict
             const dynamicHouseColour = dominantHouseSourceColour(
                 grid,
                 pvs,
-                batteries,
-                haus
+                batteries
             );
 
             homeMain.style.color = dynamicHouseColour;
@@ -3669,8 +3616,7 @@ class Energiefluss extends IPSModuleStrict
         const houseSourceColour = dominantHouseSourceColour(
             Number(d.grid || 0),
             activePvs,
-            activeBatteries,
-            Number(d.__calculatedHousePower || d.housePower || 0)
+            activeBatteries
         );
 
         const cfg = {
@@ -3737,10 +3683,13 @@ class Energiefluss extends IPSModuleStrict
                 shutdown_soc: Number(activeBatteries[0]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[0]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                // Sunsynk unterscheidet Laden/Entladen selbst anhand des Vorzeichens:
-                // colour = Entladefarbe, charge_colour = Ladefarbe.
-                // invert_flow ändert ausschließlich die Animationsrichtung.
-                colour: AC.discharge,
+                // Die Originalkarte verwendet battery.colour für den
+                // äußeren Batterierahmen und den Flusspunkt. Deshalb wird
+                // nur diese Farbe richtungsabhängig gesetzt. charge_colour
+                // und die dynamische SOC-Füllung bleiben unverändert.
+                colour: Number(activeBatteries[0]?.value || 0) < 0
+                    ? AC.charge
+                    : AC.discharge,
                 charge_colour: AC.charge,
                 show_daily: showEnergyDetails && !!activeBatteries[0] && (activeBatteries[0].hasChargeEnergy || activeBatteries[0].hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
@@ -3769,8 +3718,9 @@ class Energiefluss extends IPSModuleStrict
                 shutdown_soc: Number(activeBatteries[1]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[1]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                // Auch Batterie 2 wird von Sunsynk über das Vorzeichen unterschieden.
-                colour: AC.discharge,
+                colour: Number(activeBatteries[1]?.value || 0) < 0
+                    ? AC.charge
+                    : AC.discharge,
                 charge_colour: AC.charge,
                 show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
                 show_absolute: true,
@@ -4352,15 +4302,29 @@ class Energiefluss extends IPSModuleStrict
         const pvs = Array.isArray(d.pvs) ? d.pvs : [];
         const batteries = Array.isArray(d.batteries) ? d.batteries : [];
 
-        const dominant = dominantHouseSource(
-            Number(d.grid || 0),
-            pvs,
-            batteries,
-            Number(d.__calculatedHousePower || d.housePower || 0)
+        const solarPower = pvs.reduce(
+            (sum, pv) => sum + Math.max(Number(pv.value || 0), 0),
+            0
         );
 
-        const source = dominant.power > 0
-            ? dominant.type
+        // Im Modul bedeutet positive Batterieleistung: Entladen zum Haus.
+        const batteryPower = batteries.reduce(
+            (sum, battery) =>
+                sum + Math.max(Number(battery.value || 0), 0),
+            0
+        );
+
+        // Netz positiv = Bezug, negativ = Einspeisung.
+        const gridPower = Math.max(Number(d.grid || 0), 0);
+
+        const sources = [
+            { type: 'solar', power: solarPower },
+            { type: 'battery', power: batteryPower },
+            { type: 'grid', power: gridPower }
+        ].sort((a, b) => b.power - a.power);
+
+        const source = sources[0].power > 0
+            ? sources[0].type
             : 'normal';
 
         // Originale Pfade der Sunsynk-Karte.
@@ -4400,8 +4364,7 @@ class Energiefluss extends IPSModuleStrict
         const houseColour = dominantHouseSourceColour(
             Number(d.grid || 0),
             Array.isArray(d.pvs) ? d.pvs : [],
-            Array.isArray(d.batteries) ? d.batteries : [],
-            Number(d.__calculatedHousePower || d.housePower || 0)
+            Array.isArray(d.batteries) ? d.batteries : []
         );
 
         const roots = getOpenShadowRoots(card.shadowRoot);
@@ -5327,11 +5290,6 @@ class Energiefluss extends IPSModuleStrict
                     : calculatedHouseBalance;
         }
 
-        // Den tatsächlich verwendeten Hausverbrauch am Payload merken.
-        // Alle Hausfarben und Haussymbole verwenden dadurch exakt dieselbe
-        // Grundlage wie die sichtbare Hausverbrauchsanzeige.
-        d.__calculatedHousePower = haus;
-
         // Neue technische Ansicht.
         currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
         renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups);
@@ -6143,15 +6101,10 @@ HTML;
                 $temperatureVariableID = (int) ($source['TemperatureVariableID'] ?? 0);
                 $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
 
-                // Batteriewert einmal zentral normalisieren. Genau dieser Wert
-                // wird anschließend von Sunsynk, der Hausverbrauchsbilanz und
-                // der Hausgrafik verwendet. Nach der optionalen Umkehr gilt:
-                // positiv = Leistung geht aus der Batterie (Entladen)
-                // negativ = Leistung geht in die Batterie (Laden).
-                $rawBatteryValue = (float) GetValue($variableID);
-                $value = (bool) ($source['InvertFlow'] ?? false)
-                    ? -$rawBatteryValue
-                    : $rawBatteryValue;
+                $value = (float) GetValue($variableID);
+                if ((bool) ($source['InvertFlow'] ?? false)) {
+                    $value *= -1;
+                }
 
                 $hasChargeEnergy =
                     $chargeEnergyVariableID > 0 &&
@@ -6166,10 +6119,6 @@ HTML;
                         ? (string) $source['Name']
                         : 'Batterie ' . (count($batteries) + 1),
                     'value'                => $value,
-                    // Für das Haussymbol zählt ausschließlich der Anteil,
-                    // der nach derselben Sunsynk-Normalisierung aus der Batterie
-                    // herausfließt. Laden ergibt hier immer 0 W.
-                    'dischargeValue'       => max($value, 0.0),
                     'hasPower'             => ($variableID > 0 && IPS_VariableExists($variableID)),
                     'hasSoc'               => ($socVariableID > 0 && IPS_VariableExists($socVariableID)),
                     'invertFlow'            => (bool) ($source['InvertFlow'] ?? false),
