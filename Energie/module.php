@@ -3731,10 +3731,12 @@ class Energiefluss extends IPSModuleStrict
                 shutdown_soc: Number(activeBatteries[0]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[0]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                // Sunsynk unterscheidet Laden/Entladen selbst anhand des Vorzeichens:
-                // colour = Entladefarbe, charge_colour = Ladefarbe.
-                // invert_flow ändert ausschließlich die Animationsrichtung.
-                colour: AC.discharge,
+                // Die Farbe richtet sich ausschließlich nach dem Batteriezustand.
+                // invert_flow ändert nur die Animationsrichtung und darf die
+                // konfigurierte Lade-/Entladefarbe nicht vertauschen.
+                colour: Number(activeBatteries[0]?.value || 0) < 0
+                    ? AC.charge
+                    : AC.discharge,
                 charge_colour: AC.charge,
                 show_daily: showEnergyDetails && !!activeBatteries[0] && (activeBatteries[0].hasChargeEnergy || activeBatteries[0].hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
@@ -3763,8 +3765,9 @@ class Energiefluss extends IPSModuleStrict
                 shutdown_soc: Number(activeBatteries[1]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[1]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                // Auch Batterie 2 wird von Sunsynk über das Vorzeichen unterschieden.
-                colour: AC.discharge,
+                colour: Number(activeBatteries[1]?.value || 0) < 0
+                    ? AC.charge
+                    : AC.discharge,
                 charge_colour: AC.charge,
                 show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
                 show_absolute: true,
