@@ -4907,8 +4907,12 @@ class Energiefluss extends IPSModuleStrict
             ratioLabel.textContent = 'Eigenverbrauch';
         }
 
-        // Lit kann unmittelbar nach unserem Zugriff nochmals rendern.
-        if ((!autarkyValue || !ratioValue) && attempt < 20) {
+        // Lit rendert die Sunsynk-Karte nach Datenänderungen mehrfach neu
+        // und überschreibt dabei insbesondere den Eigenverbrauch wieder mit
+        // der internen Berechnung der Originalkarte. Deshalb werden unsere
+        // bereits korrekt berechneten Werte während der kurzen Renderphase
+        // unabhängig davon erneut gesetzt, ob die Elemente schon existieren.
+        if (attempt < 20) {
             setTimeout(
                 () => applySunsynkRatios(
                     card,
