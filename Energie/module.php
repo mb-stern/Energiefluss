@@ -4887,11 +4887,14 @@ class Energiefluss extends IPSModuleStrict
         const autarkyLabel = root.getElementById('autarky');
         const ratioLabel = root.getElementById('ratio');
 
-        if (autarkyValue) {
-            autarkyValue.textContent = `${autarky}%`;
+        const autarkyText = `${autarky}%`;
+        const ratioText = `${selfConsumption}%`;
+
+        if (autarkyValue && autarkyValue.textContent !== autarkyText) {
+            autarkyValue.textContent = autarkyText;
         }
-        if (ratioValue) {
-            ratioValue.textContent = `${selfConsumption}%`;
+        if (ratioValue && ratioValue.textContent !== ratioText) {
+            ratioValue.textContent = ratioText;
         }
         if (autarkyLabel) {
             autarkyLabel.textContent = 'Autarkie';
@@ -4917,11 +4920,55 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function scheduleSunsynkRatios(card, d, grid, haus, pvs) {
-        [0, 40, 120, 300].forEach(delay => {
-            setTimeout(
-                () => applySunsynkRatios(card, d, grid, haus, pvs),
-                delay
-            );
+        // Die Original-Sunsynk-Karte rendert ihre Prozentwerte auch nach
+        // unserem ersten Setzen erneut. Darum merken wir immer die neuesten
+        // Eingangsdaten und korrigieren ausschließlich nach echten DOM-
+        // Änderungen. Eigene identische Schreibvorgänge erzeugen dadurch
+        // keine Endlosschleife.
+        card.__symconRatioArgs = [d, grid, haus, pvs];
+
+        const installObserver = () => {
+            const root = card.shadowRoot;
+            if (!root) {
+                setTimeout(installObserver, 50);
+                return;
+            }
+
+            if (!card.__symconRatioObserver) {
+                let correctionQueued = false;
+                card.__symconRatioObserver = new MutationObserver(() => {
+                    if (correctionQueued) {
+                        return;
+                    }
+
+                    correctionQueued = true;
+                    queueMicrotask(() => {
+                        correctionQueued = false;
+                        const args = card.__symconRatioArgs;
+                        if (Array.isArray(args)) {
+                            applySunsynkRatios(card, ...args);
+                        }
+                    });
+                });
+
+                card.__symconRatioObserver.observe(root, {
+                    subtree: true,
+                    childList: true,
+                    characterData: true
+                });
+            }
+
+            applySunsynkRatios(card, d, grid, haus, pvs);
+        };
+
+        installObserver();
+        [0, 40, 120, 300, 750, 1500].forEach(delay => {
+            setTimeout(() => {
+                const args = card.__symconRatioArgs;
+                if (Array.isArray(args)) {
+                    applySunsynkRatios(card, ...args);
+                }
+            }, delay);
         });
     }
 
