@@ -3688,8 +3688,8 @@ class Energiefluss extends IPSModuleStrict
                 // nur diese Farbe richtungsabhängig gesetzt. charge_colour
                 // und die dynamische SOC-Füllung bleiben unverändert.
                 colour: Number(activeBatteries[0]?.value || 0) < 0
-                    ? AC.charge
-                    : AC.discharge,
+                    ? AC.discharge
+                    : AC.charge,
                 charge_colour: AC.charge,
                 show_daily: showEnergyDetails && !!activeBatteries[0] && (activeBatteries[0].hasChargeEnergy || activeBatteries[0].hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
@@ -3703,10 +3703,9 @@ class Energiefluss extends IPSModuleStrict
                 // negativ = Laden, positiv = Entladen. Deshalb darf die
                 // Sunsynk-Karte das Vorzeichen nicht nochmals umkehren.
                 invert_power: false,
-                // Deine Batterie liefert bereits das korrekte Vorzeichen,
-                // die Sunsynk-Animation benötigt in Symcon jedoch die
-                // umgekehrte Darstellungsrichtung.
-                invert_flow: true
+                // Flussrichtung gegenüber der bisherigen Sunsynk-Darstellung
+                // umdrehen. Farbe und Animation bleiben dabei zusammengehörig.
+                invert_flow: false
             },
             battery2: {
                 // Auch Batterie 2: Kapazität in Wh. 0 blendet die Zeit aus.
@@ -3719,8 +3718,8 @@ class Energiefluss extends IPSModuleStrict
                 soc_end_of_charge: 100,
                 hide_soc: false,
                 colour: Number(activeBatteries[1]?.value || 0) < 0
-                    ? AC.charge
-                    : AC.discharge,
+                    ? AC.discharge
+                    : AC.charge,
                 charge_colour: AC.charge,
                 show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
                 show_absolute: true,
@@ -3730,10 +3729,9 @@ class Energiefluss extends IPSModuleStrict
                 animate: true,
                 // Auch Batterie 2 ist im Payload bereits normalisiert.
                 invert_power: false,
-                // Deine Batterie liefert bereits das korrekte Vorzeichen,
-                // die Sunsynk-Animation benötigt in Symcon jedoch die
-                // umgekehrte Darstellungsrichtung.
-                invert_flow: true
+                // Flussrichtung gegenüber der bisherigen Sunsynk-Darstellung
+                // umdrehen. Farbe und Animation bleiben dabei zusammengehörig.
+                invert_flow: false
             },
             load: {
                 // Hauszweig, Haussymbol, Bezeichnung und Leistungsbox verwenden
