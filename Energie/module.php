@@ -3834,7 +3834,7 @@ class Energiefluss extends IPSModuleStrict
         );
 
         const states = {
-            'sensor.symcon_grid': ssState(d.gridPhaseL1Available ? d.gridPhaseL1 : grid, 'W'),
+            'sensor.symcon_grid': ssState(grid, 'W'),
             'sensor.symcon_grid_power': ssState(grid, 'W'),
             'sensor.symcon_grid_voltage_l1': ssState(d.gridVoltageL1 || 0, 'V'),
             'sensor.symcon_grid_voltage_l2': ssState(d.gridVoltageL2 || 0, 'V'),
