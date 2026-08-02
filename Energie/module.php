@@ -3552,7 +3552,10 @@ class Energiefluss extends IPSModuleStrict
                 // negativ = Laden, positiv = Entladen. Deshalb darf die
                 // Sunsynk-Karte das Vorzeichen nicht nochmals umkehren.
                 invert_power: false,
-                invert_flow: false
+                // Deine Batterie liefert bereits das korrekte Vorzeichen,
+                // die Sunsynk-Animation benötigt in Symcon jedoch die
+                // umgekehrte Darstellungsrichtung.
+                invert_flow: true
             },
             battery2: {
                 // Auch Batterie 2: Kapazität in Wh. 0 blendet die Zeit aus.
@@ -3576,7 +3579,10 @@ class Energiefluss extends IPSModuleStrict
                 animate: true,
                 // Auch Batterie 2 ist im Payload bereits normalisiert.
                 invert_power: false,
-                invert_flow: false
+                // Deine Batterie liefert bereits das korrekte Vorzeichen,
+                // die Sunsynk-Animation benötigt in Symcon jedoch die
+                // umgekehrte Darstellungsrichtung.
+                invert_flow: true
             },
             load: {
                 // Hauszweig, Haussymbol, Bezeichnung und Leistungsbox verwenden
