@@ -3549,7 +3549,8 @@ class Energiefluss extends IPSModuleStrict
                 animate: true,
                 show_absolute: true,
                 invert_power: !!activeBatteries[0]?.invertFlow,
-                invert_flow: false
+                // Nur die Animationsrichtung der Sunsynk-Batterielinie umkehren.
+                invert_flow: true
             },
             battery2: {
                 // Auch Batterie 2: Kapazität in Wh. 0 blendet die Zeit aus.
@@ -3572,7 +3573,8 @@ class Energiefluss extends IPSModuleStrict
                 linear_gradient: true,
                 animate: true,
                 invert_power: !!activeBatteries[1]?.invertFlow,
-                invert_flow: false
+                // Nur die Animationsrichtung der Sunsynk-Batterielinie umkehren.
+                invert_flow: true
             },
             load: {
                 // Hauszweig, Haussymbol, Bezeichnung und Leistungsbox verwenden
