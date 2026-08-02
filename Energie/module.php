@@ -439,8 +439,8 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'        => 'List',
                             'name'        => 'Inverters',
-                            'caption'     => 'Wechselrichter (maximal 2 berücksichtigt)',
-                            'rowCount'    => 2,
+                            'caption'     => 'Wechselrichter (alle Einträge werden berücksichtigt)',
+                            'rowCount'    => 5,
                             'add'         => true,
                             'delete'      => true,
                             'changeOrder' => true,
@@ -5780,7 +5780,7 @@ HTML;
 
         $inverters = json_decode($this->ReadPropertyString('Inverters'), true);
         if (is_array($inverters)) {
-            foreach (array_slice($inverters, 0, 2) as $inverter) {
+            foreach ($inverters as $inverter) {
                 foreach ([
                     'PowerVariableID',
                     'CurrentL1VariableID',
@@ -6324,7 +6324,7 @@ HTML;
         );
 
         if (is_array($decodedInverters)) {
-            foreach (array_slice($decodedInverters, 0, 2) as $index => $source) {
+            foreach ($decodedInverters as $index => $source) {
                 $ids = [
                     'power' => (int) ($source['PowerVariableID'] ?? 0),
                     'l1'    => (int) ($source['CurrentL1VariableID'] ?? 0),
