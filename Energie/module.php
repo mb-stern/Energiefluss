@@ -3687,7 +3687,7 @@ class Energiefluss extends IPSModuleStrict
                 // äußeren Batterierahmen und den Flusspunkt. Deshalb wird
                 // nur diese Farbe richtungsabhängig gesetzt. charge_colour
                 // und die dynamische SOC-Füllung bleiben unverändert.
-                colour: Number(activeBatteries[0]?.value || 0) < 0
+                colour: Number(activeBatteries[0]?.value || 0) > 0
                     ? AC.discharge
                     : AC.charge,
                 charge_colour: AC.charge,
@@ -3717,7 +3717,7 @@ class Energiefluss extends IPSModuleStrict
                 shutdown_soc: Number(activeBatteries[1]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[1]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                colour: Number(activeBatteries[1]?.value || 0) < 0
+                colour: Number(activeBatteries[1]?.value || 0) > 0
                     ? AC.discharge
                     : AC.charge,
                 charge_colour: AC.charge,
