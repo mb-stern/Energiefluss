@@ -4215,7 +4215,19 @@ class Energiefluss extends IPSModuleStrict
                     }
                 }
 
-                // 3. Leitung.
+                // 3. Sämtliche Texte der jeweiligen Batterie verwenden
+                // dieselbe richtungsabhängige Farbe. Das betrifft Leistung,
+                // SOC, Strom, Spannung, Temperatur und Energieangaben.
+                main.querySelectorAll?.('text, tspan').forEach(textNode => {
+                    textNode.setAttribute?.('fill', colour);
+                    textNode.setAttribute?.('color', colour);
+                    textNode.style?.setProperty('fill', colour, 'important');
+                    textNode.style?.setProperty('color', colour, 'important');
+                });
+
+                main.style?.setProperty('color', colour, 'important');
+
+                // 4. Leitung.
                 main.querySelectorAll?.(
                     '.anim-line, [class*="anim-line"], ' +
                     '[class*="battery-line"], [class*="battery_line"], ' +
@@ -4235,39 +4247,28 @@ class Energiefluss extends IPSModuleStrict
                     );
                 });
 
-                // 4. Fließende Punkte direkt über ihre echten IDs erfassen.
-                main.querySelectorAll?.(
-                    '#power-dot-charge, #power-dot-discharge, ' +
-                    '[id="power-dot-charge"], [id="power-dot-discharge"], ' +
-                    'circle[id="bat"]'
-                ).forEach(dot => {
-                    const id = String(dot.id || '');
+                // 5. Fließende Punkte. Einige Kartenlayouts legen die
+                // Punkte außerhalb des eigentlichen Batterie-Containers ab.
+                // Deshalb sowohl im Batterieelement als auch im jeweiligen
+                // Shadow-Root suchen und beide Richtungs-Punkte einfärben.
+                const dotSelectors = batteryNo === 1
+                    ? '#power-dot-charge, #power-dot-discharge, ' +
+                      '[id="power-dot-charge"], [id="power-dot-discharge"], ' +
+                      'circle[id="bat"], [id*="battery"] circle[class*="dot"]'
+                    : '#power-dot2-charge, #power-dot2-discharge, ' +
+                      '[id="power-dot2-charge"], [id="power-dot2-discharge"], ' +
+                      'circle[id="bat2"], [id*="battery2"] circle[class*="dot"]';
 
-                    // Unsichtbare Gegenrichtung transparent lassen.
-                    if (
-                        (id.includes('charge') && power >= 0) ||
-                        (id.includes('discharge') && power < 0)
-                    ) {
-                        return;
-                    }
+                const dots = new Set();
+                main.querySelectorAll?.(dotSelectors).forEach(dot => dots.add(dot));
+                root.querySelectorAll?.(dotSelectors).forEach(dot => dots.add(dot));
 
+                dots.forEach(dot => {
                     dot.setAttribute?.('fill', colour);
                     dot.setAttribute?.('stroke', colour);
-                    dot.style?.setProperty(
-                        'fill',
-                        colour,
-                        'important'
-                    );
-                    dot.style?.setProperty(
-                        'stroke',
-                        colour,
-                        'important'
-                    );
-                    dot.style?.setProperty(
-                        'color',
-                        colour,
-                        'important'
-                    );
+                    dot.style?.setProperty('fill', colour, 'important');
+                    dot.style?.setProperty('stroke', colour, 'important');
+                    dot.style?.setProperty('color', colour, 'important');
                 });
                 }
             }
