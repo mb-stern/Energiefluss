@@ -2446,7 +2446,7 @@ class Energiefluss extends IPSModuleStrict
         if (pvSub) {
             const hasDailyEnergy = !!d.available?.inverterDailyEnergy;
             const dailyEnergyLine = hasDailyEnergy
-                ? `Heute: ${fmtKwh(d.inverterDailyEnergy || 0)}`
+                ? fmtKwh(d.inverterDailyEnergy || 0)
                 : '';
 
             if (window.matchMedia('(max-width: 600px)').matches) {
