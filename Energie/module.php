@@ -226,15 +226,6 @@ class Energiefluss extends IPSModuleStrict
                                     ],
                                 ],
                                 [
-                                    'caption' => 'Energie (optional)',
-                                    'name'    => 'EnergyVariableID',
-                                    'width'   => '175px',
-                                    'add'     => 0,
-                                    'edit'    => [
-                                        'type' => 'SelectVariable',
-                                    ],
-                                ],
-                                [
                                     'caption' => 'Maximalleistung',
                                     'name'    => 'MaxPower',
                                     'width'   => '115px',
@@ -2435,23 +2426,22 @@ class Energiefluss extends IPSModuleStrict
             pvMain.textContent = fmt(pvTotal);
         }
         if (pvSub) {
+            const hasDailyEnergy = !!d.available?.inverterDailyEnergy;
+            const dailyEnergyLine = hasDailyEnergy
+                ? `Heute: ${fmtKwh(d.inverterDailyEnergy || 0)}`
+                : '';
+
             if (window.matchMedia('(max-width: 600px)').matches) {
-                const totalEnergy = pvs.reduce((sum, pv) => {
-                    const value = Number(pv.energyValue);
-                    return sum + (Number.isFinite(value) ? value : 0);
-                }, 0);
-
-                const hasAnyEnergy = pvs.some(pv => !!pv.hasEnergy);
-
-                pvSub.textContent = hasAnyEnergy
-                    ? fmtKwh(totalEnergy)
-                    : '';
+                pvSub.textContent = dailyEnergyLine;
             } else {
-                pvSub.innerHTML = pvs.map((pv, i) => {
+                const stringLines = pvs.map((pv, i) => {
                     const name = pv.name || ('PV ' + (i + 1));
-                    const energy = pv.energy ? ` · ${pv.energy}` : '';
-                    return `${name}: ${fmt(pv.value || 0)}${energy}`;
-                }).join('<br>');
+                    return `${name}: ${fmt(pv.value || 0)}`;
+                });
+
+                pvSub.innerHTML = [dailyEnergyLine, ...stringLines]
+                    .filter(Boolean)
+                    .join('<br>');
             }
         }
 
@@ -3391,7 +3381,7 @@ class Energiefluss extends IPSModuleStrict
             );
         });
 
-        if (activePvs.some(pv => pv.hasEnergy)) {
+        if (entityAvailable(d, 'inverterDailyEnergy')) {
             addEntity('day_pv_energy_108', 'sensor.symcon_pv_energy');
         }
 
@@ -3471,7 +3461,7 @@ class Energiefluss extends IPSModuleStrict
             },
             solar: {
                 colour: AC.solar,
-                show_daily: showEnergyDetails && activePvs.some(pv => pv.hasEnergy),
+                show_daily: showEnergyDetails && entityAvailable(d, 'inverterDailyEnergy'),
                 mppts: Math.max(1, Math.min(6, activePvs.length || 1)),
                 animation_speed: Math.max(1, Math.round(9 / flowSpeedFactor)),
                 // Die Sunsynk-Karte besitzt nur einen gemeinsamen
@@ -3636,10 +3626,9 @@ class Energiefluss extends IPSModuleStrict
         );
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
-        const pvEnergyTotal = activePvs.reduce(
-            (sum, pv) => sum + Number(pv.energyValue || 0),
-            0
-        );
+        const pvEnergyTotal = entityAvailable(d, 'inverterDailyEnergy')
+            ? Number(d.inverterDailyEnergy || 0)
+            : 0;
 
         // Die konfigurierte Prognosevariable liefert die erwartete
         // Tagesproduktion insgesamt. Sunsynk erwartet bei remaining_solar
@@ -5762,7 +5751,6 @@ HTML;
                     'VariableID',
                     'VoltageVariableID',
                     'CurrentVariableID',
-                    'EnergyVariableID',
 
                     // Alte Konfiguration bleibt zur Migration lesbar.
                     'String1PowerVariableID',
@@ -5916,8 +5904,6 @@ HTML;
         );
 
         $pvTotalPower = 0.0;
-        $pvTotalEnergy = 0.0;
-        $hasAnyPvEnergy = false;
 
         if (is_array($decodedPVs)) {
             foreach (array_slice($decodedPVs, 0, 6) as $source) {
@@ -5967,10 +5953,6 @@ HTML;
                     ?? 0
                 );
 
-                $energyVariableID = (int) (
-                    $source['EnergyVariableID'] ?? 0
-                );
-
                 $hasVoltage =
                     $voltageVariableID > 0 &&
                     IPS_VariableExists($voltageVariableID);
@@ -5979,15 +5961,7 @@ HTML;
                     $currentVariableID > 0 &&
                     IPS_VariableExists($currentVariableID);
 
-                $hasEnergy =
-                    $energyVariableID > 0 &&
-                    IPS_VariableExists($energyVariableID);
-
                 $power = (float) GetValue($powerVariableID);
-                $energyValue = $hasEnergy
-                    ? (float) GetValue($energyVariableID)
-                    : 0.0;
-
                 $name = trim((string) ($source['Name'] ?? ''));
 
                 if ($name === '') {
@@ -6015,11 +5989,9 @@ HTML;
                     'stringNo'    => count($pvs) + 1,
                     'value'       => $power,
                     'hasPower'    => true,
-                    'energy'      => $hasEnergy
-                        ? GetValueFormatted($energyVariableID)
-                        : '',
-                    'energyValue' => $energyValue,
-                    'hasEnergy'   => $hasEnergy,
+                    'energy'      => '',
+                    'energyValue' => 0.0,
+                    'hasEnergy'   => false,
                     'voltage'     => $hasVoltage
                         ? (float) GetValue($voltageVariableID)
                         : 0.0,
@@ -6033,32 +6005,13 @@ HTML;
 
                 $pvTotalPower += $power;
 
-                if ($hasEnergy) {
-                    $pvTotalEnergy += $energyValue;
-                    $hasAnyPvEnergy = true;
-                }
             }
         }
 
-        // In der Hausgrafik werden die einzelnen Strings nicht separat
-        // dargestellt. Dort erscheint nur die aufsummierte PV-Gesamtleistung.
-        if (count($pvs) > 0) {
-            $housePvs[] = [
-                'name'        => 'PV',
-                'value'       => $pvTotalPower,
-                'hasPower'    => true,
-                'energy'      => $hasAnyPvEnergy
-                    ? number_format(
-                        $pvTotalEnergy,
-                        2,
-                        ',',
-                        '.'
-                    ) . ' kWh'
-                    : '',
-                'energyValue' => $pvTotalEnergy,
-                'hasEnergy'   => $hasAnyPvEnergy,
-            ];
-        }
+        // Die Hausgrafik erhält ebenfalls die einzelnen Strings. Die
+        // Energie stammt jedoch zentral aus der Wechselrichter-Liste.
+        $housePvs = $pvs;
+
 
 
         // Batterien.
@@ -6251,15 +6204,10 @@ HTML;
             $gridExportEnergyID > 0 &&
             IPS_VariableExists($gridExportEnergyID);
 
+        // Die PV-Tagesenergie wird weiter unten nach dem Auslesen aller
+        // Wechselrichter aus deren aufsummierter Tagesenergie übernommen.
         $pvEnergyTotal = 0.0;
-        $hasPvEnergy = count($pvs) > 0;
-        foreach ($pvs as $pv) {
-            if (!($pv['hasEnergy'] ?? false)) {
-                $hasPvEnergy = false;
-                break;
-            }
-            $pvEnergyTotal += (float) ($pv['energyValue'] ?? 0.0);
-        }
+        $hasPvEnergy = false;
 
         $batteryChargeEnergyTotal = 0.0;
         $batteryDischargeEnergyTotal = 0.0;
@@ -6283,23 +6231,10 @@ HTML;
             $hasBatteryEnergy = true;
         }
 
-        $houseEnergyAvailable =
-            $hasPvEnergy &&
-            $hasGridImportEnergy &&
-            $hasGridExportEnergy &&
-            $hasBatteryEnergy;
-
+        $houseEnergyAvailable = false;
         $houseEnergy = 0.0;
-        if ($houseEnergyAvailable) {
-            $houseEnergy =
-                $pvEnergyTotal +
-                (float) GetValue($gridImportEnergyID) -
-                (float) GetValue($gridExportEnergyID) +
-                $batteryDischargeEnergyTotal -
-                $batteryChargeEnergyTotal;
-        }
 
-        // Wechselrichter: Bis zu zwei Einträge werden zu Gesamtwerten addiert.
+        // Wechselrichter: Alle Listeneinträge werden zu Gesamtwerten addiert.
         // Die beiden Temperaturwerte bleiben getrennt: WR1 wird auf dem
         // bisherigen AC-Temperaturfeld, WR2 auf dem DC-Temperaturfeld der
         // Sunsynk-Karte dargestellt. So geht keine Gerätetemperatur verloren.
@@ -6417,6 +6352,27 @@ HTML;
                 'hasDailyEnergy' => false,
                 'hasTotalEnergy' => false,
             ]];
+        }
+
+        // Für sämtliche PV-Energieanzeigen gilt zentral die Summe der
+        // Tagesenergien aus der Wechselrichter-Liste.
+        $pvEnergyTotal = $inverterDailyEnergy;
+        $hasPvEnergy = $inverterDailyEnergyAvailable;
+
+        $houseEnergyAvailable =
+            $hasPvEnergy &&
+            $hasGridImportEnergy &&
+            $hasGridExportEnergy &&
+            $hasBatteryEnergy;
+
+        $houseEnergy = 0.0;
+        if ($houseEnergyAvailable) {
+            $houseEnergy =
+                $pvEnergyTotal +
+                (float) GetValue($gridImportEnergyID) -
+                (float) GetValue($gridExportEnergyID) +
+                $batteryDischargeEnergyTotal -
+                $batteryChargeEnergyTotal;
         }
 
         // Die beiden Temperaturfelder gehören zur zentralen
