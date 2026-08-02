@@ -648,12 +648,12 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'HouseColorBatteryAccent', 'caption' => 'Batterie Akzent', 'allowTransparent' => false],
                         [
                             'type'    => 'Label',
-                            'caption' => 'Das Feld dient nur zum Import. Beim Export wird das JSON in einem Dialog angezeigt; nach einem erfolgreichen Import wird das Eingabefeld automatisch geleert. Vor dem Export geänderte Farben zuerst übernehmen.',
+                            'caption' => 'Hausfarben als JSON sichern oder in eine andere Modulinstanz übertragen. Vor dem Export geänderte Farben zuerst übernehmen.',
                         ],
                         [
                             'type'        => 'ValidationTextBox',
                             'name'        => 'HouseColorJson',
-                            'caption'     => 'JSON für Import einfügen',
+                            'caption'     => 'Hausfarben JSON',
                             'multiline'   => true,
                             'rowCount'    => 13,
                             'placeholder' => '{ \"name\": \"Mein Design\", \"version\": 1, \"colors\": { ... } }',
@@ -663,7 +663,7 @@ class Energiefluss extends IPSModuleStrict
                             'items' => [
                                 [
                                     'type'    => 'Button',
-                                    'caption' => 'Aktuelle Farben als JSON anzeigen',
+                                    'caption' => 'Aktuelle Farben als JSON erzeugen',
                                     'onClick' => 'echo ENERGIE_ExportHouseColors($id);',
                                 ],
                                 [
@@ -774,10 +774,8 @@ class Energiefluss extends IPSModuleStrict
                 | JSON_PRETTY_PRINT
             );
 
-            // Das Export-JSON nur als Dialoginhalt zurückgeben.
-            // Dadurch wird das Eingabefeld nicht verändert und IP-Symcon
-            // erkennt keine ungespeicherte Konfigurationsänderung.
-            return $json;
+            $this->UpdateFormField('HouseColorJson', 'value', $json);
+            return 'Hausfarben wurden als JSON erzeugt.';
         } catch (Throwable $e) {
             $this->LogMessage('ExportHouseColors: ' . $e->getMessage(), KL_ERROR);
             return 'Fehler beim JSON-Export: ' . $e->getMessage();
@@ -824,13 +822,8 @@ class Energiefluss extends IPSModuleStrict
                 return 'Im JSON wurden keine bekannten Hausfarben gefunden.';
             }
 
-            // Das JSON ist nur eine vorübergehende Eingabe und soll nicht
-            // dauerhaft in der Instanzkonfiguration gespeichert bleiben.
-            IPS_SetProperty($this->InstanceID, 'HouseColorJson', '');
+            IPS_SetProperty($this->InstanceID, 'HouseColorJson', $json);
             IPS_ApplyChanges($this->InstanceID);
-
-            // Auch den aktuell geöffneten Formulareditor sofort leeren.
-            $this->UpdateFormField('HouseColorJson', 'value', '');
             $this->ReloadForm();
 
             return sprintf('%d Hausfarben wurden übernommen.', $imported);
