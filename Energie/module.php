@@ -625,14 +625,12 @@ class Energiefluss extends IPSModuleStrict
             $newLayout = in_array($requestedLayout, ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'], true) ? $requestedLayout : 'lite';
 
             if ($newLayout !== $this->ReadPropertyString('TechnicalLayout')) {
-                IPS_SetProperty(
-                    $this->InstanceID,
-                    'TechnicalLayout',
-                    $newLayout
-                );
+                IPS_SetProperty($this->InstanceID, 'TechnicalLayout', $newLayout);
+                IPS_ApplyChanges($this->InstanceID);
+                $this->ReloadForm();
+            } else {
+                $this->PushState();
             }
-
-            $this->PushState();
 
             return;
         }
@@ -641,14 +639,12 @@ class Energiefluss extends IPSModuleStrict
             $newMode = ((string) $Value === 'house') ? 'house' : 'flow';
 
             if ($newMode !== $this->ReadPropertyString('DisplayMode')) {
-                IPS_SetProperty(
-                    $this->InstanceID,
-                    'DisplayMode',
-                    $newMode
-                );
+                IPS_SetProperty($this->InstanceID, 'DisplayMode', $newMode);
+                IPS_ApplyChanges($this->InstanceID);
+                $this->ReloadForm();
+            } else {
+                $this->PushState();
             }
-
-            $this->PushState();
 
             return;
         }
@@ -1442,20 +1438,8 @@ class Energiefluss extends IPSModuleStrict
     }
 
     detectTheme();
-    window.addEventListener('load', detectTheme, { once: true });
-
-    const themeMediaQuery = window.matchMedia?.(
-        '(prefers-color-scheme: dark)'
-    );
-    themeMediaQuery?.addEventListener?.('change', detectTheme);
-
-    new MutationObserver(detectTheme).observe(
-        document.documentElement,
-        {
-            attributes: true,
-            attributeFilter: ['class', 'style', 'data-theme']
-        }
-    );
+    window.addEventListener('load', detectTheme);
+    setInterval(detectTheme, 2000);
 
     // Zentrale Farbdefinition – entspricht der ursprünglichen
     // power-flow-card YAML-Konfiguration.
@@ -3709,56 +3693,77 @@ class Energiefluss extends IPSModuleStrict
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
 
-        // Ein kurzer Nachlauf genügt für tiefere Lit-/Shadow-DOM-Knoten.
-        clearTimeout(card.__symconOverrideTimer);
-        card.__symconOverrideTimer = setTimeout(() => {
-            if (currentDisplayMode !== 'flow') {
-                return;
-            }
+        // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
+        // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
+        // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
+        [0, 80, 250, 600, 1200].forEach(delay => {
+            setTimeout(() => {
+                alignConsumerNamesToPowerBoxes(card);
+                applyAdditionalLoadWattColourByGeometry(card);
+                        applyTechnicalBatteryColours(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyHouseLoadWattColour(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyDynamicHouseSourceIcon(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyInverterVisualColour(
+                    card,
+                    card.__symconLastData || d
+                );
+                showInverterPowerAboveVoltages(
+                    card,
+                    card.__symconLastData || d
+                );
+            }, delay);
+        });
 
-            const latest = card.__symconLastData || d;
-            applyAdditionalLoadColours(card);
-            alignConsumerNamesToPowerBoxes(card);
-            applyAdditionalLoadWattColourByGeometry(card);
-            applyTechnicalBatteryColours(card, latest);
-            applyHouseLoadWattColour(card, latest);
-            applyDynamicHouseSourceIcon(card, latest);
-            applyInverterVisualColour(card, latest);
-            showInverterPowerAboveVoltages(card, latest);
-        }, 120);
-
-        // Nur Strukturänderungen beobachten. Eigene Farb-/Styleänderungen
-        // lösen dadurch keine Endlosschleife mehr aus.
+        // Lit rendert bei jeder neuen hass-Zuweisung Teile des Shadow-DOM neu.
+        // Deshalb die rein optischen Korrekturen nach jedem Render erneut anwenden.
         if (!card.__symconVisualObserver && card.shadowRoot) {
             let scheduled = false;
-
             card.__symconVisualObserver = new MutationObserver(() => {
-                if (scheduled || currentDisplayMode !== 'flow') {
-                    return;
-                }
-
+                if (scheduled) return;
                 scheduled = true;
                 requestAnimationFrame(() => {
                     scheduled = false;
-                    const latest = card.__symconLastData || d;
-
                     applyAdditionalLoadColours(card);
                     alignConsumerNamesToPowerBoxes(card);
                     applyAdditionalLoadWattColourByGeometry(card);
-                    applyTechnicalBatteryColours(card, latest);
-                    applyHouseLoadWattColour(card, latest);
-                    applyDynamicHouseSourceIcon(card, latest);
-                    applyInverterVisualColour(card, latest);
-                    showInverterPowerAboveVoltages(card, latest);
+                                applyTechnicalBatteryColours(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyHouseLoadWattColour(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyDynamicHouseSourceIcon(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyInverterVisualColour(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    showInverterPowerAboveVoltages(
+                        card,
+                        card.__symconLastData || d
+                    );
                 });
             });
-
             card.__symconVisualObserver.observe(card.shadowRoot, {
                 childList: true,
-                subtree: true
+                subtree: true,
+                attributes: true,
+                attributeFilter: ['style', 'class', 'fill', 'stroke']
             });
         }
-
     }
 
     function findInOpenShadowRoots(root, selector) {
@@ -4817,15 +4822,7 @@ class Energiefluss extends IPSModuleStrict
             // Wie in Lovelace: zuerst Konfiguration und hass setzen,
             // anschließend das Element in den DOM einhängen.
             window.__symconHasWallbox = !!d.hasWallbox;
-            const initialConfig = createSunsynkConfig(
-                d,
-                pvs,
-                batteries,
-                wallbox,
-                groups
-            );
-            card.setConfig(initialConfig);
-            card.__symconConfigKey = JSON.stringify(initialConfig);
+            card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
             card.hass = createSunsynkHass(
                 d,
                 grid,
@@ -4857,72 +4854,17 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
-        currentTechnicalLayout = [
-            'compact',
-            'compact-wide',
-            'lite',
-            'lite-wide',
-            'full',
-            'full-wide'
-        ].includes(d.technicalLayout)
-            ? d.technicalLayout
-            : 'lite';
-
+        currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
         updateTechnicalLayoutButtons();
-
-        if (currentDisplayMode !== 'flow') {
-            return;
-        }
-
         if (!sunsynkCard) {
-            sunsynkPending = [
-                d,
-                grid,
-                haus,
-                pvs,
-                batteries,
-                wallbox,
-                groups
-            ];
-            ensureSunsynkCard(
-                d,
-                grid,
-                haus,
-                pvs,
-                batteries,
-                wallbox,
-                groups
-            ).catch(() => {});
+            sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
+            ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
             return;
         }
-
         window.__symconHasWallbox = !!d.hasWallbox;
-
-        const config = createSunsynkConfig(
-            d,
-            pvs,
-            batteries,
-            wallbox,
-            groups
-        );
-        const configKey = JSON.stringify(config);
-
-        if (sunsynkCard.__symconConfigKey !== configKey) {
-            sunsynkCard.setConfig(config);
-            sunsynkCard.__symconConfigKey = configKey;
-        }
-
-        sunsynkCard.hass = createSunsynkHass(
-            d,
-            grid,
-            haus,
-            pvs,
-            batteries,
-            wallbox,
-            groups
-        );
+        sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
+        sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
         sunsynkCard.__symconLastData = d;
-
         applySunsynkViewOverrides(sunsynkCard, d);
         updateSunsynkWallboxAuxInfo(sunsynkCard, d, wallbox);
     }
@@ -5040,21 +4982,7 @@ class Energiefluss extends IPSModuleStrict
     const displayModeButton = document.getElementById('display-mode-button');
     if (displayModeButton) {
         displayModeButton.addEventListener('click', function () {
-            const newMode =
-                currentDisplayMode === 'house'
-                    ? 'flow'
-                    : 'house';
-
-            applyDisplayMode(newMode);
-
-            if (lastStateData) {
-                lastStateData = {
-                    ...lastStateData,
-                    displayMode: newMode
-                };
-                setState(lastStateData);
-            }
-
+            const newMode = currentDisplayMode === 'house' ? 'flow' : 'house';
             requestAction('ToggleDisplayMode', newMode);
         });
     }
@@ -5078,16 +5006,6 @@ class Energiefluss extends IPSModuleStrict
             const newLayout =
                 nextBase + (isWide ? '-wide' : '');
 
-            currentTechnicalLayout = newLayout;
-
-            if (lastStateData) {
-                lastStateData = {
-                    ...lastStateData,
-                    technicalLayout: newLayout
-                };
-                setState(lastStateData);
-            }
-
             requestAction('ToggleTechnicalLayout', newLayout);
         });
     }
@@ -5104,16 +5022,6 @@ class Energiefluss extends IPSModuleStrict
             const newLayout = isWide
                 ? baseLayout
                 : `${baseLayout}-wide`;
-
-            currentTechnicalLayout = newLayout;
-
-            if (lastStateData) {
-                lastStateData = {
-                    ...lastStateData,
-                    technicalLayout: newLayout
-                };
-                setState(lastStateData);
-            }
 
             requestAction('ToggleTechnicalLayout', newLayout);
         });
@@ -5208,33 +5116,18 @@ class Energiefluss extends IPSModuleStrict
 
     function setState(d) {
         applyConfiguredColors(d);
+        const grid = d.grid || 0;
+        const imp = Math.max(grid, 0);
 
-        const grid = Number(d.grid || 0);
-        const pvs = Array.isArray(d.pvs) ? d.pvs : [];
-        const batteries = Array.isArray(d.batteries)
-            ? d.batteries
-            : [];
-        const groups = Array.isArray(d.groups)
-            ? d.groups
-            : [];
-        const wallbox = d.wallbox || {
-            name: 'Wallbox',
-            value: 0,
-            energy: '',
-            socText: '',
-            hasSoc: false
-        };
+        const pvs = d.pvs || [];
+        const batteries = d.batteries || [];
+        const groups = d.groups || [];
+        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', socText: '', hasSoc: false };
 
-        const pvTotal = pvs.reduce(
-            (sum, pv) => sum + Number(pv.value || 0),
-            0
-        );
-        const batteryTotal = batteries.reduce(
-            (sum, battery) =>
-                sum + Number(battery.value || 0),
-            0
-        );
+        const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
+        const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
 
+        // Netzbezug positiv, Rücklieferung negativ.
         const calculatedHouseBalance = Math.max(
             pvTotal + batteryTotal + grid,
             0
@@ -5242,15 +5135,11 @@ class Energiefluss extends IPSModuleStrict
 
         const inverterPower = Number(d.inverterPower || 0);
         const calculatedHouseInverterGrid = Math.max(
-            (
-                Number.isFinite(inverterPower)
-                    ? inverterPower
-                    : 0
-            ) + grid,
+            (Number.isFinite(inverterPower) ? inverterPower : 0) + grid,
             0
         );
 
-        const mode = [
+        const houseCalculationMode = [
             'auto',
             'balance',
             'inverter-grid'
@@ -5259,11 +5148,17 @@ class Energiefluss extends IPSModuleStrict
             : 'auto';
 
         let haus;
-        if (mode === 'inverter-grid') {
+
+        if (houseCalculationMode === 'inverter-grid') {
+            // Wechselrichterleistung gesamt + Netzbezug − Netzeinspeisung.
             haus = calculatedHouseInverterGrid;
-        } else if (mode === 'balance') {
+        } else if (houseCalculationMode === 'balance') {
+            // PV + Batterieentladung − Batterieladung
+            // + Netzbezug − Netzeinspeisung.
             haus = calculatedHouseBalance;
         } else {
+            // Bisheriges Verhalten: konfigurierte Hausverbrauchsvariable
+            // hat Vorrang, ansonsten wird die vollständige Bilanz verwendet.
             haus =
                 d.available?.housePowerConfigured &&
                 Number.isFinite(Number(d.housePower))
@@ -5271,67 +5166,128 @@ class Energiefluss extends IPSModuleStrict
                     : calculatedHouseBalance;
         }
 
-        currentTechnicalLayout = [
-            'compact',
-            'compact-wide',
-            'lite',
-            'lite-wide',
-            'full',
-            'full-wide'
-        ].includes(d.technicalLayout)
-            ? d.technicalLayout
-            : currentTechnicalLayout;
+        // Neue technische Ansicht.
+        currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
+        renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups);
 
-        const requestedMode =
-            d.displayMode === 'house'
-                ? 'house'
-                : 'flow';
+        // Alte SVG-Struktur bleibt intern nur für Abwärtskompatibilität erhalten.
+        clearDynamicSources();
+        buildPVs(pvs);
+        buildBatteries(batteries);
+        buildGroups(groups, !!d.hasWallbox);
+        buildWallbox(wallbox, !!d.hasWallbox, groups.length);
 
-        applyDisplayMode(requestedMode);
-
-        if (requestedMode === 'flow') {
-            renderTechnicalView(
-                d,
-                grid,
-                haus,
-                pvs,
-                batteries,
-                wallbox,
-                groups
-            );
-        } else {
-            const houseViewPower = Math.max(
-                haus - (
-                    d.hasWallbox
-                        ? Math.max(
-                            Number(wallbox.value || 0),
-                            0
-                        )
-                        : 0
-                ),
-                0
-            );
-
-            buildHouseView(
-                d,
-                grid,
-                houseViewPower,
-                pvs,
-                batteries,
-                wallbox
-            );
+        const gridColor = grid >= 0 ? AC.import : AC.export;
+        const gridNode = document.getElementById('n-netz');
+        if (gridNode) {
+            gridNode.style.borderColor = gridColor;
+            const icon = gridNode.querySelector('i');
+            if (icon) {
+                icon.style.color = gridColor;
+            }
         }
+
+        if (lineEl['netz-haus']) {
+            lineEl['netz-haus'].style.stroke = gridColor;
+        }
+        if (dotEl['netz-haus']) {
+            dotEl['netz-haus'].forEach(dot => dot.setAttribute('fill', gridColor));
+        }
+
+        document.getElementById('body-netz').innerHTML =
+            `<div class="val" style="color:${gridColor}">${fmt(Math.abs(grid))}</div>` +
+            (d.gridImportEnergy
+                ? `<div class="sub energy-sub" style="color:${AC.import}">&rarr; ${d.gridImportEnergy}</div>`
+                : '') +
+            (d.gridExportEnergy
+                ? `<div class="sub energy-sub" style="color:${AC.export}">&larr; ${d.gridExportEnergy}</div>`
+                : '');
+
+        document.getElementById('body-haus').innerHTML =
+            `<div class="val" style="font-size:17px">${fmt(haus)}</div>` +
+            (d.houseEnergyAvailable
+                ? `<div class="sub energy-sub">${fmtKwh(d.houseEnergy)}</div>`
+                : '');
+
+        updateRings(
+            [
+                [AC.solar, Math.max(pvTotal, 0)],
+                [AC.discharge, Math.max(batteryTotal, 0)],
+                [AC.import, imp]
+            ],
+            batteries,
+            wallbox,
+            !!d.hasWallbox,
+            groups.length
+        );
+
+        edgeState = {
+            'netz-haus': { w: Math.abs(grid), rev: grid < 0 }
+        };
+
+        pvs.forEach((pv, i) => {
+            edgeState['pv' + i] = {
+                w: Math.max(pv.value || 0, 0),
+                rev: false
+            };
+        });
+
+        batteries.forEach((bat, i) => {
+            edgeState['bat' + i] = {
+                w: Math.abs(bat.value || 0),
+                rev: (bat.value || 0) < 0
+            };
+        });
+
+        if (d.hasWallbox) {
+            edgeState['wallbox'] = {
+                w: Math.max(wallbox.value || 0, 0),
+                rev: false
+            };
+        }
+
+        groups.forEach((g, i) => {
+            edgeState['grp' + i] = { w: g.value || 0, rev: false };
+        });
+
+        for (const k in lineEl) {
+            const on = edgeState[k] && edgeState[k].w > 0;
+            if (dotEl[k]) {
+                dotEl[k].forEach(dot => dot.style.display = on ? 'block' : 'none');
+            }
+        }
+
+        // Hausansicht V2:
+        // Die Wallbox wird separat dargestellt. Ihre positive Ladeleistung
+        // wird deshalb vom Hausverbrauch abgezogen, damit sie nicht doppelt
+        // als Hausverbrauch und Wallbox erscheint.
+        const houseViewPower = Math.max(
+            haus - (
+                d.hasWallbox
+                    ? Math.max(Number(wallbox.value || 0), 0)
+                    : 0
+            ),
+            0
+        );
+
+        buildHouseView(
+            d,
+            grid,
+            houseViewPower,
+            pvs,
+            batteries,
+            wallbox
+        );
+        applyDisplayMode(d.displayMode || 'flow');
 
         updateLayout(
             groups.length,
             pvs.length,
             batteries.length,
             false,
-            requestedMode,
+            (d.displayMode || 'flow') === 'house' ? 'house' : 'flow',
             !!d.hasWallbox
         );
-
-        fit();
     }
 
     let lastStateData = null;
@@ -5503,9 +5459,7 @@ class Energiefluss extends IPSModuleStrict
     });
 
     fit();
-
-    // Die frühere eigene SVG-Ansicht wird nicht mehr aufgebaut.
-    // Sunsynk und Power Flow Card animieren ihre Flüsse selbst.
+    requestAnimationFrame(frame);
 </script>
 HTML;
 
