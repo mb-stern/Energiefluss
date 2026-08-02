@@ -2566,66 +2566,29 @@ class Energiefluss extends IPSModuleStrict
         return `Voll in ${formatBatteryDuration(missingKWh / powerKW)}`;
     }
 
-    /**
-     * Ermittelt bei jedem Update den aktuell grössten Energielieferanten.
-     *
-     * Berücksichtigt werden ausschliesslich Leistungen, die das Haus
-     * tatsächlich versorgen können:
-     *   - PV-Leistung > 0
-     *   - Batterieentladung > 0
-     *   - Netzbezug > 0
-     *
-     * Batterieladung und Netzeinspeisung werden mit 0 gewertet. Bei exakt
-     * gleichen Leistungen bleibt die feste Priorität PV > Batterie > Netz,
-     * damit Farbe und Symbol nicht zwischen zwei Quellen flackern.
-     */
-    function dominantHouseSource(grid, pvs, batteries) {
-        const solarPower = (Array.isArray(pvs) ? pvs : []).reduce(
-            (sum, pv) => sum + Math.max(Number(pv?.value || 0), 0),
+    function dominantHouseSourceColour(grid, pvs, batteries) {
+        const solarPower = pvs.reduce(
+            (sum, pv) => sum + Math.max(Number(pv.value || 0), 0),
             0
         );
 
-        const batteryPower = (Array.isArray(batteries) ? batteries : []).reduce(
+        const batteryPower = batteries.reduce(
             (sum, battery) =>
-                sum + Math.max(Number(battery?.value || 0), 0),
+                sum + Math.max(Number(battery.value || 0), 0),
             0
         );
 
         const gridPower = Math.max(Number(grid || 0), 0);
 
         const sources = [
-            { type: 'solar', power: solarPower, colour: AC.solar, priority: 3 },
-            { type: 'battery', power: batteryPower, colour: AC.discharge, priority: 2 },
-            { type: 'grid', power: gridPower, colour: AC.import, priority: 1 }
-        ];
+            { power: solarPower, colour: AC.solar },
+            { power: batteryPower, colour: AC.discharge },
+            { power: gridPower, colour: AC.import }
+        ].sort((a, b) => b.power - a.power);
 
-        const winner = sources.reduce((largest, current) => {
-            if (current.power > largest.power) {
-                return current;
-            }
-
-            if (
-                current.power === largest.power &&
-                current.priority > largest.priority
-            ) {
-                return current;
-            }
-
-            return largest;
-        });
-
-        return winner.power > 0
-            ? winner
-            : {
-                type: 'normal',
-                power: 0,
-                colour: AC.room,
-                priority: 0
-            };
-    }
-
-    function dominantHouseSourceColour(grid, pvs, batteries) {
-        return dominantHouseSource(grid, pvs, batteries).colour;
+        return sources[0].power > 0
+            ? sources[0].colour
+            : AC.room;
     }
 
     function updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox) {
@@ -4343,14 +4306,30 @@ class Energiefluss extends IPSModuleStrict
         const pvs = Array.isArray(d.pvs) ? d.pvs : [];
         const batteries = Array.isArray(d.batteries) ? d.batteries : [];
 
-        // Für Symbol, Hausfarbe und Hauswert wird bewusst dieselbe zentrale
-        // Gewinnerlogik verwendet. Damit können die drei Darstellungen nicht
-        // mehr unterschiedliche Hauptlieferanten anzeigen.
-        const source = dominantHouseSource(
-            Number(d.grid || 0),
-            pvs,
-            batteries
-        ).type;
+        const solarPower = pvs.reduce(
+            (sum, pv) => sum + Math.max(Number(pv.value || 0), 0),
+            0
+        );
+
+        // Im Modul bedeutet positive Batterieleistung: Entladen zum Haus.
+        const batteryPower = batteries.reduce(
+            (sum, battery) =>
+                sum + Math.max(Number(battery.value || 0), 0),
+            0
+        );
+
+        // Netz positiv = Bezug, negativ = Einspeisung.
+        const gridPower = Math.max(Number(d.grid || 0), 0);
+
+        const sources = [
+            { type: 'solar', power: solarPower },
+            { type: 'battery', power: batteryPower },
+            { type: 'grid', power: gridPower }
+        ].sort((a, b) => b.power - a.power);
+
+        const source = sources[0].power > 0
+            ? sources[0].type
+            : 'normal';
 
         // Originale Pfade der Sunsynk-Karte.
         const paths = {
