@@ -93,9 +93,6 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('HouseColorBattery', 858148);       // #0d1824
         $this->RegisterPropertyInteger('HouseColorBatteryAccent', 6868216);// #68ccf8
 
-        // JSON-Austauschfeld für Hausfarben-Presets.
-        $this->RegisterPropertyString('HouseColorJson', '');
-
         // Animationsgeschwindigkeit: 100 % entspricht dem bisherigen Verhalten.
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
@@ -647,33 +644,6 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'HouseColorBattery', 'caption' => 'Batterie Gehäuse', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'HouseColorBatteryAccent', 'caption' => 'Batterie Akzent', 'allowTransparent' => false],
                         [
-                            'type'    => 'Label',
-                            'caption' => 'Hausfarben als JSON sichern oder in eine andere Modulinstanz übertragen. Vor dem Export geänderte Farben zuerst übernehmen.',
-                        ],
-                        [
-                            'type'        => 'ValidationTextBox',
-                            'name'        => 'HouseColorJson',
-                            'caption'     => 'Hausfarben JSON',
-                            'multiline'   => true,
-                            'rowCount'    => 13,
-                            'placeholder' => '{ \"name\": \"Mein Design\", \"version\": 1, \"colors\": { ... } }',
-                        ],
-                        [
-                            'type'  => 'RowLayout',
-                            'items' => [
-                                [
-                                    'type'    => 'Button',
-                                    'caption' => 'Aktuelle Farben als JSON erzeugen',
-                                    'onClick' => 'echo ENERGIE_ExportHouseColors($id);',
-                                ],
-                                [
-                                    'type'    => 'Button',
-                                    'caption' => 'JSON-Farben übernehmen',
-                                    'onClick' => 'echo ENERGIE_ImportHouseColors($id, $HouseColorJson);',
-                                ],
-                            ],
-                        ],
-                        [
                             'type'    => 'Button',
                             'caption' => 'Standardfarben wiederherstellen',
                             'onClick' => 'ENERGIE_ResetHouseColors($id);',
@@ -752,120 +722,6 @@ class Energiefluss extends IPSModuleStrict
 
             return;
         }
-    }
-
-    public function ExportHouseColors(): string
-    {
-        try {
-            $colors = [];
-            foreach ($this->GetHouseColorProperties() as $property) {
-                $colors[$property] = $this->ReadPropertyInteger($property);
-            }
-
-            $json = json_encode(
-                [
-                    'name'    => 'Hausfarben',
-                    'version' => 1,
-                    'colors'  => $colors,
-                ],
-                JSON_THROW_ON_ERROR
-                | JSON_UNESCAPED_UNICODE
-                | JSON_UNESCAPED_SLASHES
-                | JSON_PRETTY_PRINT
-            );
-
-            $this->UpdateFormField('HouseColorJson', 'value', $json);
-            return 'Hausfarben wurden als JSON erzeugt.';
-        } catch (Throwable $e) {
-            $this->LogMessage('ExportHouseColors: ' . $e->getMessage(), KL_ERROR);
-            return 'Fehler beim JSON-Export: ' . $e->getMessage();
-        }
-    }
-
-    public function ImportHouseColors(string $json): string
-    {
-        try {
-            $json = trim($json);
-            if ($json === '') {
-                return 'Bitte zuerst eine JSON-Farbkonfiguration einfügen.';
-            }
-
-            $decoded = json_decode($json, true, 32, JSON_THROW_ON_ERROR);
-            if (!is_array($decoded)) {
-                return 'Die JSON-Farbkonfiguration ist ungültig.';
-            }
-
-            // Unterstützt das dokumentierte Format mit "colors" sowie
-            // einfache JSON-Objekte, die die Farbnamen direkt enthalten.
-            $source = isset($decoded['colors']) && is_array($decoded['colors'])
-                ? $decoded['colors']
-                : $decoded;
-
-            $imported = 0;
-            foreach ($this->GetHouseColorProperties() as $property) {
-                if (!array_key_exists($property, $source)) {
-                    continue;
-                }
-
-                $color = $this->NormalizeImportedColor($source[$property]);
-                if ($color === null) {
-                    throw new InvalidArgumentException(
-                        sprintf('Ungültiger Farbwert bei %s.', $property)
-                    );
-                }
-
-                IPS_SetProperty($this->InstanceID, $property, $color);
-                $imported++;
-            }
-
-            if ($imported === 0) {
-                return 'Im JSON wurden keine bekannten Hausfarben gefunden.';
-            }
-
-            IPS_SetProperty($this->InstanceID, 'HouseColorJson', $json);
-            IPS_ApplyChanges($this->InstanceID);
-            $this->ReloadForm();
-
-            return sprintf('%d Hausfarben wurden übernommen.', $imported);
-        } catch (JsonException $e) {
-            return 'Ungültiges JSON: ' . $e->getMessage();
-        } catch (Throwable $e) {
-            $this->LogMessage('ImportHouseColors: ' . $e->getMessage(), KL_ERROR);
-            return 'Fehler beim JSON-Import: ' . $e->getMessage();
-        }
-    }
-
-    private function GetHouseColorProperties(): array
-    {
-        return [
-            'HouseColorFacade',
-            'HouseColorRoof',
-            'HouseColorRoofSecondary',
-            'HouseColorWindows',
-            'HouseColorSolarPanels',
-            'HouseColorInverter',
-            'HouseColorCar',
-            'HouseColorCarDetails',
-            'HouseColorBattery',
-            'HouseColorBatteryAccent',
-        ];
-    }
-
-    private function NormalizeImportedColor(mixed $value): ?int
-    {
-        if (is_int($value) || (is_string($value) && preg_match('/^\d+$/', trim($value)) === 1)) {
-            $color = (int) $value;
-            return ($color >= 0 && $color <= 0xFFFFFF) ? $color : null;
-        }
-
-        if (is_string($value)) {
-            $hex = ltrim(trim($value), '#');
-            if (preg_match('/^[0-9a-fA-F]{6}$/', $hex) === 1) {
-                return hexdec($hex);
-            }
-        }
-
-        return null;
     }
 
     public function ResetHouseColors(): void
