@@ -1,10 +1,10 @@
 <?php
 
 /*
- * ## Third-Party Components
+* ## Third-Party Components
 
 * Komponente | Lizenz | Verwendung |
- * ------------|---------|------------|
+* ------------|---------|------------|
 * Sunsynk Power Flow Card | Apache License 2.0 | Technische Energieflussdarstellung |
 * Power Flow Card (LordGuenni) | MIT | Hausgrafik |
 * Lit (Google LLC) | BSD-3-Clause | Web Components Framework |
