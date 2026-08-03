@@ -47,6 +47,7 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('InverterCurrentL2', 0);
         $this->RegisterPropertyInteger('InverterCurrentL3', 0);
         $this->RegisterPropertyInteger('HousePower', 0);
+        $this->RegisterPropertyInteger('HouseEnergy', 0);
 
         // auto: konfigurierte Hausverbrauchsvariable verwenden, sonst Bilanz
         // balance: PV + Batterie + Netzsaldo
@@ -136,6 +137,12 @@ class Energiefluss extends IPSModuleStrict
 
             if (IPS_GetKernelRunlevel() === KR_READY) {
                 $this->PushState();
+
+                // Änderungen an Listen, AUX-Zuordnung, Icons oder Layout
+                // benötigen einen vollständigen Neuaufbau der Web-Komponente.
+                // ApplyChanges wird bei jeder übernommenen Änderung im
+                // Konfigurationsformular ausgeführt.
+                $this->ReloadHtml();
             }
         } catch (Throwable $e) {
             $this->LogMessage('ApplyChanges: ' . $e->getMessage(), KL_ERROR);
@@ -295,6 +302,13 @@ class Energiefluss extends IPSModuleStrict
                                     'caption' => 'Temperatur (°C)',
                                     'name'    => 'TemperatureVariableID',
                                     'width'   => '155px',
+                                    'add'     => 0,
+                                    'edit'    => ['type' => 'SelectVariable'],
+                                ],
+                                [
+                                    'caption' => 'Status (optional)',
+                                    'name'    => 'StatusVariableID',
+                                    'width'   => '190px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
@@ -532,6 +546,11 @@ class Energiefluss extends IPSModuleStrict
                             'caption' => 'Hausverbrauch (W, nur bei Automatisch)',
                         ],
                         [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'HouseEnergy',
+                            'caption' => 'Hausverbrauch heute (kWh, nur bei Automatisch)',
+                        ],
+                        [
                             'type'    => 'Select',
                             'name'    => 'AutarkyCalculationMode',
                             'caption' => 'Autarkie und Eigenverbrauch',
@@ -586,6 +605,18 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
+                                    'caption' => 'Anzeigeschwelle',
+                                    'name'    => 'DisplayThreshold',
+                                    'width'   => '120px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type' => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 100000,
+                                        'suffix' => ' W',
+                                    ],
+                                ],
+                                [
                                     'caption' => 'Icon',
                                     'name'    => 'Icon',
                                     'width'   => '145px',
@@ -593,6 +624,13 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => [
                                         'type' => 'SelectIcon',
                                     ],
+                                ],
+                                [
+                                    'caption' => 'Als AUX',
+                                    'name'    => 'IsAux',
+                                    'width'   => '75px',
+                                    'add'     => false,
+                                    'edit'    => ['type' => 'CheckBox'],
                                 ],
                                 [
                                     'caption' => 'Wallbox',
@@ -3459,19 +3497,38 @@ class Energiefluss extends IPSModuleStrict
             .filter(group => group.hasPower)
             .map(group => ({
                 ...group,
-                value: Math.max(Number(group.value || 0), 0)
-            }));
+                value: Math.max(Number(group.value || 0), 0),
+                displayThreshold: Math.max(
+                    Number(group.displayThreshold || 0),
+                    0
+                )
+            }))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
 
-        // Aktive Verbraucher zuerst, absteigend nach Leistung.
-        const activeConsumers = configuredConsumers
+        // Maximal zwei Verbraucher werden über den originalen AUX-Bereich
+        // der Sunsynk-Card dargestellt. Weitere versehentlich als AUX
+        // markierte Einträge bleiben normale Verbraucher.
+        const auxGroups = configuredConsumers
+            .filter(group => group.isAux === true)
+            .slice(0, 2);
+
+        const normalConsumers = configuredConsumers.filter(
+            group => !auxGroups.includes(group)
+        );
+
+        // Aktive normale Verbraucher zuerst, absteigend nach Leistung.
+        const activeConsumers = normalConsumers
             .filter(group => Number(group.value || 0) > 0)
             .sort((a, b) =>
                 Number(b.value || 0) -
                 Number(a.value || 0)
             );
 
-        // Freie Plätze werden mit inaktiven Verbrauchern aufgefüllt.
-        const inactiveConsumers = configuredConsumers.filter(group =>
+        // Freie Plätze werden mit inaktiven normalen Verbrauchern aufgefüllt.
+        const inactiveConsumers = normalConsumers.filter(group =>
             Number(group.value || 0) <= 0
         );
 
@@ -3586,6 +3643,7 @@ class Energiefluss extends IPSModuleStrict
             addEntity('battery_current_191', 'sensor.symcon_battery_current');
             addEntity('battery_voltage_183', 'sensor.symcon_battery_voltage', activeBatteries[0].hasVoltage);
             addEntity('battery_temp_182', 'sensor.symcon_battery_temperature', activeBatteries[0].hasTemperature);
+            addEntity('battery_status', 'sensor.symcon_battery_status', activeBatteries[0].hasStatus);
             addEntity('day_battery_charge_70', 'sensor.symcon_battery_charge_energy', activeBatteries[0].hasChargeEnergy);
             addEntity('day_battery_discharge_71', 'sensor.symcon_battery_discharge_energy', activeBatteries[0].hasDischargeEnergy);
         }
@@ -3595,6 +3653,7 @@ class Energiefluss extends IPSModuleStrict
             addEntity('battery2_current_191', 'sensor.symcon_battery2_current');
             addEntity('battery2_voltage_183', 'sensor.symcon_battery2_voltage', activeBatteries[1].hasVoltage);
             addEntity('battery2_temp_182', 'sensor.symcon_battery2_temperature', activeBatteries[1].hasTemperature);
+            addEntity('battery2_status', 'sensor.symcon_battery2_status', activeBatteries[1].hasStatus);
             addEntity('day_battery2_charge_70', 'sensor.symcon_battery2_charge_energy', activeBatteries[1].hasChargeEnergy);
             addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
         }
@@ -3603,6 +3662,34 @@ class Energiefluss extends IPSModuleStrict
             addEntity(`essential_load${i + 1}`, `sensor.symcon_branch${i + 1}`);
             addEntity(`essential_load${i + 1}_extra`, `sensor.symcon_branch${i + 1}_daily`, group.hasDaily);
         });
+
+        if (auxGroups.length > 0) {
+            // Der gemeinsame AUX-Zweig wird immer verwendet.
+            // Bei genau einem AUX-Verbraucher ist dies der große Haupt-AUX.
+            // Erst bei zwei AUX-Verbrauchern werden zusätzlich Aux1 und Aux2
+            // als die beiden kleinen Unterverbraucher eingeblendet.
+            addEntity('aux_power_166', 'sensor.symcon_aux_total');
+            addEntity(
+                'day_aux_energy',
+                'sensor.symcon_aux_energy',
+                auxGroups.some(group => group.hasDaily)
+            );
+
+            if (auxGroups.length >= 2) {
+                addEntity('aux_load1', 'sensor.symcon_aux1', true);
+                addEntity(
+                    'aux_load1_extra',
+                    'sensor.symcon_aux1_extra',
+                    !!auxGroups[0]?.hasSoc
+                );
+                addEntity('aux_load2', 'sensor.symcon_aux2', true);
+                addEntity(
+                    'aux_load2_extra',
+                    'sensor.symcon_aux2_extra',
+                    !!auxGroups[1]?.hasSoc
+                );
+            }
+        }
         addEntity('day_grid_import_76', 'sensor.symcon_grid_import_energy', d.gridImportEnergyValueAvailable);
         addEntity('day_grid_export_77', 'sensor.symcon_grid_export_energy', d.gridExportEnergyValueAvailable);
         addEntity('day_load_energy_84', 'sensor.symcon_load_energy', d.houseEnergyAvailable);
@@ -3745,14 +3832,46 @@ class Energiefluss extends IPSModuleStrict
                 dynamic_colour: false,
                 dynamic_icon: false,
                 show_daily: showEnergyDetails && d.houseEnergyAvailable,
-                // AUX ist deaktiviert; die Wallbox ist Verbraucher 1.
-                show_aux: false,
-                show_daily_aux: false,
+                // Maximal zwei markierte Verbraucher werden rechts im
+                // originalen AUX-Bereich der Sunsynk-Card dargestellt.
+                show_aux: auxGroups.length > 0,
+                show_daily_aux:
+                    showEnergyDetails &&
+                    auxGroups.some(group => group.hasDaily),
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
                 max_power: 12000,
                 auto_scale: false,
                 additional_loads: activeGroups.length,
-                aux_loads: 0,
+
+                // Genau ein markierter Verbraucher wird als großer Haupt-AUX
+                // dargestellt. Bei zwei Einträgen zeigt die Originalkarte
+                // die beiden kleinen Felder Aux1 und Aux2.
+                aux_loads: auxGroups.length >= 2 ? 2 : 0,
+                aux_name:
+                    auxGroups.length === 1
+                        ? (auxGroups[0]?.name || 'AUX')
+                        : 'AUX',
+                aux_daily_name:
+                    auxGroups.length === 1
+                        ? (auxGroups[0]?.name || 'AUX')
+                        : 'AUX',
+                aux_type:
+                    auxGroups.length === 1
+                        ? normalizeConsumerIcon(auxGroups[0]?.icon)
+                        : 'default',
+                aux_load1_name:
+                    auxGroups.length >= 2
+                        ? (auxGroups[0]?.name || 'Aux1')
+                        : '',
+                aux_load2_name:
+                    auxGroups.length >= 2
+                        ? (auxGroups[1]?.name || 'Aux2')
+                        : '',
+                // Haupt-AUX, Unterverbraucher, Linie, Icon, Werte und Text
+                // verwenden dieselbe konfigurierte Verbraucherfarbe.
+                aux_colour: AC.room,
+                aux_off_colour: AC.room,
+                aux_dynamic_colour: false,
                 essential_name: 'Haus',
                 load1_name: activeGroups[0]?.name || '', load2_name: activeGroups[1]?.name || '',
                 load3_name: activeGroups[2]?.name || '', load4_name: activeGroups[3]?.name || '',
@@ -3795,17 +3914,34 @@ class Energiefluss extends IPSModuleStrict
             .filter(group => group.hasPower)
             .map(group => ({
                 ...group,
-                value: Math.max(Number(group.value || 0), 0)
-            }));
+                value: Math.max(Number(group.value || 0), 0),
+                displayThreshold: Math.max(
+                    Number(group.displayThreshold || 0),
+                    0
+                )
+            }))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
 
-        const activeConsumers = configuredConsumers
+        // Exakt dieselbe AUX-Auswahl wie in createSunsynkConfig.
+        const auxGroups = configuredConsumers
+            .filter(group => group.isAux === true)
+            .slice(0, 2);
+
+        const normalConsumers = configuredConsumers.filter(
+            group => !auxGroups.includes(group)
+        );
+
+        const activeConsumers = normalConsumers
             .filter(group => Number(group.value || 0) > 0)
             .sort((a, b) =>
                 Number(b.value || 0) -
                 Number(a.value || 0)
             );
 
-        const inactiveConsumers = configuredConsumers.filter(group =>
+        const inactiveConsumers = normalConsumers.filter(group =>
             Number(group.value || 0) <= 0
         );
 
@@ -3879,6 +4015,10 @@ class Energiefluss extends IPSModuleStrict
                 Number(bat1.temperature || 0),
                 '°C'
             ),
+            'sensor.symcon_battery_status': {
+                state: String(bat1.statusText || ''),
+                attributes: {}
+            },
             'sensor.symcon_battery2_soc': ssState(Math.round(Number(bat2.soc || 0)), '%'),
             'sensor.symcon_battery2_power': ssState(Number(bat2.value || 0), 'W'),
             'sensor.symcon_battery2_current': ssState(Number(bat2.current || 0), 'A'),
@@ -3887,6 +4027,10 @@ class Energiefluss extends IPSModuleStrict
                 Number(bat2.temperature || 0),
                 '°C'
             ),
+            'sensor.symcon_battery2_status': {
+                state: String(bat2.statusText || ''),
+                attributes: {}
+            },
             'sensor.symcon_battery_charge_energy': ssState(bat1.chargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery_discharge_energy': ssState(bat1.dischargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery2_charge_energy': ssState(bat2.chargeEnergy || 0, 'kWh'),
@@ -3908,6 +4052,37 @@ class Energiefluss extends IPSModuleStrict
             states[`sensor.symcon_branch${i + 1}`] = ssState(group.value || 0, 'W');
             states[`sensor.symcon_branch${i + 1}_daily`] = ssState(group.dailyValue || 0, 'kWh');
         });
+
+        const auxTotalPower = auxGroups.reduce(
+            (sum, group) => sum + Math.max(Number(group.value || 0), 0),
+            0
+        );
+        const auxTotalEnergy = auxGroups.reduce(
+            (sum, group) => sum + (
+                group.hasDaily
+                    ? Math.max(Number(group.dailyValue || 0), 0)
+                    : 0
+            ),
+            0
+        );
+
+        states['sensor.symcon_aux_total'] = ssState(auxTotalPower, 'W');
+        states['sensor.symcon_aux_energy'] = ssState(auxTotalEnergy, 'kWh');
+        states['sensor.symcon_aux1'] = ssState(auxGroups[0]?.value || 0, 'W');
+        states['sensor.symcon_aux2'] = ssState(auxGroups[1]?.value || 0, 'W');
+        states['sensor.symcon_aux1_extra'] = ssState(
+            auxGroups[0]?.hasSoc
+                ? Number.parseFloat(String(auxGroups[0]?.socText || '0').replace(',', '.')) || 0
+                : 0,
+            '%'
+        );
+        states['sensor.symcon_aux2_extra'] = ssState(
+            auxGroups[1]?.hasSoc
+                ? Number.parseFloat(String(auxGroups[1]?.socText || '0').replace(',', '.')) || 0
+                : 0,
+            '%'
+        );
+
         return {
             states,
             locale: { language: 'de', number_format: 'comma_decimal' },
@@ -3934,6 +4109,8 @@ class Energiefluss extends IPSModuleStrict
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
+        applyConfiguredBatteryStatus(card, d);
+        applyAuxVisualOverrides(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
         // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
@@ -3955,6 +4132,14 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 showInverterPowerAboveVoltages(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyConfiguredBatteryStatus(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyAuxVisualOverrides(
                     card,
                     card.__symconLastData || d
                 );
@@ -3986,6 +4171,14 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     showInverterPowerAboveVoltages(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyConfiguredBatteryStatus(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyAuxVisualOverrides(
                         card,
                         card.__symconLastData || d
                     );
@@ -4030,6 +4223,198 @@ class Energiefluss extends IPSModuleStrict
         return roots;
     }
 
+
+
+    function applyAuxVisualOverrides(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const configuredAux = Array.isArray(d.groups)
+            ? d.groups
+                .filter(group => group?.hasPower && group?.isAux === true)
+                .map(group => ({
+                    ...group,
+                    value: Math.max(Number(group.value || 0), 0),
+                    displayThreshold: Math.max(
+                        Number(group.displayThreshold || 0),
+                        0
+                    )
+                }))
+                .filter(group =>
+                    group.displayThreshold <= 0 ||
+                    group.value >= group.displayThreshold
+                )
+                .slice(0, 2)
+            : [];
+
+        if (configuredAux.length === 0) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+        const findNode = selector => {
+            for (const root of roots) {
+                const node = root.querySelector?.(selector);
+                if (node) return node;
+            }
+            return null;
+        };
+
+        const cleanSoc = group => {
+            if (!group?.hasSoc) return '';
+
+            // Der Text ist bereits durch IP-Symcon formatiert. Dadurch bleiben
+            // Stringwerte, Profiltexte sowie Präfix und Suffix unverändert.
+            return String(group.socText || '').trim();
+        };
+
+        const setLabel = (selector, group) => {
+            const node = findNode(selector);
+            if (!node || !group) return;
+
+            const name = String(group.name || '').trim();
+            const soc = cleanSoc(group);
+            const wanted = [name, soc].filter(Boolean).join(' · ');
+
+            if (
+                wanted !== '' &&
+                String(node.textContent || '').trim() !== wanted
+            ) {
+                node.textContent = wanted;
+            }
+        };
+
+        if (configuredAux.length === 1) {
+            setLabel('#aux_one', configuredAux[0]);
+
+            // Die Card enthält für den Haupt-AUX mehrere alternative
+            // Originalsymbole. Bei einem frei konfigurierten Verbrauchericon
+            // dürfen diese nicht zusätzlich sichtbar bleiben.
+            [
+                '#aux_aux_default',
+                '#aux_aux_generator',
+                '#aux_aux_oven',
+                '#aux_aux_boiler',
+                '#aux_aux_ac',
+                '#aux_aux_pump',
+                '#aux_inverter'
+            ].forEach(selector => {
+                const node = findNode(selector);
+                if (!node) return;
+
+                if (node.style?.display !== 'none') {
+                    node.style?.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+                }
+            });
+        } else {
+            setLabel('#aux_load1', configuredAux[0]);
+            setLabel('#aux_load2', configuredAux[1]);
+
+            // AUX1 und AUX2 werden vollständig ohne Icon dargestellt.
+            // Es wird kein ungültiger Icon-Name an die Card übergeben.
+            [
+                '.aux-small-icon-1',
+                '.aux-small-icon-2',
+                '#aux_load1_icon',
+                '#aux_load2_icon',
+                '[id*="aux_load1"][class*="icon"]',
+                '[id*="aux_load2"][class*="icon"]'
+            ].forEach(selector => {
+                for (const root of roots) {
+                    root.querySelectorAll?.(selector).forEach(node => {
+                        node.style?.setProperty(
+                            'display',
+                            'none',
+                            'important'
+                        );
+                        node.style?.setProperty(
+                            'visibility',
+                            'hidden',
+                            'important'
+                        );
+                        node.setAttribute?.('display', 'none');
+                        node.setAttribute?.('visibility', 'hidden');
+                    });
+                }
+            });
+
+            // Der SOC steht jetzt direkt hinter dem Namen und soll nicht
+            // nochmals als separate Zusatzzeile erscheinen.
+            [
+                '#aux_load1_extra',
+                '#aux_load2_extra'
+            ].forEach(selector => {
+                const node = findNode(selector);
+                if (!node) return;
+
+                if (node.style?.display !== 'none') {
+                    node.style?.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+                }
+            });
+        }
+    }
+
+
+    function applyConfiguredBatteryStatus(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const batteries = Array.isArray(d.batteries)
+            ? d.batteries
+            : [];
+
+        const statusDefinitions = [
+            {
+                battery: batteries[0],
+                selectors: [
+                    '#battery_state_msg',
+                    '[id="battery_state_msg"]'
+                ]
+            },
+            {
+                battery: batteries[1],
+                selectors: [
+                    '#battery2_state_msg',
+                    '[id="battery2_state_msg"]'
+                ]
+            }
+        ];
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        statusDefinitions.forEach(definition => {
+            const battery = definition.battery;
+            if (!battery || battery.hasStatus !== true) return;
+
+            const statusText = String(battery.statusText || '').trim();
+            if (statusText === '') return;
+
+            for (const root of roots) {
+                const node = root.querySelector?.(
+                    definition.selectors.join(',')
+                );
+
+                if (!node) continue;
+
+                // Nur schreiben, wenn sich der Text tatsächlich unterscheidet.
+                // Dadurch entsteht mit dem vorhandenen visuellen Observer
+                // keine Render- oder Mutation-Schleife.
+                if (String(node.textContent || '').trim() !== statusText) {
+                    node.textContent = statusText;
+                }
+
+                node.removeAttribute?.('display');
+                node.style?.setProperty('display', 'inline', 'important');
+                node.style?.setProperty('visibility', 'visible', 'important');
+                node.style?.setProperty('opacity', '1', 'important');
+                break;
+            }
+        });
+    }
 
 
     function showInverterPowerAboveVoltages(card, d) {
@@ -5833,6 +6218,7 @@ HTML;
             'InverterCurrentL2',
             'InverterCurrentL3',
             'HousePower',
+            'HouseEnergy',
             'InverterVoltage',
             'InverterCurrent',
             'InverterFrequency',
@@ -5904,6 +6290,7 @@ HTML;
                     'CurrentVariableID',
                     'VoltageVariableID',
                     'TemperatureVariableID',
+                    'StatusVariableID',
                     'MaxDischargeSoCVariableID'
                 ] as $key) {
                     $variableID = (int) ($battery[$key] ?? 0);
@@ -6134,7 +6521,25 @@ HTML;
                 $currentVariableID = (int) ($source['CurrentVariableID'] ?? 0);
                 $voltageVariableID = (int) ($source['VoltageVariableID'] ?? 0);
                 $temperatureVariableID = (int) ($source['TemperatureVariableID'] ?? 0);
+                $statusVariableID = (int) ($source['StatusVariableID'] ?? 0);
                 $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
+
+                $hasStatus =
+                    $statusVariableID > 0 &&
+                    IPS_VariableExists($statusVariableID);
+
+                $statusText = '';
+                if ($hasStatus) {
+                    $formattedStatus = trim((string) GetValueFormatted($statusVariableID));
+                    if ($formattedStatus !== '') {
+                        $statusText = $formattedStatus;
+                    } else {
+                        $rawStatus = GetValue($statusVariableID);
+                        $statusText = is_bool($rawStatus)
+                            ? ($rawStatus ? 'Ein' : 'Aus')
+                            : trim((string) $rawStatus);
+                    }
+                }
 
                 $value = (float) GetValue($variableID);
                 if ((bool) ($source['InvertFlow'] ?? false)) {
@@ -6178,6 +6583,8 @@ HTML;
                     )
                         ? (float) GetValue($temperatureVariableID)
                         : 0.0,
+                    'hasStatus'            => $hasStatus,
+                    'statusText'           => $statusText,
                     'maxDischargeSoc'      => max(
                         0,
                         min(
@@ -6238,10 +6645,20 @@ HTML;
 
                 $socText = '';
                 if ($hasSoc) {
-                    $socValue = GetValue($socVariableID);
-                    $socText = is_bool($socValue)
-                        ? ($socValue ? 'true' : 'false')
-                        : (string) $socValue;
+                    // GetValueFormatted unterstützt Boolean, Integer, Float
+                    // und String. Bei numerischen Variablen werden außerdem
+                    // Präfix, Suffix und Zuordnungstexte des Variablenprofils
+                    // übernommen, z. B. "69 %", "Voll" oder "Lädt".
+                    $socText = trim((string) GetValueFormatted($socVariableID));
+
+                    // Sicherheitsrückfall, falls ein Profil keinen formatierten
+                    // Text liefert.
+                    if ($socText === '') {
+                        $socValue = GetValue($socVariableID);
+                        $socText = is_bool($socValue)
+                            ? ($socValue ? 'true' : 'false')
+                            : trim((string) $socValue);
+                    }
                 }
 
                 $groups[] = [
@@ -6252,6 +6669,11 @@ HTML;
                     'daily' => $daily,
                     'dailyValue' => $dailyValue,
                     'hasDaily' => $hasDaily,
+                    'displayThreshold' => max(
+                        0.0,
+                        (float) ($group['DisplayThreshold'] ?? 0)
+                    ),
+                    'isAux' => (bool) ($group['IsAux'] ?? false),
                     'isWallbox' => $isWallbox,
                     'socText' => $socText,
                     'hasSoc' => $hasSoc,
@@ -6464,20 +6886,50 @@ HTML;
         $pvEnergyTotal = $inverterDailyEnergy;
         $hasPvEnergy = $inverterDailyEnergyAvailable;
 
-        $houseEnergyAvailable =
+        $houseEnergy = 0.0;
+        $houseEnergyAvailable = false;
+        $houseCalculationMode = $this->ReadPropertyString('HouseCalculationMode');
+
+        $houseEnergyID = $this->ReadPropertyInteger('HouseEnergy');
+        $hasConfiguredHouseEnergy =
+            $houseEnergyID > 0 &&
+            IPS_VariableExists($houseEnergyID);
+
+        $balanceEnergyAvailable =
             $hasPvEnergy &&
             $hasGridImportEnergy &&
             $hasGridExportEnergy &&
             $hasBatteryEnergy;
 
-        $houseEnergy = 0.0;
-        if ($houseEnergyAvailable) {
-            $houseEnergy =
+        $inverterGridEnergyAvailable =
+            $inverterDailyEnergyAvailable &&
+            $hasGridImportEnergy &&
+            $hasGridExportEnergy;
+
+        if ($houseCalculationMode === 'auto' && $hasConfiguredHouseEnergy) {
+            $houseEnergy = max(0.0, (float) GetValue($houseEnergyID));
+            $houseEnergyAvailable = true;
+        } elseif ($houseCalculationMode === 'inverter-grid') {
+            if ($inverterGridEnergyAvailable) {
+                $houseEnergy = max(
+                    0.0,
+                    $inverterDailyEnergy +
+                    (float) GetValue($gridImportEnergyID) -
+                    (float) GetValue($gridExportEnergyID)
+                );
+                $houseEnergyAvailable = true;
+            }
+        } elseif ($balanceEnergyAvailable) {
+            // Gilt für "balance" sowie als Rückfall von "auto".
+            $houseEnergy = max(
+                0.0,
                 $pvEnergyTotal +
                 (float) GetValue($gridImportEnergyID) -
                 (float) GetValue($gridExportEnergyID) +
                 $batteryDischargeEnergyTotal -
-                $batteryChargeEnergyTotal;
+                $batteryChargeEnergyTotal
+            );
+            $houseEnergyAvailable = true;
         }
 
         // Die beiden Temperaturfelder gehören zur zentralen
@@ -6555,6 +7007,7 @@ HTML;
                 'inverterCurrentL2' => $inverterCurrentL2Available,
                 'inverterCurrentL3' => $inverterCurrentL3Available,
                 'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
+                'houseEnergyConfigured' => ($this->ReadPropertyInteger('HouseEnergy') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HouseEnergy'))),
                 'outsideTemperature' => (
                     $this->ReadPropertyInteger('OutsideTemperature') > 0
                     && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
