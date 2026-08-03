@@ -137,6 +137,12 @@ class Energiefluss extends IPSModuleStrict
 
             if (IPS_GetKernelRunlevel() === KR_READY) {
                 $this->PushState();
+
+                // Änderungen an Listen, AUX-Zuordnung, Icons oder Layout
+                // benötigen einen vollständigen Neuaufbau der Web-Komponente.
+                // ApplyChanges wird bei jeder übernommenen Änderung im
+                // Konfigurationsformular ausgeführt.
+                $this->ReloadHtml();
             }
         } catch (Throwable $e) {
             $this->LogMessage('ApplyChanges: ' . $e->getMessage(), KL_ERROR);
@@ -4263,15 +4269,9 @@ class Energiefluss extends IPSModuleStrict
         const cleanSoc = group => {
             if (!group?.hasSoc) return '';
 
-            const raw = String(group.socText || '').trim();
-            if (raw === '') return '';
-
-            // Wenn die Variable z. B. "EQA300: 69%" liefert, nur den
-            // eigentlichen SOC-Teil direkt hinter dem Verbrauchernamen nutzen.
-            const percentage = raw.match(/-?\d+(?:[.,]\d+)?\s*%/);
-            return percentage
-                ? percentage[0].replace(',', '.')
-                : raw;
+            // Der Text ist bereits durch IP-Symcon formatiert. Dadurch bleiben
+            // Stringwerte, Profiltexte sowie Präfix und Suffix unverändert.
+            return String(group.socText || '').trim();
         };
 
         const setLabel = (selector, group) => {
@@ -4320,7 +4320,9 @@ class Energiefluss extends IPSModuleStrict
             setLabel('#aux_load1', configuredAux[0]);
             setLabel('#aux_load2', configuredAux[1]);
 
-            // Die beiden kleinen Icons etwas näher an die Felder schieben.
+            // Die SVG-Positionen der Originalkarte sind layoutabhängig.
+            // Statt sie zu verschieben, werden die beiden Icons zuverlässig
+            // um 30 Prozent verkleinert.
             [
                 '.aux-small-icon-1',
                 '.aux-small-icon-2'
@@ -4328,7 +4330,7 @@ class Energiefluss extends IPSModuleStrict
                 const node = findNode(selector);
                 if (!node) return;
 
-                const wantedTransform = 'translate(-7px, -5px)';
+                const wantedTransform = 'scale(0.7)';
                 if (node.style?.transform !== wantedTransform) {
                     node.style?.setProperty(
                         'transform',
@@ -6654,10 +6656,20 @@ HTML;
 
                 $socText = '';
                 if ($hasSoc) {
-                    $socValue = GetValue($socVariableID);
-                    $socText = is_bool($socValue)
-                        ? ($socValue ? 'true' : 'false')
-                        : (string) $socValue;
+                    // GetValueFormatted unterstützt Boolean, Integer, Float
+                    // und String. Bei numerischen Variablen werden außerdem
+                    // Präfix, Suffix und Zuordnungstexte des Variablenprofils
+                    // übernommen, z. B. "69 %", "Voll" oder "Lädt".
+                    $socText = trim((string) GetValueFormatted($socVariableID));
+
+                    // Sicherheitsrückfall, falls ein Profil keinen formatierten
+                    // Text liefert.
+                    if ($socText === '') {
+                        $socValue = GetValue($socVariableID);
+                        $socText = is_bool($socValue)
+                            ? ($socValue ? 'true' : 'false')
+                            : trim((string) $socValue);
+                    }
                 }
 
                 $groups[] = [
