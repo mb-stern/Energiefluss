@@ -4320,11 +4320,10 @@ class Energiefluss extends IPSModuleStrict
             setLabel('#aux_load1', configuredAux[0]);
             setLabel('#aux_load2', configuredAux[1]);
 
-            // Die Sunsynk-Card steuert die Größe der mdi-Icons über
-            // --mdc-icon-size. Die normalen kleinen Verbrauchericons werden
-            // mit 20 px dargestellt; AUX1 und AUX2 erhalten deshalb exakt
-            // dieselbe Größe. Ein transform/scale wird bewusst nicht mehr
-            // verwendet, weil es innerhalb des SVG-Layouts unzuverlässig ist.
+            // AUX1/AUX2 besitzen in der Card einen festen 40x40-Container.
+            // Deshalb bleibt der Container unverändert. Verkleinert werden
+            // stattdessen das tatsächliche ha-icon sowie dessen inneres SVG
+            // bzw. ein von Symcon eingesetztes <i>-Symbol.
             [
                 '.aux-small-icon-1',
                 '.aux-small-icon-2'
@@ -4332,29 +4331,83 @@ class Energiefluss extends IPSModuleStrict
                 const node = findNode(selector);
                 if (!node) return;
 
-                node.style?.removeProperty('transform');
-                node.style?.removeProperty('transform-box');
-                node.style?.removeProperty('transform-origin');
-                node.style?.setProperty(
-                    '--mdc-icon-size',
-                    '20px',
-                    'important'
+                const applyIconSize = element => {
+                    if (!element?.style) return;
+
+                    element.style.setProperty(
+                        '--mdc-icon-size',
+                        '20px',
+                        'important'
+                    );
+                    element.style.setProperty(
+                        'font-size',
+                        '20px',
+                        'important'
+                    );
+                    element.style.setProperty(
+                        'width',
+                        '20px',
+                        'important'
+                    );
+                    element.style.setProperty(
+                        'height',
+                        '20px',
+                        'important'
+                    );
+                    element.style.setProperty(
+                        'min-width',
+                        '20px',
+                        'important'
+                    );
+                    element.style.setProperty(
+                        'min-height',
+                        '20px',
+                        'important'
+                    );
+                    element.style.setProperty(
+                        'max-width',
+                        '20px',
+                        'important'
+                    );
+                    element.style.setProperty(
+                        'max-height',
+                        '20px',
+                        'important'
+                    );
+                    element.style.setProperty(
+                        'line-height',
+                        '20px',
+                        'important'
+                    );
+                };
+
+                // Äußerer ha-icon-Knoten.
+                applyIconSize(node);
+
+                // Falls Symcon das Icon durch ein Font-/HTML-Icon ersetzt hat.
+                node.querySelectorAll?.('i, svg, ha-svg-icon').forEach(
+                    applyIconSize
                 );
-                node.style?.setProperty(
-                    'width',
-                    '20px',
-                    'important'
-                );
-                node.style?.setProperty(
-                    'height',
-                    '20px',
-                    'important'
-                );
-                node.style?.setProperty(
-                    'font-size',
-                    '20px',
-                    'important'
-                );
+
+                // Native ha-icon-Komponenten rendern das SVG in einem eigenen
+                // offenen Shadow-DOM. Auch dort direkt auf 20 px setzen.
+                if (node.shadowRoot) {
+                    node.shadowRoot
+                        .querySelectorAll('svg, ha-svg-icon, i')
+                        .forEach(applyIconSize);
+                }
+
+                // Manche Card-Versionen setzen innerhalb des Containers erst
+                // ein weiteres ha-icon ein.
+                node.querySelectorAll?.('ha-icon').forEach(icon => {
+                    applyIconSize(icon);
+
+                    if (icon.shadowRoot) {
+                        icon.shadowRoot
+                            .querySelectorAll('svg, ha-svg-icon, i')
+                            .forEach(applyIconSize);
+                    }
+                });
             });
 
             // Der SOC steht jetzt direkt hinter dem Namen und soll nicht
