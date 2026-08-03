@@ -620,6 +620,13 @@ class Energiefluss extends IPSModuleStrict
                                     ],
                                 ],
                                 [
+                                    'caption' => 'Als AUX',
+                                    'name'    => 'IsAux',
+                                    'width'   => '75px',
+                                    'add'     => false,
+                                    'edit'    => ['type' => 'CheckBox'],
+                                ],
+                                [
                                     'caption' => 'Wallbox',
                                     'name'    => 'IsWallbox',
                                     'width'   => '80px',
@@ -3495,16 +3502,27 @@ class Energiefluss extends IPSModuleStrict
                 group.value >= group.displayThreshold
             );
 
-        // Aktive Verbraucher zuerst, absteigend nach Leistung.
-        const activeConsumers = configuredConsumers
+        // Maximal zwei Verbraucher werden über den originalen AUX-Bereich
+        // der Sunsynk-Card dargestellt. Weitere versehentlich als AUX
+        // markierte Einträge bleiben normale Verbraucher.
+        const auxGroups = configuredConsumers
+            .filter(group => group.isAux === true)
+            .slice(0, 2);
+
+        const normalConsumers = configuredConsumers.filter(
+            group => !auxGroups.includes(group)
+        );
+
+        // Aktive normale Verbraucher zuerst, absteigend nach Leistung.
+        const activeConsumers = normalConsumers
             .filter(group => Number(group.value || 0) > 0)
             .sort((a, b) =>
                 Number(b.value || 0) -
                 Number(a.value || 0)
             );
 
-        // Freie Plätze werden mit inaktiven Verbrauchern aufgefüllt.
-        const inactiveConsumers = configuredConsumers.filter(group =>
+        // Freie Plätze werden mit inaktiven normalen Verbrauchern aufgefüllt.
+        const inactiveConsumers = normalConsumers.filter(group =>
             Number(group.value || 0) <= 0
         );
 
@@ -3638,6 +3656,29 @@ class Energiefluss extends IPSModuleStrict
             addEntity(`essential_load${i + 1}`, `sensor.symcon_branch${i + 1}`);
             addEntity(`essential_load${i + 1}_extra`, `sensor.symcon_branch${i + 1}_daily`, group.hasDaily);
         });
+
+        if (auxGroups.length > 0) {
+            // aux_power_166 ist der gemeinsame AUX-Zweig und entspricht der
+            // Summe der maximal zwei separat dargestellten AUX-Verbraucher.
+            addEntity('aux_power_166', 'sensor.symcon_aux_total');
+            addEntity(
+                'day_aux_energy',
+                'sensor.symcon_aux_energy',
+                auxGroups.some(group => group.hasDaily)
+            );
+            addEntity('aux_load1', 'sensor.symcon_aux1', !!auxGroups[0]);
+            addEntity(
+                'aux_load1_extra',
+                'sensor.symcon_aux1_extra',
+                !!auxGroups[0]?.hasSoc
+            );
+            addEntity('aux_load2', 'sensor.symcon_aux2', !!auxGroups[1]);
+            addEntity(
+                'aux_load2_extra',
+                'sensor.symcon_aux2_extra',
+                !!auxGroups[1]?.hasSoc
+            );
+        }
         addEntity('day_grid_import_76', 'sensor.symcon_grid_import_energy', d.gridImportEnergyValueAvailable);
         addEntity('day_grid_export_77', 'sensor.symcon_grid_export_energy', d.gridExportEnergyValueAvailable);
         addEntity('day_load_energy_84', 'sensor.symcon_load_energy', d.houseEnergyAvailable);
@@ -3780,14 +3821,24 @@ class Energiefluss extends IPSModuleStrict
                 dynamic_colour: false,
                 dynamic_icon: false,
                 show_daily: showEnergyDetails && d.houseEnergyAvailable,
-                // AUX ist deaktiviert; die Wallbox ist Verbraucher 1.
-                show_aux: false,
-                show_daily_aux: false,
+                // Maximal zwei markierte Verbraucher werden rechts im
+                // originalen AUX-Bereich der Sunsynk-Card dargestellt.
+                show_aux: auxGroups.length > 0,
+                show_daily_aux:
+                    showEnergyDetails &&
+                    auxGroups.some(group => group.hasDaily),
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
                 max_power: 12000,
                 auto_scale: false,
                 additional_loads: activeGroups.length,
-                aux_loads: 0,
+                aux_loads: auxGroups.length,
+                aux_name: 'AUX',
+                aux_daily_name: 'AUX',
+                aux_type: 'default',
+                aux_load1_name: auxGroups[0]?.name || '',
+                aux_load2_name: auxGroups[1]?.name || '',
+                aux_load1_icon: normalizeConsumerIcon(auxGroups[0]?.icon),
+                aux_load2_icon: normalizeConsumerIcon(auxGroups[1]?.icon),
                 essential_name: 'Haus',
                 load1_name: activeGroups[0]?.name || '', load2_name: activeGroups[1]?.name || '',
                 load3_name: activeGroups[2]?.name || '', load4_name: activeGroups[3]?.name || '',
@@ -3841,14 +3892,23 @@ class Energiefluss extends IPSModuleStrict
                 group.value >= group.displayThreshold
             );
 
-        const activeConsumers = configuredConsumers
+        // Exakt dieselbe AUX-Auswahl wie in createSunsynkConfig.
+        const auxGroups = configuredConsumers
+            .filter(group => group.isAux === true)
+            .slice(0, 2);
+
+        const normalConsumers = configuredConsumers.filter(
+            group => !auxGroups.includes(group)
+        );
+
+        const activeConsumers = normalConsumers
             .filter(group => Number(group.value || 0) > 0)
             .sort((a, b) =>
                 Number(b.value || 0) -
                 Number(a.value || 0)
             );
 
-        const inactiveConsumers = configuredConsumers.filter(group =>
+        const inactiveConsumers = normalConsumers.filter(group =>
             Number(group.value || 0) <= 0
         );
 
@@ -3959,6 +4019,37 @@ class Energiefluss extends IPSModuleStrict
             states[`sensor.symcon_branch${i + 1}`] = ssState(group.value || 0, 'W');
             states[`sensor.symcon_branch${i + 1}_daily`] = ssState(group.dailyValue || 0, 'kWh');
         });
+
+        const auxTotalPower = auxGroups.reduce(
+            (sum, group) => sum + Math.max(Number(group.value || 0), 0),
+            0
+        );
+        const auxTotalEnergy = auxGroups.reduce(
+            (sum, group) => sum + (
+                group.hasDaily
+                    ? Math.max(Number(group.dailyValue || 0), 0)
+                    : 0
+            ),
+            0
+        );
+
+        states['sensor.symcon_aux_total'] = ssState(auxTotalPower, 'W');
+        states['sensor.symcon_aux_energy'] = ssState(auxTotalEnergy, 'kWh');
+        states['sensor.symcon_aux1'] = ssState(auxGroups[0]?.value || 0, 'W');
+        states['sensor.symcon_aux2'] = ssState(auxGroups[1]?.value || 0, 'W');
+        states['sensor.symcon_aux1_extra'] = ssState(
+            auxGroups[0]?.hasSoc
+                ? Number.parseFloat(String(auxGroups[0]?.socText || '0').replace(',', '.')) || 0
+                : 0,
+            '%'
+        );
+        states['sensor.symcon_aux2_extra'] = ssState(
+            auxGroups[1]?.hasSoc
+                ? Number.parseFloat(String(auxGroups[1]?.socText || '0').replace(',', '.')) || 0
+                : 0,
+            '%'
+        );
+
         return {
             states,
             locale: { language: 'de', number_format: 'comma_decimal' },
@@ -6395,6 +6486,7 @@ HTML;
                         0.0,
                         (float) ($group['DisplayThreshold'] ?? 0)
                     ),
+                    'isAux' => (bool) ($group['IsAux'] ?? false),
                     'isWallbox' => $isWallbox,
                     'socText' => $socText,
                     'hasSoc' => $hasSoc,
