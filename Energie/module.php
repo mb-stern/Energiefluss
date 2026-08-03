@@ -599,18 +599,6 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Anzeigeschwelle',
-                                    'name'    => 'DisplayThreshold',
-                                    'width'   => '120px',
-                                    'add'     => 0,
-                                    'edit'    => [
-                                        'type' => 'NumberSpinner',
-                                        'minimum' => 0,
-                                        'maximum' => 100000,
-                                        'suffix' => ' W',
-                                    ],
-                                ],
-                                [
                                     'caption' => 'Icon',
                                     'name'    => 'Icon',
                                     'width'   => '145px',
