@@ -47,7 +47,6 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('InverterCurrentL2', 0);
         $this->RegisterPropertyInteger('InverterCurrentL3', 0);
         $this->RegisterPropertyInteger('HousePower', 0);
-        $this->RegisterPropertyInteger('HouseEnergy', 0);
 
         // auto: konfigurierte Hausverbrauchsvariable verwenden, sonst Bilanz
         // balance: PV + Batterie + Netzsaldo
@@ -300,13 +299,6 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Status (optional)',
-                                    'name'    => 'StatusVariableID',
-                                    'width'   => '190px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
                                     'caption' => 'Max. Entladezustand Variable',
                                     'name'    => 'MaxDischargeSoCVariableID',
                                     'width'   => '180px',
@@ -538,11 +530,6 @@ class Energiefluss extends IPSModuleStrict
                             'type'    => 'SelectVariable',
                             'name'    => 'HousePower',
                             'caption' => 'Hausverbrauch (W, nur bei Automatisch)',
-                        ],
-                        [
-                            'type'    => 'SelectVariable',
-                            'name'    => 'HouseEnergy',
-                            'caption' => 'Hausverbrauch heute (kWh, nur bei Automatisch)',
                         ],
                         [
                             'type'    => 'Select',
@@ -3599,7 +3586,6 @@ class Energiefluss extends IPSModuleStrict
             addEntity('battery_current_191', 'sensor.symcon_battery_current');
             addEntity('battery_voltage_183', 'sensor.symcon_battery_voltage', activeBatteries[0].hasVoltage);
             addEntity('battery_temp_182', 'sensor.symcon_battery_temperature', activeBatteries[0].hasTemperature);
-            addEntity('battery_status', 'sensor.symcon_battery_status', activeBatteries[0].hasStatus);
             addEntity('day_battery_charge_70', 'sensor.symcon_battery_charge_energy', activeBatteries[0].hasChargeEnergy);
             addEntity('day_battery_discharge_71', 'sensor.symcon_battery_discharge_energy', activeBatteries[0].hasDischargeEnergy);
         }
@@ -3609,7 +3595,6 @@ class Energiefluss extends IPSModuleStrict
             addEntity('battery2_current_191', 'sensor.symcon_battery2_current');
             addEntity('battery2_voltage_183', 'sensor.symcon_battery2_voltage', activeBatteries[1].hasVoltage);
             addEntity('battery2_temp_182', 'sensor.symcon_battery2_temperature', activeBatteries[1].hasTemperature);
-            addEntity('battery2_status', 'sensor.symcon_battery2_status', activeBatteries[1].hasStatus);
             addEntity('day_battery2_charge_70', 'sensor.symcon_battery2_charge_energy', activeBatteries[1].hasChargeEnergy);
             addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
         }
@@ -3894,10 +3879,6 @@ class Energiefluss extends IPSModuleStrict
                 Number(bat1.temperature || 0),
                 '°C'
             ),
-            'sensor.symcon_battery_status': {
-                state: String(bat1.statusText || ''),
-                attributes: {}
-            },
             'sensor.symcon_battery2_soc': ssState(Math.round(Number(bat2.soc || 0)), '%'),
             'sensor.symcon_battery2_power': ssState(Number(bat2.value || 0), 'W'),
             'sensor.symcon_battery2_current': ssState(Number(bat2.current || 0), 'A'),
@@ -3906,10 +3887,6 @@ class Energiefluss extends IPSModuleStrict
                 Number(bat2.temperature || 0),
                 '°C'
             ),
-            'sensor.symcon_battery2_status': {
-                state: String(bat2.statusText || ''),
-                attributes: {}
-            },
             'sensor.symcon_battery_charge_energy': ssState(bat1.chargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery_discharge_energy': ssState(bat1.dischargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery2_charge_energy': ssState(bat2.chargeEnergy || 0, 'kWh'),
@@ -3957,7 +3934,6 @@ class Energiefluss extends IPSModuleStrict
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
-        applyConfiguredBatteryStatus(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
         // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
@@ -3979,10 +3955,6 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 showInverterPowerAboveVoltages(
-                    card,
-                    card.__symconLastData || d
-                );
-                applyConfiguredBatteryStatus(
                     card,
                     card.__symconLastData || d
                 );
@@ -4014,10 +3986,6 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     showInverterPowerAboveVoltages(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    applyConfiguredBatteryStatus(
                         card,
                         card.__symconLastData || d
                     );
@@ -4062,63 +4030,6 @@ class Energiefluss extends IPSModuleStrict
         return roots;
     }
 
-
-
-    function applyConfiguredBatteryStatus(card, d) {
-        if (!card || !card.shadowRoot || !d) return;
-
-        const batteries = Array.isArray(d.batteries)
-            ? d.batteries
-            : [];
-
-        const statusDefinitions = [
-            {
-                battery: batteries[0],
-                selectors: [
-                    '#battery_state_msg',
-                    '[id="battery_state_msg"]'
-                ]
-            },
-            {
-                battery: batteries[1],
-                selectors: [
-                    '#battery2_state_msg',
-                    '[id="battery2_state_msg"]'
-                ]
-            }
-        ];
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        statusDefinitions.forEach(definition => {
-            const battery = definition.battery;
-            if (!battery || battery.hasStatus !== true) return;
-
-            const statusText = String(battery.statusText || '').trim();
-            if (statusText === '') return;
-
-            for (const root of roots) {
-                const node = root.querySelector?.(
-                    definition.selectors.join(',')
-                );
-
-                if (!node) continue;
-
-                // Nur schreiben, wenn sich der Text tatsächlich unterscheidet.
-                // Dadurch entsteht mit dem vorhandenen visuellen Observer
-                // keine Render- oder Mutation-Schleife.
-                if (String(node.textContent || '').trim() !== statusText) {
-                    node.textContent = statusText;
-                }
-
-                node.removeAttribute?.('display');
-                node.style?.setProperty('display', 'inline', 'important');
-                node.style?.setProperty('visibility', 'visible', 'important');
-                node.style?.setProperty('opacity', '1', 'important');
-                break;
-            }
-        });
-    }
 
 
     function showInverterPowerAboveVoltages(card, d) {
@@ -5922,7 +5833,6 @@ HTML;
             'InverterCurrentL2',
             'InverterCurrentL3',
             'HousePower',
-            'HouseEnergy',
             'InverterVoltage',
             'InverterCurrent',
             'InverterFrequency',
@@ -5994,7 +5904,6 @@ HTML;
                     'CurrentVariableID',
                     'VoltageVariableID',
                     'TemperatureVariableID',
-                    'StatusVariableID',
                     'MaxDischargeSoCVariableID'
                 ] as $key) {
                     $variableID = (int) ($battery[$key] ?? 0);
@@ -6225,25 +6134,7 @@ HTML;
                 $currentVariableID = (int) ($source['CurrentVariableID'] ?? 0);
                 $voltageVariableID = (int) ($source['VoltageVariableID'] ?? 0);
                 $temperatureVariableID = (int) ($source['TemperatureVariableID'] ?? 0);
-                $statusVariableID = (int) ($source['StatusVariableID'] ?? 0);
                 $maxDischargeSoCVariableID = (int) ($source['MaxDischargeSoCVariableID'] ?? 0);
-
-                $hasStatus =
-                    $statusVariableID > 0 &&
-                    IPS_VariableExists($statusVariableID);
-
-                $statusText = '';
-                if ($hasStatus) {
-                    $formattedStatus = trim((string) GetValueFormatted($statusVariableID));
-                    if ($formattedStatus !== '') {
-                        $statusText = $formattedStatus;
-                    } else {
-                        $rawStatus = GetValue($statusVariableID);
-                        $statusText = is_bool($rawStatus)
-                            ? ($rawStatus ? 'Ein' : 'Aus')
-                            : trim((string) $rawStatus);
-                    }
-                }
 
                 $value = (float) GetValue($variableID);
                 if ((bool) ($source['InvertFlow'] ?? false)) {
@@ -6287,8 +6178,6 @@ HTML;
                     )
                         ? (float) GetValue($temperatureVariableID)
                         : 0.0,
-                    'hasStatus'            => $hasStatus,
-                    'statusText'           => $statusText,
                     'maxDischargeSoc'      => max(
                         0,
                         min(
@@ -6575,50 +6464,20 @@ HTML;
         $pvEnergyTotal = $inverterDailyEnergy;
         $hasPvEnergy = $inverterDailyEnergyAvailable;
 
-        $houseEnergy = 0.0;
-        $houseEnergyAvailable = false;
-        $houseCalculationMode = $this->ReadPropertyString('HouseCalculationMode');
-
-        $houseEnergyID = $this->ReadPropertyInteger('HouseEnergy');
-        $hasConfiguredHouseEnergy =
-            $houseEnergyID > 0 &&
-            IPS_VariableExists($houseEnergyID);
-
-        $balanceEnergyAvailable =
+        $houseEnergyAvailable =
             $hasPvEnergy &&
             $hasGridImportEnergy &&
             $hasGridExportEnergy &&
             $hasBatteryEnergy;
 
-        $inverterGridEnergyAvailable =
-            $inverterDailyEnergyAvailable &&
-            $hasGridImportEnergy &&
-            $hasGridExportEnergy;
-
-        if ($houseCalculationMode === 'auto' && $hasConfiguredHouseEnergy) {
-            $houseEnergy = max(0.0, (float) GetValue($houseEnergyID));
-            $houseEnergyAvailable = true;
-        } elseif ($houseCalculationMode === 'inverter-grid') {
-            if ($inverterGridEnergyAvailable) {
-                $houseEnergy = max(
-                    0.0,
-                    $inverterDailyEnergy +
-                    (float) GetValue($gridImportEnergyID) -
-                    (float) GetValue($gridExportEnergyID)
-                );
-                $houseEnergyAvailable = true;
-            }
-        } elseif ($balanceEnergyAvailable) {
-            // Gilt für "balance" sowie als Rückfall von "auto".
-            $houseEnergy = max(
-                0.0,
+        $houseEnergy = 0.0;
+        if ($houseEnergyAvailable) {
+            $houseEnergy =
                 $pvEnergyTotal +
                 (float) GetValue($gridImportEnergyID) -
                 (float) GetValue($gridExportEnergyID) +
                 $batteryDischargeEnergyTotal -
-                $batteryChargeEnergyTotal
-            );
-            $houseEnergyAvailable = true;
+                $batteryChargeEnergyTotal;
         }
 
         // Die beiden Temperaturfelder gehören zur zentralen
@@ -6696,7 +6555,6 @@ HTML;
                 'inverterCurrentL2' => $inverterCurrentL2Available,
                 'inverterCurrentL3' => $inverterCurrentL3Available,
                 'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
-                'houseEnergyConfigured' => ($this->ReadPropertyInteger('HouseEnergy') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HouseEnergy'))),
                 'outsideTemperature' => (
                     $this->ReadPropertyInteger('OutsideTemperature') > 0
                     && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
