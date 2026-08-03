@@ -599,6 +599,18 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
+                                    'caption' => 'Anzeigeschwelle',
+                                    'name'    => 'DisplayThreshold',
+                                    'width'   => '120px',
+                                    'add'     => 0,
+                                    'edit'    => [
+                                        'type' => 'NumberSpinner',
+                                        'minimum' => 0,
+                                        'maximum' => 100000,
+                                        'suffix' => ' W',
+                                    ],
+                                ],
+                                [
                                     'caption' => 'Icon',
                                     'name'    => 'Icon',
                                     'width'   => '145px',
@@ -3472,8 +3484,16 @@ class Energiefluss extends IPSModuleStrict
             .filter(group => group.hasPower)
             .map(group => ({
                 ...group,
-                value: Math.max(Number(group.value || 0), 0)
-            }));
+                value: Math.max(Number(group.value || 0), 0),
+                displayThreshold: Math.max(
+                    Number(group.displayThreshold || 0),
+                    0
+                )
+            }))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
 
         // Aktive Verbraucher zuerst, absteigend nach Leistung.
         const activeConsumers = configuredConsumers
@@ -3810,8 +3830,16 @@ class Energiefluss extends IPSModuleStrict
             .filter(group => group.hasPower)
             .map(group => ({
                 ...group,
-                value: Math.max(Number(group.value || 0), 0)
-            }));
+                value: Math.max(Number(group.value || 0), 0),
+                displayThreshold: Math.max(
+                    Number(group.displayThreshold || 0),
+                    0
+                )
+            }))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
 
         const activeConsumers = configuredConsumers
             .filter(group => Number(group.value || 0) > 0)
@@ -6363,6 +6391,10 @@ HTML;
                     'daily' => $daily,
                     'dailyValue' => $dailyValue,
                     'hasDaily' => $hasDaily,
+                    'displayThreshold' => max(
+                        0.0,
+                        (float) ($group['DisplayThreshold'] ?? 0)
+                    ),
                     'isWallbox' => $isWallbox,
                     'socText' => $socText,
                     'hasSoc' => $hasSoc,
