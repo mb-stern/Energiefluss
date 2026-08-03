@@ -3867,10 +3867,6 @@ class Energiefluss extends IPSModuleStrict
                     auxGroups.length >= 2
                         ? (auxGroups[1]?.name || 'Aux2')
                         : '',
-                // Bei zwei AUX-Verbrauchern bewusst keine Icons anzeigen.
-                aux_load1_icon: 'none',
-                aux_load2_icon: 'none',
-
                 // Haupt-AUX, Unterverbraucher, Linie, Icon, Werte und Text
                 // verwenden dieselbe konfigurierte Verbraucherfarbe.
                 aux_colour: AC.room,
@@ -4315,49 +4311,31 @@ class Energiefluss extends IPSModuleStrict
             setLabel('#aux_load1', configuredAux[0]);
             setLabel('#aux_load2', configuredAux[1]);
 
-            // AUX1 und AUX2 werden ohne Icon dargestellt.
+            // AUX1 und AUX2 werden vollständig ohne Icon dargestellt.
+            // Es wird kein ungültiger Icon-Name an die Card übergeben.
             [
                 '.aux-small-icon-1',
-                '.aux-small-icon-2'
+                '.aux-small-icon-2',
+                '#aux_load1_icon',
+                '#aux_load2_icon',
+                '[id*="aux_load1"][class*="icon"]',
+                '[id*="aux_load2"][class*="icon"]'
             ].forEach(selector => {
-                const node = findNode(selector);
-                if (!node) return;
-
-                node.style?.setProperty(
-                    'display',
-                    'none',
-                    'important'
-                );
-                node.setAttribute?.('display', 'none');
-            });
-
-            // Die SVG-Positionen der Originalkarte sind layoutabhängig.
-            // Statt sie zu verschieben, werden die beiden Icons zuverlässig
-            // um 30 Prozent verkleinert.
-            [
-                '.aux-small-icon-1',
-                '.aux-small-icon-2'
-            ].forEach(selector => {
-                const node = findNode(selector);
-                if (!node) return;
-
-                const wantedTransform = 'scale(0.7)';
-                if (node.style?.transform !== wantedTransform) {
-                    node.style?.setProperty(
-                        'transform',
-                        wantedTransform,
-                        'important'
-                    );
-                    node.style?.setProperty(
-                        'transform-box',
-                        'fill-box',
-                        'important'
-                    );
-                    node.style?.setProperty(
-                        'transform-origin',
-                        'center',
-                        'important'
-                    );
+                for (const root of roots) {
+                    root.querySelectorAll?.(selector).forEach(node => {
+                        node.style?.setProperty(
+                            'display',
+                            'none',
+                            'important'
+                        );
+                        node.style?.setProperty(
+                            'visibility',
+                            'hidden',
+                            'important'
+                        );
+                        node.setAttribute?.('display', 'none');
+                        node.setAttribute?.('visibility', 'hidden');
+                    });
                 }
             });
 
