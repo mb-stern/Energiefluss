@@ -3658,26 +3658,31 @@ class Energiefluss extends IPSModuleStrict
         });
 
         if (auxGroups.length > 0) {
-            // aux_power_166 ist der gemeinsame AUX-Zweig und entspricht der
-            // Summe der maximal zwei separat dargestellten AUX-Verbraucher.
+            // Der gemeinsame AUX-Zweig wird immer verwendet.
+            // Bei genau einem AUX-Verbraucher ist dies der große Haupt-AUX.
+            // Erst bei zwei AUX-Verbrauchern werden zusätzlich Aux1 und Aux2
+            // als die beiden kleinen Unterverbraucher eingeblendet.
             addEntity('aux_power_166', 'sensor.symcon_aux_total');
             addEntity(
                 'day_aux_energy',
                 'sensor.symcon_aux_energy',
                 auxGroups.some(group => group.hasDaily)
             );
-            addEntity('aux_load1', 'sensor.symcon_aux1', !!auxGroups[0]);
-            addEntity(
-                'aux_load1_extra',
-                'sensor.symcon_aux1_extra',
-                !!auxGroups[0]?.hasSoc
-            );
-            addEntity('aux_load2', 'sensor.symcon_aux2', !!auxGroups[1]);
-            addEntity(
-                'aux_load2_extra',
-                'sensor.symcon_aux2_extra',
-                !!auxGroups[1]?.hasSoc
-            );
+
+            if (auxGroups.length >= 2) {
+                addEntity('aux_load1', 'sensor.symcon_aux1', true);
+                addEntity(
+                    'aux_load1_extra',
+                    'sensor.symcon_aux1_extra',
+                    !!auxGroups[0]?.hasSoc
+                );
+                addEntity('aux_load2', 'sensor.symcon_aux2', true);
+                addEntity(
+                    'aux_load2_extra',
+                    'sensor.symcon_aux2_extra',
+                    !!auxGroups[1]?.hasSoc
+                );
+            }
         }
         addEntity('day_grid_import_76', 'sensor.symcon_grid_import_energy', d.gridImportEnergyValueAvailable);
         addEntity('day_grid_export_77', 'sensor.symcon_grid_export_energy', d.gridExportEnergyValueAvailable);
@@ -3831,14 +3836,42 @@ class Energiefluss extends IPSModuleStrict
                 max_power: 12000,
                 auto_scale: false,
                 additional_loads: activeGroups.length,
-                aux_loads: auxGroups.length,
-                aux_name: 'AUX',
-                aux_daily_name: 'AUX',
+
+                // Genau ein markierter Verbraucher wird als großer Haupt-AUX
+                // dargestellt. Bei zwei Einträgen zeigt die Originalkarte
+                // die beiden kleinen Felder Aux1 und Aux2.
+                aux_loads: auxGroups.length >= 2 ? 2 : 0,
+                aux_name:
+                    auxGroups.length === 1
+                        ? (auxGroups[0]?.name || 'AUX')
+                        : 'AUX',
+                aux_daily_name:
+                    auxGroups.length === 1
+                        ? (auxGroups[0]?.name || 'AUX')
+                        : 'AUX',
                 aux_type: 'default',
-                aux_load1_name: auxGroups[0]?.name || '',
-                aux_load2_name: auxGroups[1]?.name || '',
-                aux_load1_icon: normalizeConsumerIcon(auxGroups[0]?.icon),
-                aux_load2_icon: normalizeConsumerIcon(auxGroups[1]?.icon),
+                aux_load1_name:
+                    auxGroups.length >= 2
+                        ? (auxGroups[0]?.name || 'Aux1')
+                        : '',
+                aux_load2_name:
+                    auxGroups.length >= 2
+                        ? (auxGroups[1]?.name || 'Aux2')
+                        : '',
+                aux_load1_icon:
+                    auxGroups.length >= 2
+                        ? normalizeConsumerIcon(auxGroups[0]?.icon)
+                        : 'default',
+                aux_load2_icon:
+                    auxGroups.length >= 2
+                        ? normalizeConsumerIcon(auxGroups[1]?.icon)
+                        : 'default',
+
+                // Haupt-AUX, Unterverbraucher, Linie, Icon, Werte und Text
+                // verwenden dieselbe konfigurierte Verbraucherfarbe.
+                aux_colour: AC.room,
+                aux_off_colour: AC.room,
+                aux_dynamic_colour: false,
                 essential_name: 'Haus',
                 load1_name: activeGroups[0]?.name || '', load2_name: activeGroups[1]?.name || '',
                 load3_name: activeGroups[2]?.name || '', load4_name: activeGroups[3]?.name || '',
