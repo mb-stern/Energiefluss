@@ -273,6 +273,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ### Version 1.1 (03.08.2026)
 - Die Energiemenge (kwh) für den Hausverbrauch kann nun selber definiert werden, analog der Leistung.
+- Die Energiemenge lässt sich nun analog der Leistung in drei berschiedenen Modi berechen,
 - Der Status der Batterieen kann nun angezeigt werden.
 - Verbrauchern kann eine Mindestleistung hinterlegt werden, unter deren sie ausgeblendet werden.
 
