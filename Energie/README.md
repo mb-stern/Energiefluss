@@ -276,6 +276,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 - Die Energiemenge lässt sich nun analog der Leistung in drei verschiedenen Modi berechen.
 - Der Status der Batterieen kann nun angezeigt werden.
 - Verbrauchern kann eine Mindestleistung hinterlegt werden, unter deren sie ausgeblendet werden.
+- Maximal 2 Verbraucher können als AUX-Verbraucher markiert werden, damit diese prominent dargestellt werden.
 
 ### Version 1.0 (02.08.2026)
 - Initiale Version
