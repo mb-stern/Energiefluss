@@ -3867,14 +3867,9 @@ class Energiefluss extends IPSModuleStrict
                     auxGroups.length >= 2
                         ? (auxGroups[1]?.name || 'Aux2')
                         : '',
-                aux_load1_icon:
-                    auxGroups.length >= 2
-                        ? normalizeConsumerIcon(auxGroups[0]?.icon)
-                        : 'default',
-                aux_load2_icon:
-                    auxGroups.length >= 2
-                        ? normalizeConsumerIcon(auxGroups[1]?.icon)
-                        : 'default',
+                // Bei zwei AUX-Verbrauchern bewusst keine Icons anzeigen.
+                aux_load1_icon: 'none',
+                aux_load2_icon: 'none',
 
                 // Haupt-AUX, Unterverbraucher, Linie, Icon, Werte und Text
                 // verwenden dieselbe konfigurierte Verbraucherfarbe.
@@ -4319,6 +4314,22 @@ class Energiefluss extends IPSModuleStrict
         } else {
             setLabel('#aux_load1', configuredAux[0]);
             setLabel('#aux_load2', configuredAux[1]);
+
+            // AUX1 und AUX2 werden ohne Icon dargestellt.
+            [
+                '.aux-small-icon-1',
+                '.aux-small-icon-2'
+            ].forEach(selector => {
+                const node = findNode(selector);
+                if (!node) return;
+
+                node.style?.setProperty(
+                    'display',
+                    'none',
+                    'important'
+                );
+                node.setAttribute?.('display', 'none');
+            });
 
             // Die SVG-Positionen der Originalkarte sind layoutabhängig.
             // Statt sie zu verschieben, werden die beiden Icons zuverlässig
