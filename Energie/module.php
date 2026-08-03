@@ -47,7 +47,6 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('InverterCurrentL2', 0);
         $this->RegisterPropertyInteger('InverterCurrentL3', 0);
         $this->RegisterPropertyInteger('HousePower', 0);
-        $this->RegisterPropertyInteger('HouseEnergy', 0);
 
         // auto: konfigurierte Hausverbrauchsvariable verwenden, sonst Bilanz
         // balance: PV + Batterie + Netzsaldo
@@ -531,11 +530,6 @@ class Energiefluss extends IPSModuleStrict
                             'type'    => 'SelectVariable',
                             'name'    => 'HousePower',
                             'caption' => 'Hausverbrauch (W, nur bei Automatisch)',
-                        ],
-                        [
-                            'type'    => 'SelectVariable',
-                            'name'    => 'HouseEnergy',
-                            'caption' => 'Hausverbrauch heute (kWh, nur bei Automatisch)',
                         ],
                         [
                             'type'    => 'Select',
@@ -5839,7 +5833,6 @@ HTML;
             'InverterCurrentL2',
             'InverterCurrentL3',
             'HousePower',
-            'HouseEnergy',
             'InverterVoltage',
             'InverterCurrent',
             'InverterFrequency',
@@ -6471,50 +6464,20 @@ HTML;
         $pvEnergyTotal = $inverterDailyEnergy;
         $hasPvEnergy = $inverterDailyEnergyAvailable;
 
-        $houseEnergy = 0.0;
-        $houseEnergyAvailable = false;
-        $houseCalculationMode = $this->ReadPropertyString('HouseCalculationMode');
-
-        $houseEnergyID = $this->ReadPropertyInteger('HouseEnergy');
-        $hasConfiguredHouseEnergy =
-            $houseEnergyID > 0 &&
-            IPS_VariableExists($houseEnergyID);
-
-        $balanceEnergyAvailable =
+        $houseEnergyAvailable =
             $hasPvEnergy &&
             $hasGridImportEnergy &&
             $hasGridExportEnergy &&
             $hasBatteryEnergy;
 
-        $inverterGridEnergyAvailable =
-            $inverterDailyEnergyAvailable &&
-            $hasGridImportEnergy &&
-            $hasGridExportEnergy;
-
-        if ($houseCalculationMode === 'auto' && $hasConfiguredHouseEnergy) {
-            $houseEnergy = max(0.0, (float) GetValue($houseEnergyID));
-            $houseEnergyAvailable = true;
-        } elseif ($houseCalculationMode === 'inverter-grid') {
-            if ($inverterGridEnergyAvailable) {
-                $houseEnergy = max(
-                    0.0,
-                    $inverterDailyEnergy +
-                    (float) GetValue($gridImportEnergyID) -
-                    (float) GetValue($gridExportEnergyID)
-                );
-                $houseEnergyAvailable = true;
-            }
-        } elseif ($balanceEnergyAvailable) {
-            // Gilt für "balance" sowie als Rückfall von "auto".
-            $houseEnergy = max(
-                0.0,
+        $houseEnergy = 0.0;
+        if ($houseEnergyAvailable) {
+            $houseEnergy =
                 $pvEnergyTotal +
                 (float) GetValue($gridImportEnergyID) -
                 (float) GetValue($gridExportEnergyID) +
                 $batteryDischargeEnergyTotal -
-                $batteryChargeEnergyTotal
-            );
-            $houseEnergyAvailable = true;
+                $batteryChargeEnergyTotal;
         }
 
         // Die beiden Temperaturfelder gehören zur zentralen
@@ -6592,7 +6555,6 @@ HTML;
                 'inverterCurrentL2' => $inverterCurrentL2Available,
                 'inverterCurrentL3' => $inverterCurrentL3Available,
                 'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
-                'houseEnergyConfigured' => ($this->ReadPropertyInteger('HouseEnergy') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HouseEnergy'))),
                 'outsideTemperature' => (
                     $this->ReadPropertyInteger('OutsideTemperature') > 0
                     && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
