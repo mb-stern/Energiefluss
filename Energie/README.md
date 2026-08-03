@@ -271,7 +271,11 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
-### Version 1.0
+### Version 1.1 (03.08.2026)
+- Die Energiemenge (kwh) für den Hausverbrauch kann nun selber definiert werden, analog der Leistung.
+- Der Status der Batterieen kann nun angezeigt werden.
+
+### Version 1.0 (02.08.2026)
 - Initiale Version
 
 ---
