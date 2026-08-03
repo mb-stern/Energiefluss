@@ -3849,7 +3849,10 @@ class Energiefluss extends IPSModuleStrict
                     auxGroups.length === 1
                         ? (auxGroups[0]?.name || 'AUX')
                         : 'AUX',
-                aux_type: 'default',
+                aux_type:
+                    auxGroups.length === 1
+                        ? normalizeConsumerIcon(auxGroups[0]?.icon)
+                        : 'default',
                 aux_load1_name:
                     auxGroups.length >= 2
                         ? (auxGroups[0]?.name || 'Aux1')
@@ -4110,6 +4113,7 @@ class Energiefluss extends IPSModuleStrict
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
         applyConfiguredBatteryStatus(card, d);
+        applyAuxVisualOverrides(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
         // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
@@ -4135,6 +4139,10 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 applyConfiguredBatteryStatus(
+                    card,
+                    card.__symconLastData || d
+                );
+                applyAuxVisualOverrides(
                     card,
                     card.__symconLastData || d
                 );
@@ -4170,6 +4178,10 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     applyConfiguredBatteryStatus(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    applyAuxVisualOverrides(
                         card,
                         card.__symconLastData || d
                     );
@@ -4214,6 +4226,147 @@ class Energiefluss extends IPSModuleStrict
         return roots;
     }
 
+
+
+    function applyAuxVisualOverrides(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const configuredAux = Array.isArray(d.groups)
+            ? d.groups
+                .filter(group => group?.hasPower && group?.isAux === true)
+                .map(group => ({
+                    ...group,
+                    value: Math.max(Number(group.value || 0), 0),
+                    displayThreshold: Math.max(
+                        Number(group.displayThreshold || 0),
+                        0
+                    )
+                }))
+                .filter(group =>
+                    group.displayThreshold <= 0 ||
+                    group.value >= group.displayThreshold
+                )
+                .slice(0, 2)
+            : [];
+
+        if (configuredAux.length === 0) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+        const findNode = selector => {
+            for (const root of roots) {
+                const node = root.querySelector?.(selector);
+                if (node) return node;
+            }
+            return null;
+        };
+
+        const cleanSoc = group => {
+            if (!group?.hasSoc) return '';
+
+            const raw = String(group.socText || '').trim();
+            if (raw === '') return '';
+
+            // Wenn die Variable z. B. "EQA300: 69%" liefert, nur den
+            // eigentlichen SOC-Teil direkt hinter dem Verbrauchernamen nutzen.
+            const percentage = raw.match(/-?\d+(?:[.,]\d+)?\s*%/);
+            return percentage
+                ? percentage[0].replace(',', '.')
+                : raw;
+        };
+
+        const setLabel = (selector, group) => {
+            const node = findNode(selector);
+            if (!node || !group) return;
+
+            const name = String(group.name || '').trim();
+            const soc = cleanSoc(group);
+            const wanted = [name, soc].filter(Boolean).join(' · ');
+
+            if (
+                wanted !== '' &&
+                String(node.textContent || '').trim() !== wanted
+            ) {
+                node.textContent = wanted;
+            }
+        };
+
+        if (configuredAux.length === 1) {
+            setLabel('#aux_one', configuredAux[0]);
+
+            // Die Card enthält für den Haupt-AUX mehrere alternative
+            // Originalsymbole. Bei einem frei konfigurierten Verbrauchericon
+            // dürfen diese nicht zusätzlich sichtbar bleiben.
+            [
+                '#aux_aux_default',
+                '#aux_aux_generator',
+                '#aux_aux_oven',
+                '#aux_aux_boiler',
+                '#aux_aux_ac',
+                '#aux_aux_pump',
+                '#aux_inverter'
+            ].forEach(selector => {
+                const node = findNode(selector);
+                if (!node) return;
+
+                if (node.style?.display !== 'none') {
+                    node.style?.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+                }
+            });
+        } else {
+            setLabel('#aux_load1', configuredAux[0]);
+            setLabel('#aux_load2', configuredAux[1]);
+
+            // Die beiden kleinen Icons etwas näher an die Felder schieben.
+            [
+                '.aux-small-icon-1',
+                '.aux-small-icon-2'
+            ].forEach(selector => {
+                const node = findNode(selector);
+                if (!node) return;
+
+                const wantedTransform = 'translate(-7px, -5px)';
+                if (node.style?.transform !== wantedTransform) {
+                    node.style?.setProperty(
+                        'transform',
+                        wantedTransform,
+                        'important'
+                    );
+                    node.style?.setProperty(
+                        'transform-box',
+                        'fill-box',
+                        'important'
+                    );
+                    node.style?.setProperty(
+                        'transform-origin',
+                        'center',
+                        'important'
+                    );
+                }
+            });
+
+            // Der SOC steht jetzt direkt hinter dem Namen und soll nicht
+            // nochmals als separate Zusatzzeile erscheinen.
+            [
+                '#aux_load1_extra',
+                '#aux_load2_extra'
+            ].forEach(selector => {
+                const node = findNode(selector);
+                if (!node) return;
+
+                if (node.style?.display !== 'none') {
+                    node.style?.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+                }
+            });
+        }
+    }
 
 
     function applyConfiguredBatteryStatus(card, d) {
