@@ -4320,9 +4320,11 @@ class Energiefluss extends IPSModuleStrict
             setLabel('#aux_load1', configuredAux[0]);
             setLabel('#aux_load2', configuredAux[1]);
 
-            // Die SVG-Positionen der Originalkarte sind layoutabhängig.
-            // Statt sie zu verschieben, werden die beiden Icons zuverlässig
-            // um 30 Prozent verkleinert.
+            // Die Sunsynk-Card steuert die Größe der mdi-Icons über
+            // --mdc-icon-size. Die normalen kleinen Verbrauchericons werden
+            // mit 20 px dargestellt; AUX1 und AUX2 erhalten deshalb exakt
+            // dieselbe Größe. Ein transform/scale wird bewusst nicht mehr
+            // verwendet, weil es innerhalb des SVG-Layouts unzuverlässig ist.
             [
                 '.aux-small-icon-1',
                 '.aux-small-icon-2'
@@ -4330,24 +4332,29 @@ class Energiefluss extends IPSModuleStrict
                 const node = findNode(selector);
                 if (!node) return;
 
-                const wantedTransform = 'scale(0.7)';
-                if (node.style?.transform !== wantedTransform) {
-                    node.style?.setProperty(
-                        'transform',
-                        wantedTransform,
-                        'important'
-                    );
-                    node.style?.setProperty(
-                        'transform-box',
-                        'fill-box',
-                        'important'
-                    );
-                    node.style?.setProperty(
-                        'transform-origin',
-                        'center',
-                        'important'
-                    );
-                }
+                node.style?.removeProperty('transform');
+                node.style?.removeProperty('transform-box');
+                node.style?.removeProperty('transform-origin');
+                node.style?.setProperty(
+                    '--mdc-icon-size',
+                    '20px',
+                    'important'
+                );
+                node.style?.setProperty(
+                    'width',
+                    '20px',
+                    'important'
+                );
+                node.style?.setProperty(
+                    'height',
+                    '20px',
+                    'important'
+                );
+                node.style?.setProperty(
+                    'font-size',
+                    '20px',
+                    'important'
+                );
             });
 
             // Der SOC steht jetzt direkt hinter dem Namen und soll nicht
