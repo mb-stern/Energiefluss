@@ -3488,10 +3488,23 @@ class Energiefluss extends IPSModuleStrict
         return `mdi:${raw || 'plug'}`;
     }
 
-    function prepareSunsynkConsumers(groups) {
-        // Grenzleistung, AUX-Zuordnung und Reihenfolge werden genau einmal
-        // pro Renderdurchlauf bestimmt. Konfiguration und virtuelle Sensoren
-        // erhalten anschließend dasselbe unveränderte Ergebnis.
+    function createSunsynkConfig(d, pvs, batteries, wallbox, groups) {
+        const requestedLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(currentTechnicalLayout)
+            ? currentTechnicalLayout
+            : 'lite';
+        const wide = requestedLayout.endsWith('-wide');
+        const style = requestedLayout.replace('-wide', '');
+        const full = style === 'full';
+        const showEnergyDetails = style !== 'compact';
+
+        const activePvs = pvs.filter(pv => pv.hasPower);
+        const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
+        const hasGrid = entityAvailable(d, 'gridPower');
+        const hasWallbox = !!d.hasWallbox;
+
+        // Die Wallbox befindet sich bereits in der normalen Verbraucherliste.
+        // Verbraucher sind reine Lasten; negative Werte werden in der
+        // Sunsynk-Ansicht deshalb auf 0 W begrenzt.
         const configuredConsumers = groups
             .filter(group => group.hasPower)
             .map(group => ({
@@ -3507,6 +3520,9 @@ class Energiefluss extends IPSModuleStrict
                 group.value >= group.displayThreshold
             );
 
+        // Maximal zwei Verbraucher werden über den originalen AUX-Bereich
+        // der Sunsynk-Card dargestellt. Weitere versehentlich als AUX
+        // markierte Einträge bleiben normale Verbraucher.
         const auxGroups = configuredConsumers
             .filter(group => group.isAux === true)
             .slice(0, 2);
@@ -3515,6 +3531,7 @@ class Energiefluss extends IPSModuleStrict
             group => !auxGroups.includes(group)
         );
 
+        // Aktive normale Verbraucher zuerst, absteigend nach Leistung.
         const activeConsumers = normalConsumers
             .filter(group => Number(group.value || 0) > 0)
             .sort((a, b) =>
@@ -3522,6 +3539,7 @@ class Energiefluss extends IPSModuleStrict
                 Number(a.value || 0)
             );
 
+        // Freie Plätze werden mit inaktiven normalen Verbrauchern aufgefüllt.
         const inactiveConsumers = normalConsumers.filter(group =>
             Number(group.value || 0) <= 0
         );
@@ -3529,40 +3547,7 @@ class Energiefluss extends IPSModuleStrict
         const activeGroups = [
             ...activeConsumers,
             ...inactiveConsumers
-        ].slice(
-            0,
-            currentTechnicalLayout.startsWith('full') ? 6 : 3
-        );
-
-        return {
-            configuredConsumers,
-            auxGroups,
-            activeGroups
-        };
-    }
-
-    function createSunsynkConfig(
-        d,
-        pvs,
-        batteries,
-        wallbox,
-        consumerSelection
-    ) {
-        const requestedLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(currentTechnicalLayout)
-            ? currentTechnicalLayout
-            : 'lite';
-        const wide = requestedLayout.endsWith('-wide');
-        const style = requestedLayout.replace('-wide', '');
-        const full = style === 'full';
-        const showEnergyDetails = style !== 'compact';
-
-        const activePvs = pvs.filter(pv => pv.hasPower);
-        const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
-        const hasGrid = entityAvailable(d, 'gridPower');
-        const hasWallbox = !!d.hasWallbox;
-
-        const auxGroups = consumerSelection.auxGroups;
-        const activeGroups = consumerSelection.activeGroups;
+        ].slice(0, full ? 6 : 3);
 
         // Nur diese Texte dürfen später geometrisch zentriert werden.
         // Dadurch bleiben PV-Stringwerte, Spannungen, Ströme und sonstige
@@ -3930,21 +3915,56 @@ class Energiefluss extends IPSModuleStrict
         return cfg;
     }
 
-    function createSunsynkHass(
-        d,
-        grid,
-        haus,
-        pvs,
-        batteries,
-        wallbox,
-        consumerSelection
-    ) {
+    function createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups) {
         const activePvs = pvs.filter(pv => pv.hasPower);
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
         const hasWallbox = !!d.hasWallbox;
 
-        const auxGroups = consumerSelection.auxGroups;
-        const activeGroups = consumerSelection.activeGroups;
+        // Auch im virtuellen Home-Assistant-Datenmodell negative
+        // Verbraucherwerte konsequent auf 0 W begrenzen.
+        const configuredConsumers = groups
+            .filter(group => group.hasPower)
+            .map(group => ({
+                ...group,
+                value: Math.max(Number(group.value || 0), 0),
+                displayThreshold: Math.max(
+                    Number(group.displayThreshold || 0),
+                    0
+                )
+            }))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
+
+        // Exakt dieselbe AUX-Auswahl wie in createSunsynkConfig.
+        const auxGroups = configuredConsumers
+            .filter(group => group.isAux === true)
+            .slice(0, 2);
+
+        const normalConsumers = configuredConsumers.filter(
+            group => !auxGroups.includes(group)
+        );
+
+        const activeConsumers = normalConsumers
+            .filter(group => Number(group.value || 0) > 0)
+            .sort((a, b) =>
+                Number(b.value || 0) -
+                Number(a.value || 0)
+            );
+
+        const inactiveConsumers = normalConsumers.filter(group =>
+            Number(group.value || 0) <= 0
+        );
+
+        // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
+        const activeGroups = [
+            ...activeConsumers,
+            ...inactiveConsumers
+        ].slice(
+            0,
+            currentTechnicalLayout.startsWith('full') ? 6 : 3
+        );
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
         const pvEnergyTotal = entityAvailable(d, 'inverterDailyEnergy')
@@ -5359,16 +5379,7 @@ class Energiefluss extends IPSModuleStrict
             // Wie in Lovelace: zuerst Konfiguration und hass setzen,
             // anschließend das Element in den DOM einhängen.
             window.__symconHasWallbox = !!d.hasWallbox;
-            const consumerSelection = prepareSunsynkConsumers(groups);
-            card.setConfig(
-                createSunsynkConfig(
-                    d,
-                    pvs,
-                    batteries,
-                    wallbox,
-                    consumerSelection
-                )
-            );
+            card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
             card.hass = createSunsynkHass(
                 d,
                 grid,
@@ -5376,7 +5387,7 @@ class Energiefluss extends IPSModuleStrict
                 pvs,
                 batteries,
                 wallbox,
-                consumerSelection
+                groups
             );
             host.appendChild(card);
             sunsynkCard = card;
@@ -5409,25 +5420,8 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
         window.__symconHasWallbox = !!d.hasWallbox;
-        const consumerSelection = prepareSunsynkConsumers(groups);
-        sunsynkCard.setConfig(
-            createSunsynkConfig(
-                d,
-                pvs,
-                batteries,
-                wallbox,
-                consumerSelection
-            )
-        );
-        sunsynkCard.hass = createSunsynkHass(
-            d,
-            grid,
-            haus,
-            pvs,
-            batteries,
-            wallbox,
-            consumerSelection
-        );
+        sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
+        sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
         sunsynkCard.__symconLastData = d;
         applySunsynkViewOverrides(sunsynkCard, d);
         scheduleSunsynkRatios(sunsynkCard, d, grid, haus, pvs, batteries);
