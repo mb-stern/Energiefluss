@@ -272,8 +272,8 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 # 📦 Versionen
 
 ### Version 1.2 (04.08.2026)
-- Automatische Berechnung des Eigenverbrauchs korrigiert.
-- Autarkie und Eigenverbrauch können nun selber definiert werden.
+- Automatische Berechnung des Eigenverbrauchs überarbeitet.
+- Autarkie und Eigenverbrauch können nun selber definiert werden und die automatische Berechnung überarbeit
 - AUX und normale Verbraucher überarbeitet, in Full werden max. 2 AUX und 2 Verbraucher dargestellt
 
 ### Version 1.1 (03.08.2026)
