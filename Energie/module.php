@@ -488,16 +488,9 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'PV-Tagesenergie (kWh)',
+                                    'caption' => 'Tagesenergie (kWh)',
                                     'name'    => 'DailyEnergyVariableID',
                                     'width'   => '180px',
-                                    'add'     => 0,
-                                    'edit'    => ['type' => 'SelectVariable'],
-                                ],
-                                [
-                                    'caption' => 'WR AC-Tagesenergie (kWh)',
-                                    'name'    => 'ACDailyEnergyVariableID',
-                                    'width'   => '190px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
@@ -6275,7 +6268,6 @@ HTML;
                     'CurrentL2VariableID',
                     'CurrentL3VariableID',
                     'DailyEnergyVariableID',
-                    'ACDailyEnergyVariableID',
                     'TotalEnergyVariableID',
                 ] as $key) {
                     $variableID = (int) ($inverter[$key] ?? 0);
@@ -6779,20 +6771,13 @@ HTML;
         $inverterCurrentL1 = 0.0;
         $inverterCurrentL2 = 0.0;
         $inverterCurrentL3 = 0.0;
-        // PV-/DC-Tagesenergie für die PV-Anzeige.
         $inverterDailyEnergy = 0.0;
-
-        // Tatsächliche AC-Ausgangsenergie des Wechselrichters.
-        // Nur dieser Wert darf für "Wechselrichter + Netzsaldo" verwendet werden.
-        $inverterACDailyEnergy = 0.0;
-
         $inverterTotalEnergy = 0.0;
         $inverterPowerAvailable = false;
         $inverterCurrentL1Available = false;
         $inverterCurrentL2Available = false;
         $inverterCurrentL3Available = false;
         $inverterDailyEnergyAvailable = false;
-        $inverterACDailyEnergyAvailable = false;
         $inverterTotalEnergyAvailable = false;
         $hasConfiguredInverterList = false;
         $inverterDetails = [];
@@ -6809,9 +6794,8 @@ HTML;
                     'l1'    => (int) ($source['CurrentL1VariableID'] ?? 0),
                     'l2'    => (int) ($source['CurrentL2VariableID'] ?? 0),
                     'l3'    => (int) ($source['CurrentL3VariableID'] ?? 0),
-                    'daily'   => (int) ($source['DailyEnergyVariableID'] ?? 0),
-                    'acDaily' => (int) ($source['ACDailyEnergyVariableID'] ?? 0),
-                    'total'   => (int) ($source['TotalEnergyVariableID'] ?? 0),
+                    'daily' => (int) ($source['DailyEnergyVariableID'] ?? 0),
+                    'total' => (int) ($source['TotalEnergyVariableID'] ?? 0),
                 ];
 
                 if (max($ids) > 0) {
@@ -6823,7 +6807,6 @@ HTML;
                 $l2Available = $ids['l2'] > 0 && IPS_VariableExists($ids['l2']);
                 $l3Available = $ids['l3'] > 0 && IPS_VariableExists($ids['l3']);
                 $dailyAvailable = $ids['daily'] > 0 && IPS_VariableExists($ids['daily']);
-                $acDailyAvailable = $ids['acDaily'] > 0 && IPS_VariableExists($ids['acDaily']);
                 $totalAvailable = $ids['total'] > 0 && IPS_VariableExists($ids['total']);
 
                 $power = $powerAvailable ? (float) GetValue($ids['power']) : 0.0;
@@ -6831,7 +6814,6 @@ HTML;
                 $currentL2 = $l2Available ? (float) GetValue($ids['l2']) : 0.0;
                 $currentL3 = $l3Available ? (float) GetValue($ids['l3']) : 0.0;
                 $dailyEnergy = $dailyAvailable ? (float) GetValue($ids['daily']) : 0.0;
-                $acDailyEnergy = $acDailyAvailable ? (float) GetValue($ids['acDaily']) : 0.0;
                 $totalEnergy = $totalAvailable ? (float) GetValue($ids['total']) : 0.0;
 
                 $inverterPower += $power;
@@ -6839,7 +6821,6 @@ HTML;
                 $inverterCurrentL2 += $currentL2;
                 $inverterCurrentL3 += $currentL3;
                 $inverterDailyEnergy += $dailyEnergy;
-                $inverterACDailyEnergy += $acDailyEnergy;
                 $inverterTotalEnergy += $totalEnergy;
 
                 $inverterPowerAvailable = $inverterPowerAvailable || $powerAvailable;
@@ -6847,7 +6828,6 @@ HTML;
                 $inverterCurrentL2Available = $inverterCurrentL2Available || $l2Available;
                 $inverterCurrentL3Available = $inverterCurrentL3Available || $l3Available;
                 $inverterDailyEnergyAvailable = $inverterDailyEnergyAvailable || $dailyAvailable;
-                $inverterACDailyEnergyAvailable = $inverterACDailyEnergyAvailable || $acDailyAvailable;
                 $inverterTotalEnergyAvailable = $inverterTotalEnergyAvailable || $totalAvailable;
 
                 $inverterDetails[] = [
@@ -6857,14 +6837,12 @@ HTML;
                     'currentL2' => $currentL2,
                     'currentL3' => $currentL3,
                     'dailyEnergy' => $dailyEnergy,
-                    'acDailyEnergy' => $acDailyEnergy,
                     'totalEnergy' => $totalEnergy,
                     'hasPower' => $powerAvailable,
                     'hasCurrentL1' => $l1Available,
                     'hasCurrentL2' => $l2Available,
                     'hasCurrentL3' => $l3Available,
                     'hasDailyEnergy' => $dailyAvailable,
-                    'hasACDailyEnergy' => $acDailyAvailable,
                     'hasTotalEnergy' => $totalAvailable,
                 ];
             }
@@ -6893,14 +6871,12 @@ HTML;
                 'currentL2' => $inverterCurrentL2,
                 'currentL3' => $inverterCurrentL3,
                 'dailyEnergy' => 0.0,
-                'acDailyEnergy' => 0.0,
                 'totalEnergy' => 0.0,
                 'hasPower' => $inverterPowerAvailable,
                 'hasCurrentL1' => $inverterCurrentL1Available,
                 'hasCurrentL2' => $inverterCurrentL2Available,
                 'hasCurrentL3' => $inverterCurrentL3Available,
                 'hasDailyEnergy' => false,
-                'hasACDailyEnergy' => false,
                 'hasTotalEnergy' => false,
             ]];
         }
@@ -6926,7 +6902,7 @@ HTML;
             $hasBatteryEnergy;
 
         $inverterGridEnergyAvailable =
-            $inverterACDailyEnergyAvailable &&
+            $inverterDailyEnergyAvailable &&
             $hasGridImportEnergy &&
             $hasGridExportEnergy;
 
@@ -6937,7 +6913,7 @@ HTML;
             if ($inverterGridEnergyAvailable) {
                 $houseEnergy = max(
                     0.0,
-                    $inverterACDailyEnergy +
+                    $inverterDailyEnergy +
                     (float) GetValue($gridImportEnergyID) -
                     (float) GetValue($gridExportEnergyID)
                 );
@@ -7007,7 +6983,6 @@ HTML;
             'inverterPowerAvailable' => $inverterPowerAvailable,
             'inverters' => $inverterDetails,
             'inverterDailyEnergy' => $inverterDailyEnergy,
-            'inverterACDailyEnergy' => $inverterACDailyEnergy,
             'inverterTotalEnergy' => $inverterTotalEnergy,
             'inverter2Temperature' => $inverter2Temperature,
             'outsideTemperature' => $this->ReadVar('OutsideTemperature'),
@@ -7040,7 +7015,6 @@ HTML;
                 'inverterTemperature' => $inverterTemperatureAvailable,
                 'inverter2Temperature' => $inverter2TemperatureAvailable,
                 'inverterDailyEnergy' => $inverterDailyEnergyAvailable,
-                'inverterACDailyEnergy' => $inverterACDailyEnergyAvailable,
                 'inverterTotalEnergy' => $inverterTotalEnergyAvailable,
                 'solarForecastRemaining' => (
                     $this->ReadPropertyInteger('SolarForecastRemaining') > 0
