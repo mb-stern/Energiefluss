@@ -51,9 +51,13 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('AutarkyVariable', 0);
         $this->RegisterPropertyInteger('SelfConsumptionVariable', 0);
 
-        // auto: konfigurierte Hausverbrauchsvariable verwenden, sonst Bilanz
+        // Berechnungsart ausschließlich für die aktuelle Hausleistung (W):
+        // auto: konfigurierte Hausleistungsvariable verwenden, sonst Bilanz
         // balance: PV + Batterie + Netzsaldo
-        // inverter-grid: Wechselrichterleistung + Netzbezug - Einspeisung
+        // inverter-grid: Wechselrichterleistung + Netzsaldo
+        //
+        // Die Hausenergie (kWh) wird unabhängig davon immer über die
+        // vollständige Tagesenergiebilanz berechnet.
         $this->RegisterPropertyString('HouseCalculationMode', 'auto');
         // energy = Tagesenergien, power = aktuelle Leistungen, no = ausblenden.
         $this->RegisterPropertyString('AutarkyCalculationMode', 'energy');
@@ -521,23 +525,23 @@ class Energiefluss extends IPSModuleStrict
                         ],
                         [
                             'type'    => 'Label',
-                            'caption' => 'Hausverbrauch',
+                            'caption' => 'Hausleistung und Hausenergie',
                         ],
                         [
                             'type'    => 'Select',
                             'name'    => 'HouseCalculationMode',
-                            'caption' => 'Berechnung des Hausverbrauchs',
+                            'caption' => 'Berechnung der Hausleistung (W)',
                             'options' => [
                                 [
-                                    'caption' => 'Automatisch: Variable verwenden, sonst PV + Batterie + Netz',
+                                    'caption' => 'Automatisch: Hausleistungsvariable verwenden, sonst PV + Batterie + Netz',
                                     'value'   => 'auto',
                                 ],
                                 [
-                                    'caption' => 'PV + Batterie + Netzbezug − Netzeinspeisung',
+                                    'caption' => 'PV-Leistung + Batterie + Netzsaldo',
                                     'value'   => 'balance',
                                 ],
                                 [
-                                    'caption' => 'Wechselrichter gesamt + Netzbezug − Netzeinspeisung',
+                                    'caption' => 'Wechselrichterleistung gesamt + Netzsaldo',
                                     'value'   => 'inverter-grid',
                                 ],
                             ],
@@ -545,12 +549,12 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'HousePower',
-                            'caption' => 'Hausverbrauch (W, nur bei Automatisch)',
+                            'caption' => 'Hausleistung (W, nur bei Automatisch)',
                         ],
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'HouseEnergy',
-                            'caption' => 'Hausverbrauch heute (kWh, nur bei Automatisch)',
+                            'caption' => 'Hausverbrauch heute (kWh, optional – sonst interne Berechnung)',
                         ],
                         [
                             'type'    => 'SelectVariable',
@@ -6919,9 +6923,20 @@ HTML;
         $pvEnergyTotal = $inverterDailyEnergy;
         $hasPvEnergy = $inverterDailyEnergyAvailable;
 
+        // Die Auswahl HouseCalculationMode gilt ausschließlich für die
+        // momentane Hausleistung in Watt.
+        //
+        // Für die Tagesenergie gilt:
+        // 1. Ist eine gültige HouseEnergy-Variable gewählt, wird deren Wert
+        //    direkt verwendet.
+        // 2. Andernfalls erfolgt die interne Bilanz:
+        //    PV + Netzbezug - Einspeisung
+        //    + Batterieentladung - Batterieladung.
         $houseEnergy = 0.0;
         $houseEnergyAvailable = false;
-        $houseCalculationMode = $this->ReadPropertyString('HouseCalculationMode');
+        $houseCalculationMode = $this->ReadPropertyString(
+            'HouseCalculationMode'
+        );
 
         $houseEnergyID = $this->ReadPropertyInteger('HouseEnergy');
         $hasConfiguredHouseEnergy =
@@ -6934,26 +6949,13 @@ HTML;
             $hasGridExportEnergy &&
             $hasBatteryEnergy;
 
-        $inverterGridEnergyAvailable =
-            $inverterDailyEnergyAvailable &&
-            $hasGridImportEnergy &&
-            $hasGridExportEnergy;
-
-        if ($houseCalculationMode === 'auto' && $hasConfiguredHouseEnergy) {
-            $houseEnergy = max(0.0, (float) GetValue($houseEnergyID));
+        if ($hasConfiguredHouseEnergy) {
+            $houseEnergy = max(
+                0.0,
+                (float) GetValue($houseEnergyID)
+            );
             $houseEnergyAvailable = true;
-        } elseif ($houseCalculationMode === 'inverter-grid') {
-            if ($inverterGridEnergyAvailable) {
-                $houseEnergy = max(
-                    0.0,
-                    $inverterDailyEnergy +
-                    (float) GetValue($gridImportEnergyID) -
-                    (float) GetValue($gridExportEnergyID)
-                );
-                $houseEnergyAvailable = true;
-            }
         } elseif ($balanceEnergyAvailable) {
-            // Gilt für "balance" sowie als Rückfall von "auto".
             $houseEnergy = max(
                 0.0,
                 $pvEnergyTotal +
