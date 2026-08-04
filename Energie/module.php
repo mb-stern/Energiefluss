@@ -3753,7 +3753,10 @@ class Energiefluss extends IPSModuleStrict
             },
             solar: {
                 colour: AC.solar,
-                show_daily: showEnergyDetails && entityAvailable(d, 'inverterDailyEnergy'),
+                // Die Solar-Tagesenergie gehört auch in der Compact-Ansicht
+                // in die obere PV-Anzeige. Nur die übrigen Detailenergien
+                // bleiben über showEnergyDetails in Compact ausgeblendet.
+                show_daily: entityAvailable(d, 'inverterDailyEnergy'),
                 mppts: Math.max(1, Math.min(6, activePvs.length || 1)),
                 animation_speed: Math.max(1, Math.round(9 / flowSpeedFactor)),
                 // Die Sunsynk-Karte besitzt nur einen gemeinsamen
