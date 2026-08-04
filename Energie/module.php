@@ -5292,15 +5292,21 @@ class Energiefluss extends IPSModuleStrict
                 : 0;
 
             // Tages-Eigenverbrauch:
-            // Anteil der Wechselrichter-Tagesenergie, der nicht ins Netz
-            // eingespeist wurde. Die Batterieentladung wird nicht nochmals
-            // addiert, da sie keine zusätzliche Energieerzeugung darstellt.
-            const ownEnergy = pvEnergy;
+            // Die selbst gedeckte Hausenergie ist der Hausverbrauch abzüglich
+            // des Netzbezugs. Als Bezugsgröße dient die gesamte konfigurierte
+            // Wechselrichter-/PV-Tagesenergie.
+            //
+            // Dadurch verwenden Autarkie und Eigenverbrauch dieselbe zentrale
+            // Hausenergie, unabhängig davon, ob diese aus einer gewählten
+            // Variable oder aus der internen PV-/Batterie-/Netzbilanz stammt.
+            const selfSuppliedHouseEnergy = Math.max(
+                houseEnergy - Math.max(gridImportEnergy, 0),
+                0
+            );
 
-            selfConsumption = ownEnergy > 0
+            selfConsumption = pvEnergy > 0
                 ? clampPercent(
-                    ((ownEnergy - Math.max(gridExportEnergy, 0)) /
-                        ownEnergy) * 100
+                    (selfSuppliedHouseEnergy / pvEnergy) * 100
                 )
                 : 0;
         }
