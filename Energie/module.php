@@ -3489,88 +3489,47 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function prepareSunsynkConsumers(groups) {
-        // Die Sunsynk-Full-Ansicht verträgt keine dynamisch wechselnde Anzahl
-        // von additional_loads. Deshalb bleiben ihre Plätze stabil. Unterhalb
-        // der Grenzleistung wird ein Platz nur inhaltlich geleert, aber nicht
-        // aus der Konfiguration entfernt.
-        const fullLayout = currentTechnicalLayout.startsWith('full');
-
-        const allConsumers = groups
+        const visibleConsumers = groups
             .filter(group => group.hasPower)
-            .map(group => {
-                const value = Math.max(Number(group.value || 0), 0);
-                const displayThreshold = Math.max(
+            .map(group => ({
+                ...group,
+                value: Math.max(Number(group.value || 0), 0),
+                displayThreshold: Math.max(
                     Number(group.displayThreshold || 0),
                     0
-                );
-                const visible =
-                    displayThreshold <= 0 ||
-                    value >= displayThreshold;
-
-                return {
-                    ...group,
-                    value,
-                    displayThreshold,
-                    visible
-                };
-            });
-
-        // AUX bleibt wie bisher wirklich grenzwertgefiltert.
-        const auxGroups = allConsumers
+                )
+            }))
             .filter(group =>
-                group.isAux === true &&
-                group.visible
-            )
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
+
+        const auxGroups = visibleConsumers
+            .filter(group => group.isAux === true)
             .slice(0, 2);
 
-        const normalConsumers = allConsumers.filter(
-            group => !group.isAux
+        const normalConsumers = visibleConsumers.filter(
+            group => !auxGroups.includes(group)
         );
 
-        let activeGroups;
+        const activeConsumers = normalConsumers
+            .filter(group => group.value > 0)
+            .sort((a, b) => b.value - a.value);
 
-        if (fullLayout) {
-            // Stabile Slots im Full-Modus. Verdeckte Verbraucher behalten
-            // ihren Platz, liefern aber keine sichtbaren Inhalte.
-            activeGroups = normalConsumers
-                .slice(0, 6)
-                .map(group => group.visible
-                    ? group
-                    : {
-                        ...group,
-                        name: '',
-                        icon: 'plug',
-                        value: 0,
-                        daily: 0,
-                        hasDaily: false,
-                        hiddenByThreshold: true
-                    }
-                );
-        } else {
-            // Compact und Lite können die Anzahl dynamisch ändern.
-            const visibleConsumers = normalConsumers.filter(
-                group => group.visible
-            );
+        const inactiveConsumers = normalConsumers.filter(
+            group => group.value <= 0
+        );
 
-            const activeConsumers = visibleConsumers
-                .filter(group => Number(group.value || 0) > 0)
-                .sort((a, b) =>
-                    Number(b.value || 0) -
-                    Number(a.value || 0)
-                );
-
-            const inactiveConsumers = visibleConsumers.filter(group =>
-                Number(group.value || 0) <= 0
-            );
-
-            activeGroups = [
-                ...activeConsumers,
-                ...inactiveConsumers
-            ].slice(0, 3);
-        }
+        const activeGroups = [
+            ...activeConsumers,
+            ...inactiveConsumers
+        ].slice(
+            0,
+            currentTechnicalLayout.startsWith('full') ? 6 : 3
+        );
 
         return {
-            configuredConsumers: allConsumers,
+            configuredConsumers: visibleConsumers,
             auxGroups,
             activeGroups
         };
