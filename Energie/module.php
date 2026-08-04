@@ -4208,6 +4208,24 @@ class Energiefluss extends IPSModuleStrict
                         card,
                         card.__symconLastData || d
                     );
+
+                    // Die Sunsynk-Card rendert Autarkie und Verhältnis bei
+                    // Änderungen ihres Shadow-DOM teilweise erneut. Deshalb
+                    // unsere getrennten Werte nach jedem Renderdurchlauf
+                    // wieder einsetzen.
+                    const ratioContext =
+                        card.__symconRatioContext;
+
+                    if (ratioContext) {
+                        applySunsynkRatios(
+                            card,
+                            ratioContext.d,
+                            ratioContext.grid,
+                            ratioContext.haus,
+                            ratioContext.pvs,
+                            ratioContext.batteries
+                        );
+                    }
                 });
             });
             card.__symconVisualObserver.observe(card.shadowRoot, {
@@ -5335,16 +5353,37 @@ class Energiefluss extends IPSModuleStrict
         const autarkyLabel = root.getElementById('autarky');
         const ratioLabel = root.getElementById('ratio');
 
-        if (autarkyValue) {
-            autarkyValue.textContent = `${autarky}%`;
+        const autarkyText = `${autarky}%`;
+        const selfConsumptionText = `${selfConsumption}%`;
+
+        // Nur echte Änderungen schreiben. Das verhindert, dass der
+        // MutationObserver durch unsere eigenen identischen Werte dauerhaft
+        // erneut ausgelöst wird.
+        if (
+            autarkyValue &&
+            autarkyValue.textContent !== autarkyText
+        ) {
+            autarkyValue.textContent = autarkyText;
         }
-        if (ratioValue) {
-            ratioValue.textContent = `${selfConsumption}%`;
+
+        if (
+            ratioValue &&
+            ratioValue.textContent !== selfConsumptionText
+        ) {
+            ratioValue.textContent = selfConsumptionText;
         }
-        if (autarkyLabel) {
+
+        if (
+            autarkyLabel &&
+            autarkyLabel.textContent !== 'Autarkie'
+        ) {
             autarkyLabel.textContent = 'Autarkie';
         }
-        if (ratioLabel) {
+
+        if (
+            ratioLabel &&
+            ratioLabel.textContent !== 'Eigenverbrauch'
+        ) {
             ratioLabel.textContent = 'Eigenverbrauch';
         }
 
@@ -5412,6 +5451,13 @@ class Energiefluss extends IPSModuleStrict
             host.appendChild(card);
             sunsynkCard = card;
             card.__symconLastData = d;
+            card.__symconRatioContext = {
+                d,
+                grid,
+                haus,
+                pvs,
+                batteries
+            };
             await applySunsynkViewOverrides(card, d);
             scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
@@ -5440,9 +5486,16 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
         window.__symconHasWallbox = !!d.hasWallbox;
+        sunsynkCard.__symconLastData = d;
+        sunsynkCard.__symconRatioContext = {
+            d,
+            grid,
+            haus,
+            pvs,
+            batteries
+        };
         sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
-        sunsynkCard.__symconLastData = d;
         applySunsynkViewOverrides(sunsynkCard, d);
         scheduleSunsynkRatios(sunsynkCard, d, grid, haus, pvs, batteries);
         updateSunsynkWallboxAuxInfo(sunsynkCard, d, wallbox);
