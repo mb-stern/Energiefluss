@@ -271,6 +271,9 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.2 (04.08.2026)
+- Automatische Berechnung des Eigenverbrauchs korrigiert.
+
 ### Version 1.1 (03.08.2026)
 - Die Energiemenge (kwh) für den Hausverbrauch kann nun selber definiert werden, analog der Leistung.
 - Die Energiemenge lässt sich nun analog der Leistung in drei verschiedenen Modi berechen.

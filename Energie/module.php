@@ -48,6 +48,8 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('InverterCurrentL3', 0);
         $this->RegisterPropertyInteger('HousePower', 0);
         $this->RegisterPropertyInteger('HouseEnergy', 0);
+        $this->RegisterPropertyInteger('AutarkyVariable', 0);
+        $this->RegisterPropertyInteger('SelfConsumptionVariable', 0);
 
         // auto: konfigurierte Hausverbrauchsvariable verwenden, sonst Bilanz
         // balance: PV + Batterie + Netzsaldo
@@ -549,6 +551,16 @@ class Energiefluss extends IPSModuleStrict
                             'type'    => 'SelectVariable',
                             'name'    => 'HouseEnergy',
                             'caption' => 'Hausverbrauch heute (kWh, nur bei Automatisch)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'AutarkyVariable',
+                            'caption' => 'Autarkie (%, optional – sonst interne Berechnung)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'SelfConsumptionVariable',
+                            'caption' => 'Eigenverbrauch (%, optional – sonst interne Berechnung)',
                         ],
                         [
                             'type'    => 'Select',
@@ -5279,6 +5291,21 @@ class Energiefluss extends IPSModuleStrict
                 : 0;
         }
 
+        // Optional konfigurierte Prozentvariablen haben Vorrang vor
+        // der internen Berechnung. Ohne Auswahl bleibt das bisherige
+        // Berechnungsverhalten vollständig erhalten.
+        if (d.autarkyVariableAvailable) {
+            autarky = clampPercent(
+                Number(d.autarkyVariableValue || 0)
+            );
+        }
+
+        if (d.selfConsumptionVariableAvailable) {
+            selfConsumption = clampPercent(
+                Number(d.selfConsumptionVariableValue || 0)
+            );
+        }
+
         const autarkyValue = root.getElementById(
             `autarky${valueSuffix}_value`
         );
@@ -6213,6 +6240,8 @@ HTML;
             'InverterCurrentL3',
             'HousePower',
             'HouseEnergy',
+            'AutarkyVariable',
+            'SelfConsumptionVariable',
             'InverterVoltage',
             'InverterCurrent',
             'InverterFrequency',
@@ -6970,6 +6999,20 @@ HTML;
             'autarkyCalculationMode' => $this->ReadPropertyString(
                 'AutarkyCalculationMode'
             ),
+            'autarkyVariableValue' => $this->ReadVar('AutarkyVariable'),
+            'autarkyVariableAvailable' => (
+                $this->ReadPropertyInteger('AutarkyVariable') > 0
+                && IPS_VariableExists($this->ReadPropertyInteger('AutarkyVariable'))
+            ),
+            'selfConsumptionVariableValue' => $this->ReadVar(
+                'SelfConsumptionVariable'
+            ),
+            'selfConsumptionVariableAvailable' => (
+                $this->ReadPropertyInteger('SelfConsumptionVariable') > 0
+                && IPS_VariableExists(
+                    $this->ReadPropertyInteger('SelfConsumptionVariable')
+                )
+            ),
             'inverterPower'    => $inverterPower,
             'inverterCurrentL1' => $inverterCurrentL1,
             'inverterCurrentL2' => $inverterCurrentL2,
@@ -7002,6 +7045,18 @@ HTML;
                 'inverterCurrentL3' => $inverterCurrentL3Available,
                 'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
                 'houseEnergyConfigured' => ($this->ReadPropertyInteger('HouseEnergy') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HouseEnergy'))),
+                'autarkyVariableConfigured' => (
+                    $this->ReadPropertyInteger('AutarkyVariable') > 0
+                    && IPS_VariableExists(
+                        $this->ReadPropertyInteger('AutarkyVariable')
+                    )
+                ),
+                'selfConsumptionVariableConfigured' => (
+                    $this->ReadPropertyInteger('SelfConsumptionVariable') > 0
+                    && IPS_VariableExists(
+                        $this->ReadPropertyInteger('SelfConsumptionVariable')
+                    )
+                ),
                 'outsideTemperature' => (
                     $this->ReadPropertyInteger('OutsideTemperature') > 0
                     && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))
