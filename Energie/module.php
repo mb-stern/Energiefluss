@@ -48,10 +48,16 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('InverterCurrentL3', 0);
         $this->RegisterPropertyInteger('HousePower', 0);
         $this->RegisterPropertyInteger('HouseEnergy', 0);
+        $this->RegisterPropertyInteger('AutarkyVariable', 0);
+        $this->RegisterPropertyInteger('SelfConsumptionVariable', 0);
 
-        // auto: konfigurierte Hausverbrauchsvariable verwenden, sonst Bilanz
+        // Berechnungsart ausschließlich für die aktuelle Hausleistung (W):
+        // auto: konfigurierte Hausleistungsvariable verwenden, sonst Bilanz
         // balance: PV + Batterie + Netzsaldo
-        // inverter-grid: Wechselrichterleistung + Netzbezug - Einspeisung
+        // inverter-grid: Wechselrichterleistung + Netzsaldo
+        //
+        // Die Hausenergie (kWh) wird unabhängig davon immer über die
+        // vollständige Tagesenergiebilanz berechnet.
         $this->RegisterPropertyString('HouseCalculationMode', 'auto');
         // energy = Tagesenergien, power = aktuelle Leistungen, no = ausblenden.
         $this->RegisterPropertyString('AutarkyCalculationMode', 'energy');
@@ -519,23 +525,23 @@ class Energiefluss extends IPSModuleStrict
                         ],
                         [
                             'type'    => 'Label',
-                            'caption' => 'Hausverbrauch',
+                            'caption' => 'Hausleistung und Hausenergie',
                         ],
                         [
                             'type'    => 'Select',
                             'name'    => 'HouseCalculationMode',
-                            'caption' => 'Berechnung des Hausverbrauchs',
+                            'caption' => 'Berechnung der Hausleistung (W)',
                             'options' => [
                                 [
-                                    'caption' => 'Automatisch: Variable verwenden, sonst PV + Batterie + Netz',
+                                    'caption' => 'Automatisch: Hausleistungsvariable verwenden, sonst PV + Batterie + Netz',
                                     'value'   => 'auto',
                                 ],
                                 [
-                                    'caption' => 'PV + Batterie + Netzbezug − Netzeinspeisung',
+                                    'caption' => 'PV-Leistung + Batterie + Netzsaldo',
                                     'value'   => 'balance',
                                 ],
                                 [
-                                    'caption' => 'Wechselrichter gesamt + Netzbezug − Netzeinspeisung',
+                                    'caption' => 'Wechselrichterleistung gesamt + Netzsaldo',
                                     'value'   => 'inverter-grid',
                                 ],
                             ],
@@ -543,12 +549,22 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'HousePower',
-                            'caption' => 'Hausverbrauch (W, nur bei Automatisch)',
+                            'caption' => 'Hausleistung (W, nur bei Automatisch)',
                         ],
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'HouseEnergy',
-                            'caption' => 'Hausverbrauch heute (kWh, nur bei Automatisch)',
+                            'caption' => 'Hausverbrauch heute (kWh, optional – sonst interne Berechnung)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'AutarkyVariable',
+                            'caption' => 'Autarkie (%, optional – sonst interne Berechnung)',
+                        ],
+                        [
+                            'type'    => 'SelectVariable',
+                            'name'    => 'SelfConsumptionVariable',
+                            'caption' => 'Eigenverbrauch (%, optional – sonst interne Berechnung)',
                         ],
                         [
                             'type'    => 'Select',
@@ -3502,22 +3518,21 @@ class Energiefluss extends IPSModuleStrict
                     Number(group.displayThreshold || 0),
                     0
                 )
-            }))
-            .filter(group =>
-                group.displayThreshold <= 0 ||
-                group.value >= group.displayThreshold
-            );
+            }));
 
-        // Maximal zwei Verbraucher werden über den originalen AUX-Bereich
-        // der Sunsynk-Card dargestellt. Weitere versehentlich als AUX
-        // markierte Einträge bleiben normale Verbraucher.
+        // AUX bleibt von der Mindestleistung unberührt und verhält sich
+        // damit exakt wie vor Einführung der Anzeigeschwelle.
         const auxGroups = configuredConsumers
             .filter(group => group.isAux === true)
             .slice(0, 2);
 
-        const normalConsumers = configuredConsumers.filter(
-            group => !auxGroups.includes(group)
-        );
+        // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        const normalConsumers = configuredConsumers
+            .filter(group => !auxGroups.includes(group))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
 
         // Aktive normale Verbraucher zuerst, absteigend nach Leistung.
         const activeConsumers = normalConsumers
@@ -3532,10 +3547,15 @@ class Energiefluss extends IPSModuleStrict
             Number(group.value || 0) <= 0
         );
 
+        const maxConsumers =
+            full && auxGroups.length > 0
+                ? 2
+                : (full ? 6 : 3);
+
         const activeGroups = [
             ...activeConsumers,
             ...inactiveConsumers
-        ].slice(0, full ? 6 : 3);
+        ].slice(0, maxConsumers);
 
         // Nur diese Texte dürfen später geometrisch zentriert werden.
         // Dadurch bleiben PV-Stringwerte, Spannungen, Ströme und sonstige
@@ -3733,7 +3753,10 @@ class Energiefluss extends IPSModuleStrict
             },
             solar: {
                 colour: AC.solar,
-                show_daily: showEnergyDetails && entityAvailable(d, 'inverterDailyEnergy'),
+                // Die Solar-Tagesenergie gehört auch in der Compact-Ansicht
+                // in die obere PV-Anzeige. Nur die übrigen Detailenergien
+                // bleiben über showEnergyDetails in Compact ausgeblendet.
+                show_daily: entityAvailable(d, 'inverterDailyEnergy'),
                 mppts: Math.max(1, Math.min(6, activePvs.length || 1)),
                 animation_speed: Math.max(1, Math.round(9 / flowSpeedFactor)),
                 // Die Sunsynk-Karte besitzt nur einen gemeinsamen
@@ -3919,20 +3942,21 @@ class Energiefluss extends IPSModuleStrict
                     Number(group.displayThreshold || 0),
                     0
                 )
-            }))
-            .filter(group =>
-                group.displayThreshold <= 0 ||
-                group.value >= group.displayThreshold
-            );
+            }));
 
-        // Exakt dieselbe AUX-Auswahl wie in createSunsynkConfig.
+        // AUX bleibt von der Mindestleistung unberührt und verhält sich
+        // damit exakt wie vor Einführung der Anzeigeschwelle.
         const auxGroups = configuredConsumers
             .filter(group => group.isAux === true)
             .slice(0, 2);
 
-        const normalConsumers = configuredConsumers.filter(
-            group => !auxGroups.includes(group)
-        );
+        // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        const normalConsumers = configuredConsumers
+            .filter(group => !auxGroups.includes(group))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
 
         const activeConsumers = normalConsumers
             .filter(group => Number(group.value || 0) > 0)
@@ -3946,13 +3970,18 @@ class Energiefluss extends IPSModuleStrict
         );
 
         // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
+        const fullLayout =
+            currentTechnicalLayout.startsWith('full');
+
+        const maxConsumers =
+            fullLayout && auxGroups.length > 0
+                ? 2
+                : (fullLayout ? 6 : 3);
+
         const activeGroups = [
             ...activeConsumers,
             ...inactiveConsumers
-        ].slice(
-            0,
-            currentTechnicalLayout.startsWith('full') ? 6 : 3
-        );
+        ].slice(0, maxConsumers);
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
         const pvEnergyTotal = entityAvailable(d, 'inverterDailyEnergy')
@@ -4182,6 +4211,24 @@ class Energiefluss extends IPSModuleStrict
                         card,
                         card.__symconLastData || d
                     );
+
+                    // Die Sunsynk-Card rendert Autarkie und Verhältnis bei
+                    // Änderungen ihres Shadow-DOM teilweise erneut. Deshalb
+                    // unsere getrennten Werte nach jedem Renderdurchlauf
+                    // wieder einsetzen.
+                    const ratioContext =
+                        card.__symconRatioContext;
+
+                    if (ratioContext) {
+                        applySunsynkRatios(
+                            card,
+                            ratioContext.d,
+                            ratioContext.grid,
+                            ratioContext.haus,
+                            ratioContext.pvs,
+                            ratioContext.batteries
+                        );
+                    }
                 });
             });
             card.__symconVisualObserver.observe(card.shadowRoot, {
@@ -5265,24 +5312,39 @@ class Energiefluss extends IPSModuleStrict
                 )
                 : 0;
 
-            const batteryDischargeEnergy = (
-                Array.isArray(batteries) ? batteries : []
-            ).reduce(
-                (sum, battery) =>
-                    sum + Math.max(Number(battery?.dischargeEnergy || 0), 0),
+            // Tages-Eigenverbrauch:
+            // Die selbst gedeckte Hausenergie ist der Hausverbrauch abzüglich
+            // des Netzbezugs. Als Bezugsgröße dient die gesamte konfigurierte
+            // Wechselrichter-/PV-Tagesenergie.
+            //
+            // Dadurch verwenden Autarkie und Eigenverbrauch dieselbe zentrale
+            // Hausenergie, unabhängig davon, ob diese aus einer gewählten
+            // Variable oder aus der internen PV-/Batterie-/Netzbilanz stammt.
+            const selfSuppliedHouseEnergy = Math.max(
+                houseEnergy - Math.max(gridImportEnergy, 0),
                 0
             );
-            const ownEnergy = pvEnergy + batteryDischargeEnergy;
 
-            // Tages-Eigenverbrauch im Hybridsystem: PV-Tagesenergie plus
-            // Batterieentladung gelten als eigene Energie. Nur die ins Netz
-            // eingespeiste Energie vermindert den Eigenverbrauch.
-            selfConsumption = ownEnergy > 0
+            selfConsumption = pvEnergy > 0
                 ? clampPercent(
-                    ((ownEnergy - Math.max(gridExportEnergy, 0)) /
-                        ownEnergy) * 100
+                    (selfSuppliedHouseEnergy / pvEnergy) * 100
                 )
                 : 0;
+        }
+
+        // Optional konfigurierte Prozentvariablen haben Vorrang vor
+        // der internen Berechnung. Ohne Auswahl bleibt das bisherige
+        // Berechnungsverhalten vollständig erhalten.
+        if (d.autarkyVariableAvailable) {
+            autarky = clampPercent(
+                Number(d.autarkyVariableValue || 0)
+            );
+        }
+
+        if (d.selfConsumptionVariableAvailable) {
+            selfConsumption = clampPercent(
+                Number(d.selfConsumptionVariableValue || 0)
+            );
         }
 
         const autarkyValue = root.getElementById(
@@ -5294,16 +5356,37 @@ class Energiefluss extends IPSModuleStrict
         const autarkyLabel = root.getElementById('autarky');
         const ratioLabel = root.getElementById('ratio');
 
-        if (autarkyValue) {
-            autarkyValue.textContent = `${autarky}%`;
+        const autarkyText = `${autarky}%`;
+        const selfConsumptionText = `${selfConsumption}%`;
+
+        // Nur echte Änderungen schreiben. Das verhindert, dass der
+        // MutationObserver durch unsere eigenen identischen Werte dauerhaft
+        // erneut ausgelöst wird.
+        if (
+            autarkyValue &&
+            autarkyValue.textContent !== autarkyText
+        ) {
+            autarkyValue.textContent = autarkyText;
         }
-        if (ratioValue) {
-            ratioValue.textContent = `${selfConsumption}%`;
+
+        if (
+            ratioValue &&
+            ratioValue.textContent !== selfConsumptionText
+        ) {
+            ratioValue.textContent = selfConsumptionText;
         }
-        if (autarkyLabel) {
+
+        if (
+            autarkyLabel &&
+            autarkyLabel.textContent !== 'Autarkie'
+        ) {
             autarkyLabel.textContent = 'Autarkie';
         }
-        if (ratioLabel) {
+
+        if (
+            ratioLabel &&
+            ratioLabel.textContent !== 'Eigenverbrauch'
+        ) {
             ratioLabel.textContent = 'Eigenverbrauch';
         }
 
@@ -5371,6 +5454,13 @@ class Energiefluss extends IPSModuleStrict
             host.appendChild(card);
             sunsynkCard = card;
             card.__symconLastData = d;
+            card.__symconRatioContext = {
+                d,
+                grid,
+                haus,
+                pvs,
+                batteries
+            };
             await applySunsynkViewOverrides(card, d);
             scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
@@ -5399,9 +5489,16 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
         window.__symconHasWallbox = !!d.hasWallbox;
+        sunsynkCard.__symconLastData = d;
+        sunsynkCard.__symconRatioContext = {
+            d,
+            grid,
+            haus,
+            pvs,
+            batteries
+        };
         sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
-        sunsynkCard.__symconLastData = d;
         applySunsynkViewOverrides(sunsynkCard, d);
         scheduleSunsynkRatios(sunsynkCard, d, grid, haus, pvs, batteries);
         updateSunsynkWallboxAuxInfo(sunsynkCard, d, wallbox);
@@ -6219,6 +6316,8 @@ HTML;
             'InverterCurrentL3',
             'HousePower',
             'HouseEnergy',
+            'AutarkyVariable',
+            'SelfConsumptionVariable',
             'InverterVoltage',
             'InverterCurrent',
             'InverterFrequency',
@@ -6886,9 +6985,20 @@ HTML;
         $pvEnergyTotal = $inverterDailyEnergy;
         $hasPvEnergy = $inverterDailyEnergyAvailable;
 
+        // Die Auswahl HouseCalculationMode gilt ausschließlich für die
+        // momentane Hausleistung in Watt.
+        //
+        // Für die Tagesenergie gilt:
+        // 1. Ist eine gültige HouseEnergy-Variable gewählt, wird deren Wert
+        //    direkt verwendet.
+        // 2. Andernfalls erfolgt die interne Bilanz:
+        //    PV + Netzbezug - Einspeisung
+        //    + Batterieentladung - Batterieladung.
         $houseEnergy = 0.0;
         $houseEnergyAvailable = false;
-        $houseCalculationMode = $this->ReadPropertyString('HouseCalculationMode');
+        $houseCalculationMode = $this->ReadPropertyString(
+            'HouseCalculationMode'
+        );
 
         $houseEnergyID = $this->ReadPropertyInteger('HouseEnergy');
         $hasConfiguredHouseEnergy =
@@ -6901,26 +7011,13 @@ HTML;
             $hasGridExportEnergy &&
             $hasBatteryEnergy;
 
-        $inverterGridEnergyAvailable =
-            $inverterDailyEnergyAvailable &&
-            $hasGridImportEnergy &&
-            $hasGridExportEnergy;
-
-        if ($houseCalculationMode === 'auto' && $hasConfiguredHouseEnergy) {
-            $houseEnergy = max(0.0, (float) GetValue($houseEnergyID));
+        if ($hasConfiguredHouseEnergy) {
+            $houseEnergy = max(
+                0.0,
+                (float) GetValue($houseEnergyID)
+            );
             $houseEnergyAvailable = true;
-        } elseif ($houseCalculationMode === 'inverter-grid') {
-            if ($inverterGridEnergyAvailable) {
-                $houseEnergy = max(
-                    0.0,
-                    $inverterDailyEnergy +
-                    (float) GetValue($gridImportEnergyID) -
-                    (float) GetValue($gridExportEnergyID)
-                );
-                $houseEnergyAvailable = true;
-            }
         } elseif ($balanceEnergyAvailable) {
-            // Gilt für "balance" sowie als Rückfall von "auto".
             $houseEnergy = max(
                 0.0,
                 $pvEnergyTotal +
@@ -6976,6 +7073,20 @@ HTML;
             'autarkyCalculationMode' => $this->ReadPropertyString(
                 'AutarkyCalculationMode'
             ),
+            'autarkyVariableValue' => $this->ReadVar('AutarkyVariable'),
+            'autarkyVariableAvailable' => (
+                $this->ReadPropertyInteger('AutarkyVariable') > 0
+                && IPS_VariableExists($this->ReadPropertyInteger('AutarkyVariable'))
+            ),
+            'selfConsumptionVariableValue' => $this->ReadVar(
+                'SelfConsumptionVariable'
+            ),
+            'selfConsumptionVariableAvailable' => (
+                $this->ReadPropertyInteger('SelfConsumptionVariable') > 0
+                && IPS_VariableExists(
+                    $this->ReadPropertyInteger('SelfConsumptionVariable')
+                )
+            ),
             'inverterPower'    => $inverterPower,
             'inverterCurrentL1' => $inverterCurrentL1,
             'inverterCurrentL2' => $inverterCurrentL2,
@@ -7008,6 +7119,18 @@ HTML;
                 'inverterCurrentL3' => $inverterCurrentL3Available,
                 'housePowerConfigured' => ($this->ReadPropertyInteger('HousePower') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HousePower'))),
                 'houseEnergyConfigured' => ($this->ReadPropertyInteger('HouseEnergy') > 0 && IPS_VariableExists($this->ReadPropertyInteger('HouseEnergy'))),
+                'autarkyVariableConfigured' => (
+                    $this->ReadPropertyInteger('AutarkyVariable') > 0
+                    && IPS_VariableExists(
+                        $this->ReadPropertyInteger('AutarkyVariable')
+                    )
+                ),
+                'selfConsumptionVariableConfigured' => (
+                    $this->ReadPropertyInteger('SelfConsumptionVariable') > 0
+                    && IPS_VariableExists(
+                        $this->ReadPropertyInteger('SelfConsumptionVariable')
+                    )
+                ),
                 'outsideTemperature' => (
                     $this->ReadPropertyInteger('OutsideTemperature') > 0
                     && IPS_VariableExists($this->ReadPropertyInteger('OutsideTemperature'))

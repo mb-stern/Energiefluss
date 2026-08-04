@@ -271,6 +271,11 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.2 (04.08.2026)
+- Automatische Berechnung des Eigenverbrauchs überarbeitet.
+- Autarkie und Eigenverbrauch können nun selber definiert werden und die automatische Berechnung überarbeitet.
+- AUX und normale Verbraucher überarbeitet, in Full werden max. 2 AUX und 2 Verbraucher dargestellt.
+
 ### Version 1.1 (03.08.2026)
 - Die Energiemenge (kwh) für den Hausverbrauch kann nun selber definiert werden, analog der Leistung.
 - Die Energiemenge lässt sich nun analog der Leistung in drei verschiedenen Modi berechen.
