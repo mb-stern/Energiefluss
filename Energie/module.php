@@ -3514,26 +3514,21 @@ class Energiefluss extends IPSModuleStrict
                     Number(group.displayThreshold || 0),
                     0
                 )
-            }))
-            // Einzige Ergänzung gegenüber der früher funktionierenden
-            // Verbraucherlogik: Ein Verbraucher wird vor Sortierung und
-            // AUX-Zuordnung ausgeblendet, solange seine Leistung unter
-            // der konfigurierten Mindestleistung liegt.
-            .filter(group =>
-                group.displayThreshold <= 0 ||
-                group.value >= group.displayThreshold
-            );
+            }));
 
-        // Maximal zwei Verbraucher werden über den originalen AUX-Bereich
-        // der Sunsynk-Card dargestellt. Weitere versehentlich als AUX
-        // markierte Einträge bleiben normale Verbraucher.
+        // AUX bleibt von der Mindestleistung unberührt und verhält sich
+        // damit exakt wie vor Einführung der Anzeigeschwelle.
         const auxGroups = configuredConsumers
             .filter(group => group.isAux === true)
             .slice(0, 2);
 
-        const normalConsumers = configuredConsumers.filter(
-            group => !auxGroups.includes(group)
-        );
+        // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        const normalConsumers = configuredConsumers
+            .filter(group => !auxGroups.includes(group))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
 
         // Aktive normale Verbraucher zuerst, absteigend nach Leistung.
         const activeConsumers = normalConsumers
@@ -3940,24 +3935,21 @@ class Energiefluss extends IPSModuleStrict
                     Number(group.displayThreshold || 0),
                     0
                 )
-            }))
-            // Einzige Ergänzung gegenüber der früher funktionierenden
-            // Verbraucherlogik: Ein Verbraucher wird vor Sortierung und
-            // AUX-Zuordnung ausgeblendet, solange seine Leistung unter
-            // der konfigurierten Mindestleistung liegt.
-            .filter(group =>
-                group.displayThreshold <= 0 ||
-                group.value >= group.displayThreshold
-            );
+            }));
 
-        // Exakt dieselbe AUX-Auswahl wie in createSunsynkConfig.
+        // AUX bleibt von der Mindestleistung unberührt und verhält sich
+        // damit exakt wie vor Einführung der Anzeigeschwelle.
         const auxGroups = configuredConsumers
             .filter(group => group.isAux === true)
             .slice(0, 2);
 
-        const normalConsumers = configuredConsumers.filter(
-            group => !auxGroups.includes(group)
-        );
+        // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        const normalConsumers = configuredConsumers
+            .filter(group => !auxGroups.includes(group))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
 
         const activeConsumers = normalConsumers
             .filter(group => Number(group.value || 0) > 0)
