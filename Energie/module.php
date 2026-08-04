@@ -3515,6 +3515,10 @@ class Energiefluss extends IPSModuleStrict
                     0
                 )
             }))
+            // Einzige Ergänzung gegenüber der früher funktionierenden
+            // Verbraucherlogik: Ein Verbraucher wird vor Sortierung und
+            // AUX-Zuordnung ausgeblendet, solange seine Leistung unter
+            // der konfigurierten Mindestleistung liegt.
             .filter(group =>
                 group.displayThreshold <= 0 ||
                 group.value >= group.displayThreshold
@@ -3932,6 +3936,10 @@ class Energiefluss extends IPSModuleStrict
                     0
                 )
             }))
+            // Einzige Ergänzung gegenüber der früher funktionierenden
+            // Verbraucherlogik: Ein Verbraucher wird vor Sortierung und
+            // AUX-Zuordnung ausgeblendet, solange seine Leistung unter
+            // der konfigurierten Mindestleistung liegt.
             .filter(group =>
                 group.displayThreshold <= 0 ||
                 group.value >= group.displayThreshold
