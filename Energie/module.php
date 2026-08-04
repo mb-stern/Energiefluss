@@ -3548,10 +3548,15 @@ class Energiefluss extends IPSModuleStrict
             Number(group.value || 0) <= 0
         );
 
+        const maxConsumers =
+            full && auxGroups.length > 0
+                ? 2
+                : (full ? 6 : 3);
+
         const activeGroups = [
             ...activeConsumers,
             ...inactiveConsumers
-        ].slice(0, full ? 6 : 3);
+        ].slice(0, maxConsumers);
 
         // Nur diese Texte dürfen später geometrisch zentriert werden.
         // Dadurch bleiben PV-Stringwerte, Spannungen, Ströme und sonstige
@@ -3966,13 +3971,18 @@ class Energiefluss extends IPSModuleStrict
         );
 
         // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
+        const fullLayout =
+            currentTechnicalLayout.startsWith('full');
+
+        const maxConsumers =
+            fullLayout && auxGroups.length > 0
+                ? 2
+                : (fullLayout ? 6 : 3);
+
         const activeGroups = [
             ...activeConsumers,
             ...inactiveConsumers
-        ].slice(
-            0,
-            currentTechnicalLayout.startsWith('full') ? 6 : 3
-        );
+        ].slice(0, maxConsumers);
         const bat1 = activeBatteries[0] || {};
         const bat2 = activeBatteries[1] || {};
         const pvEnergyTotal = entityAvailable(d, 'inverterDailyEnergy')
