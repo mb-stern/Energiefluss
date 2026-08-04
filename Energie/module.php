@@ -5265,18 +5265,12 @@ class Energiefluss extends IPSModuleStrict
                 )
                 : 0;
 
-            const batteryDischargeEnergy = (
-                Array.isArray(batteries) ? batteries : []
-            ).reduce(
-                (sum, battery) =>
-                    sum + Math.max(Number(battery?.dischargeEnergy || 0), 0),
-                0
-            );
-            const ownEnergy = pvEnergy + batteryDischargeEnergy;
+            // Tages-Eigenverbrauch:
+            // Anteil der Wechselrichter-Tagesenergie, der nicht ins Netz
+            // eingespeist wurde. Die Batterieentladung wird nicht nochmals
+            // addiert, da sie keine zusätzliche Energieerzeugung darstellt.
+            const ownEnergy = pvEnergy;
 
-            // Tages-Eigenverbrauch im Hybridsystem: PV-Tagesenergie plus
-            // Batterieentladung gelten als eigene Energie. Nur die ins Netz
-            // eingespeiste Energie vermindert den Eigenverbrauch.
             selfConsumption = ownEnergy > 0
                 ? clampPercent(
                     ((ownEnergy - Math.max(gridExportEnergy, 0)) /
