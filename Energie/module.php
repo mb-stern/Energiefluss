@@ -6297,7 +6297,7 @@ HTML;
             'CreateVariableHousePower',
             'CalculatedHousePower',
             'Hausleistung',
-            '~Power',
+            '~Watt',
             10
         );
         $this->ConfigureCalculatedVariable(
@@ -6325,7 +6325,7 @@ HTML;
             'CreateVariablePvPower',
             'CalculatedPvPower',
             'PV-Gesamtleistung',
-            '~Power',
+            '~Watt',
             50
         );
         $this->ConfigureCalculatedVariable(
@@ -6339,21 +6339,21 @@ HTML;
             'CreateVariableGridImportPower',
             'CalculatedGridImportPower',
             'Netzbezug',
-            '~Power',
+            '~Watt',
             70
         );
         $this->ConfigureCalculatedVariable(
             'CreateVariableGridExportPower',
             'CalculatedGridExportPower',
             'Netzeinspeisung',
-            '~Power',
+            '~Watt',
             80
         );
         $this->ConfigureCalculatedVariable(
             'CreateVariableBatteryPower',
             'CalculatedBatteryPower',
             'Batterieleistung gesamt',
-            '~Power',
+            '~Watt',
             90
         );
         $this->ConfigureCalculatedVariable(
@@ -6374,7 +6374,7 @@ HTML;
             'CreateVariableWallboxPower',
             'CalculatedWallboxPower',
             'Wallbox-Leistung',
-            '~Power',
+            '~Watt',
             120
         );
         $this->ConfigureCalculatedVariable(
