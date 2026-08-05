@@ -6529,39 +6529,88 @@ HTML;
             ? $payload['wallbox']
             : [];
 
+        // Leistungswerte werden im Modul immer in Watt geführt und deshalb
+        // auf ganze Watt gerundet. Energie- und Prozentwerte bleiben Float.
         $values = [
-            'CalculatedHousePower' => $housePower,
-            'CalculatedHouseEnergy' => $houseEnergy,
-            'CalculatedAutarky' => $autarky,
-            'CalculatedSelfConsumption' => $selfConsumption,
-            'CalculatedPvPower' => $pvPower,
-            'CalculatedPvEnergy' => $pvEnergy,
-            'CalculatedGridImportPower' => $gridImportPower,
-            'CalculatedGridExportPower' => $gridExportPower,
-            'CalculatedBatteryPower' => $batteryPower,
-            'CalculatedBatteryChargeEnergy' => $batteryChargeEnergy,
-            'CalculatedBatteryDischargeEnergy' => $batteryDischargeEnergy,
-            'CalculatedWallboxPower' => max(
-                (float) ($wallbox['value'] ?? 0.0),
-                0.0
-            ),
-            'CalculatedWallboxEnergy' => max(
-                (float) ($wallbox['energyValue'] ?? 0.0),
-                0.0
-            ),
+            'CalculatedHousePower' => [
+                'value' => round($housePower),
+                'tolerance' => 0.0,
+            ],
+            'CalculatedHouseEnergy' => [
+                'value' => $houseEnergy,
+                'tolerance' => 0.0001,
+            ],
+            'CalculatedAutarky' => [
+                'value' => $autarky,
+                'tolerance' => 0.0001,
+            ],
+            'CalculatedSelfConsumption' => [
+                'value' => $selfConsumption,
+                'tolerance' => 0.0001,
+            ],
+            'CalculatedPvPower' => [
+                'value' => round($pvPower),
+                'tolerance' => 0.0,
+            ],
+            'CalculatedPvEnergy' => [
+                'value' => $pvEnergy,
+                'tolerance' => 0.0001,
+            ],
+            'CalculatedGridImportPower' => [
+                'value' => round($gridImportPower),
+                'tolerance' => 0.0,
+            ],
+            'CalculatedGridExportPower' => [
+                'value' => round($gridExportPower),
+                'tolerance' => 0.0,
+            ],
+            'CalculatedBatteryPower' => [
+                'value' => round($batteryPower),
+                'tolerance' => 0.0,
+            ],
+            'CalculatedBatteryChargeEnergy' => [
+                'value' => $batteryChargeEnergy,
+                'tolerance' => 0.0001,
+            ],
+            'CalculatedBatteryDischargeEnergy' => [
+                'value' => $batteryDischargeEnergy,
+                'tolerance' => 0.0001,
+            ],
+            'CalculatedWallboxPower' => [
+                'value' => round(
+                    max((float) ($wallbox['value'] ?? 0.0), 0.0)
+                ),
+                'tolerance' => 0.0,
+            ],
+            'CalculatedWallboxEnergy' => [
+                'value' => max(
+                    (float) ($wallbox['energyValue'] ?? 0.0),
+                    0.0
+                ),
+                'tolerance' => 0.0001,
+            ],
         ];
 
-        foreach ($values as $ident => $value) {
+        foreach ($values as $ident => $definition) {
             $variableID = @$this->GetIDForIdent($ident);
             if (
-                is_int($variableID) &&
-                $variableID > 0 &&
-                IPS_VariableExists($variableID)
+                !is_int($variableID) ||
+                $variableID <= 0 ||
+                !IPS_VariableExists($variableID)
             ) {
-                // Modulvariablen sind von außen schreibgeschützt.
-                // Innerhalb des Moduls müssen sie über SetValue() anhand
-                // ihres Idents aktualisiert werden.
-                $this->SetValue($ident, (float) $value);
+                continue;
+            }
+
+            $newValue = (float) $definition['value'];
+            $tolerance = (float) $definition['tolerance'];
+            $currentValue = (float) GetValue($variableID);
+
+            // Nur bei einer tatsächlichen Wertänderung schreiben.
+            // Leistungswerte sind ganze Watt und haben daher Toleranz 0.
+            // Bei Float-Werten verhindert eine kleine Toleranz unnötige
+            // Aktualisierungen durch Fließkommaabweichungen.
+            if (abs($currentValue - $newValue) > $tolerance) {
+                $this->SetValue($ident, $newValue);
             }
         }
     }
