@@ -78,6 +78,21 @@ class Energiefluss extends IPSModuleStrict
         // Weitere Darstellung.
         $this->RegisterPropertyString('Groups', '[]');
 
+        // Optional erzeugte Modulvariablen.
+        $this->RegisterPropertyBoolean('CreateVariableHousePower', false);
+        $this->RegisterPropertyBoolean('CreateVariableHouseEnergy', false);
+        $this->RegisterPropertyBoolean('CreateVariableAutarky', false);
+        $this->RegisterPropertyBoolean('CreateVariableSelfConsumption', false);
+        $this->RegisterPropertyBoolean('CreateVariablePvPower', false);
+        $this->RegisterPropertyBoolean('CreateVariablePvEnergy', false);
+        $this->RegisterPropertyBoolean('CreateVariableGridImportPower', false);
+        $this->RegisterPropertyBoolean('CreateVariableGridExportPower', false);
+        $this->RegisterPropertyBoolean('CreateVariableBatteryPower', false);
+        $this->RegisterPropertyBoolean('CreateVariableBatteryChargeEnergy', false);
+        $this->RegisterPropertyBoolean('CreateVariableBatteryDischargeEnergy', false);
+        $this->RegisterPropertyBoolean('CreateVariableWallboxPower', false);
+        $this->RegisterPropertyBoolean('CreateVariableWallboxEnergy', false);
+
         // Farben der Visualisierung.
         $this->RegisterPropertyInteger('ColorSolar', 16766287);
         $this->RegisterPropertyInteger('ColorGridImport', 15684432);
@@ -140,6 +155,8 @@ class Energiefluss extends IPSModuleStrict
                     $this->RegisterReference($id);
                 }
             }
+
+            $this->ConfigureCalculatedVariables();
 
             if (IPS_GetKernelRunlevel() === KR_READY) {
                 $this->PushState();
@@ -663,6 +680,81 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'SelectObject'],
                                 ],
                             ],
+                        ],
+                    ],
+                ],
+                [
+                    'type'    => 'ExpansionPanel',
+                    'caption' => 'Berechnete Variablen',
+                    'items'   => [
+                        [
+                            'type'    => 'Label',
+                            'caption' => 'Aktivierte Werte werden als Variablen unter der Modulinstanz angelegt und laufend aktualisiert. Beim Deaktivieren wird die betreffende Variable wieder entfernt.',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableHousePower',
+                            'caption' => 'Hausleistung (W)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableHouseEnergy',
+                            'caption' => 'Hausenergie heute (kWh)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableAutarky',
+                            'caption' => 'Autarkie (%)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableSelfConsumption',
+                            'caption' => 'Eigenverbrauch (%)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariablePvPower',
+                            'caption' => 'PV-Gesamtleistung (W)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariablePvEnergy',
+                            'caption' => 'PV-Tagesenergie (kWh)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableGridImportPower',
+                            'caption' => 'Netzbezug (W)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableGridExportPower',
+                            'caption' => 'Netzeinspeisung (W)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableBatteryPower',
+                            'caption' => 'Batterieleistung gesamt (W)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableBatteryChargeEnergy',
+                            'caption' => 'Batterie-Ladeenergie heute (kWh)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableBatteryDischargeEnergy',
+                            'caption' => 'Batterie-Entladeenergie heute (kWh)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableWallboxPower',
+                            'caption' => 'Wallbox-Leistung (W)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableWallboxEnergy',
+                            'caption' => 'Wallbox-Energie heute (kWh)',
                         ],
                     ],
                 ],
@@ -6199,11 +6291,287 @@ HTML;
     }
 
 
+    private function ConfigureCalculatedVariables(): void
+    {
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableHousePower',
+            'CalculatedHousePower',
+            'Hausleistung',
+            '~Power',
+            10
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableHouseEnergy',
+            'CalculatedHouseEnergy',
+            'Hausenergie heute',
+            '~Electricity',
+            20
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableAutarky',
+            'CalculatedAutarky',
+            'Autarkie',
+            '~Intensity.100',
+            30
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableSelfConsumption',
+            'CalculatedSelfConsumption',
+            'Eigenverbrauch',
+            '~Intensity.100',
+            40
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariablePvPower',
+            'CalculatedPvPower',
+            'PV-Gesamtleistung',
+            '~Power',
+            50
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariablePvEnergy',
+            'CalculatedPvEnergy',
+            'PV-Tagesenergie',
+            '~Electricity',
+            60
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableGridImportPower',
+            'CalculatedGridImportPower',
+            'Netzbezug',
+            '~Power',
+            70
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableGridExportPower',
+            'CalculatedGridExportPower',
+            'Netzeinspeisung',
+            '~Power',
+            80
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableBatteryPower',
+            'CalculatedBatteryPower',
+            'Batterieleistung gesamt',
+            '~Power',
+            90
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableBatteryChargeEnergy',
+            'CalculatedBatteryChargeEnergy',
+            'Batterie-Ladeenergie heute',
+            '~Electricity',
+            100
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableBatteryDischargeEnergy',
+            'CalculatedBatteryDischargeEnergy',
+            'Batterie-Entladeenergie heute',
+            '~Electricity',
+            110
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableWallboxPower',
+            'CalculatedWallboxPower',
+            'Wallbox-Leistung',
+            '~Power',
+            120
+        );
+        $this->ConfigureCalculatedVariable(
+            'CreateVariableWallboxEnergy',
+            'CalculatedWallboxEnergy',
+            'Wallbox-Energie heute',
+            '~Electricity',
+            130
+        );
+    }
+
+    private function ConfigureCalculatedVariable(
+        string $property,
+        string $ident,
+        string $name,
+        string $profile,
+        int $position
+    ): void {
+        if ($this->ReadPropertyBoolean($property)) {
+            $this->RegisterVariableFloat(
+                $ident,
+                $name,
+                $profile,
+                $position
+            );
+            return;
+        }
+
+        $variableID = @$this->GetIDForIdent($ident);
+        if (
+            is_int($variableID) &&
+            $variableID > 0 &&
+            IPS_VariableExists($variableID)
+        ) {
+            $this->UnregisterVariable($ident);
+        }
+    }
+
+    private function UpdateCalculatedVariables(array $payload): void
+    {
+        $pvs = is_array($payload['pvs'] ?? null)
+            ? $payload['pvs']
+            : [];
+        $batteries = is_array($payload['batteries'] ?? null)
+            ? $payload['batteries']
+            : [];
+
+        $pvPower = array_reduce(
+            $pvs,
+            static fn(float $sum, array $pv): float =>
+                $sum + max((float) ($pv['value'] ?? 0.0), 0.0),
+            0.0
+        );
+
+        $batteryPower = array_reduce(
+            $batteries,
+            static fn(float $sum, array $battery): float =>
+                $sum + (float) ($battery['value'] ?? 0.0),
+            0.0
+        );
+
+        $batteryChargeEnergy = array_reduce(
+            $batteries,
+            static fn(float $sum, array $battery): float =>
+                $sum + max((float) ($battery['chargeEnergy'] ?? 0.0), 0.0),
+            0.0
+        );
+
+        $batteryDischargeEnergy = array_reduce(
+            $batteries,
+            static fn(float $sum, array $battery): float =>
+                $sum + max((float) ($battery['dischargeEnergy'] ?? 0.0), 0.0),
+            0.0
+        );
+
+        $grid = (float) ($payload['grid'] ?? 0.0);
+        $gridImportPower = max($grid, 0.0);
+        $gridExportPower = max(-$grid, 0.0);
+
+        $calculatedHouseBalance = max(
+            $pvPower + $batteryPower + $grid,
+            0.0
+        );
+        $calculatedHouseInverterGrid = max(
+            (float) ($payload['inverterPower'] ?? 0.0) + $grid,
+            0.0
+        );
+
+        $houseMode = (string) (
+            $payload['houseCalculationMode'] ?? 'auto'
+        );
+
+        if ($houseMode === 'inverter-grid') {
+            $housePower = $calculatedHouseInverterGrid;
+        } elseif ($houseMode === 'balance') {
+            $housePower = $calculatedHouseBalance;
+        } else {
+            $housePowerConfigured = (bool) (
+                $payload['available']['housePowerConfigured'] ?? false
+            );
+            $housePower = $housePowerConfigured
+                ? max((float) ($payload['housePower'] ?? 0.0), 0.0)
+                : $calculatedHouseBalance;
+        }
+
+        $houseEnergy = max(
+            (float) ($payload['houseEnergy'] ?? 0.0),
+            0.0
+        );
+        $pvEnergy = max(
+            (float) ($payload['inverterDailyEnergy'] ?? 0.0),
+            0.0
+        );
+        $gridImportEnergy = max(
+            (float) ($payload['gridImportEnergyValue'] ?? 0.0),
+            0.0
+        );
+
+        $autarky = $houseEnergy > 0.0
+            ? (($houseEnergy - $gridImportEnergy) / $houseEnergy) * 100.0
+            : 0.0;
+
+        $selfSuppliedHouseEnergy = max(
+            $houseEnergy - $gridImportEnergy,
+            0.0
+        );
+        $selfConsumption = $pvEnergy > 0.0
+            ? ($selfSuppliedHouseEnergy / $pvEnergy) * 100.0
+            : 0.0;
+
+        if ((bool) ($payload['autarkyVariableAvailable'] ?? false)) {
+            $autarky = (float) (
+                $payload['autarkyVariableValue'] ?? 0.0
+            );
+        }
+
+        if ((bool) (
+            $payload['selfConsumptionVariableAvailable'] ?? false
+        )) {
+            $selfConsumption = (float) (
+                $payload['selfConsumptionVariableValue'] ?? 0.0
+            );
+        }
+
+        $autarky = min(max($autarky, 0.0), 100.0);
+        $selfConsumption = min(
+            max($selfConsumption, 0.0),
+            100.0
+        );
+
+        $wallbox = is_array($payload['wallbox'] ?? null)
+            ? $payload['wallbox']
+            : [];
+
+        $values = [
+            'CalculatedHousePower' => $housePower,
+            'CalculatedHouseEnergy' => $houseEnergy,
+            'CalculatedAutarky' => $autarky,
+            'CalculatedSelfConsumption' => $selfConsumption,
+            'CalculatedPvPower' => $pvPower,
+            'CalculatedPvEnergy' => $pvEnergy,
+            'CalculatedGridImportPower' => $gridImportPower,
+            'CalculatedGridExportPower' => $gridExportPower,
+            'CalculatedBatteryPower' => $batteryPower,
+            'CalculatedBatteryChargeEnergy' => $batteryChargeEnergy,
+            'CalculatedBatteryDischargeEnergy' => $batteryDischargeEnergy,
+            'CalculatedWallboxPower' => max(
+                (float) ($wallbox['value'] ?? 0.0),
+                0.0
+            ),
+            'CalculatedWallboxEnergy' => max(
+                (float) ($wallbox['energyValue'] ?? 0.0),
+                0.0
+            ),
+        ];
+
+        foreach ($values as $ident => $value) {
+            $variableID = @$this->GetIDForIdent($ident);
+            if (
+                is_int($variableID) &&
+                $variableID > 0 &&
+                IPS_VariableExists($variableID)
+            ) {
+                SetValueFloat($variableID, (float) $value);
+            }
+        }
+    }
+
     private function PushState(): void
     {
+        $payload = $this->BuildPayload();
+
+        $this->UpdateCalculatedVariables($payload);
+
         $this->UpdateVisualizationValue(
             json_encode(
-                $this->BuildPayload(),
+                $payload,
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             )
         );
