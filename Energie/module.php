@@ -85,6 +85,7 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyBoolean('CreateVariableSelfConsumption', false);
         $this->RegisterPropertyBoolean('CreateVariablePvPower', false);
         $this->RegisterPropertyBoolean('CreateVariablePvEnergy', false);
+        $this->RegisterPropertyBoolean('CreateVariableInverterPower', false);
         $this->RegisterPropertyBoolean('CreateVariableGridImportPower', false);
         $this->RegisterPropertyBoolean('CreateVariableGridExportPower', false);
         $this->RegisterPropertyBoolean('CreateVariableBatteryPower', false);
@@ -720,6 +721,11 @@ class Energiefluss extends IPSModuleStrict
                             'type'    => 'CheckBox',
                             'name'    => 'CreateVariablePvEnergy',
                             'caption' => 'PV-Tagesenergie (kWh)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableInverterPower',
+                            'caption' => 'Inverterleistung gesamt (W)',
                         ],
                         [
                             'type'    => 'CheckBox',
@@ -6336,6 +6342,13 @@ HTML;
             60
         );
         $this->ConfigureCalculatedVariable(
+            'CreateVariableInverterPower',
+            'CalculatedInverterPower',
+            'Inverterleistung gesamt',
+            '~Watt',
+            65
+        );
+        $this->ConfigureCalculatedVariable(
             'CreateVariableGridImportPower',
             'CalculatedGridImportPower',
             'Netzbezug',
@@ -6555,6 +6568,12 @@ HTML;
             'CalculatedPvEnergy' => [
                 'value' => $pvEnergy,
                 'tolerance' => 0.0001,
+            ],
+            'CalculatedInverterPower' => [
+                'value' => round(
+                    (float) ($payload['inverterPower'] ?? 0.0)
+                ),
+                'tolerance' => 0.0,
             ],
             'CalculatedGridImportPower' => [
                 'value' => round($gridImportPower),
