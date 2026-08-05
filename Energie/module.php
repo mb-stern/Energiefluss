@@ -6558,7 +6558,10 @@ HTML;
                 $variableID > 0 &&
                 IPS_VariableExists($variableID)
             ) {
-                SetValueFloat($variableID, (float) $value);
+                // Modulvariablen sind von außen schreibgeschützt.
+                // Innerhalb des Moduls müssen sie über SetValue() anhand
+                // ihres Idents aktualisiert werden.
+                $this->SetValue($ident, (float) $value);
             }
         }
     }
