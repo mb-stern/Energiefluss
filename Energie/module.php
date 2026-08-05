@@ -5410,22 +5410,56 @@ class Energiefluss extends IPSModuleStrict
                 )
                 : 0;
 
-            // Tages-Eigenverbrauch:
-            // Die selbst gedeckte Hausenergie ist der Hausverbrauch abzüglich
-            // des Netzbezugs. Als Bezugsgröße dient die gesamte konfigurierte
-            // Wechselrichter-/PV-Tagesenergie.
+            // Tages-Eigenverbrauch inklusive Batterie:
             //
-            // Dadurch verwenden Autarkie und Eigenverbrauch dieselbe zentrale
-            // Hausenergie, unabhängig davon, ob diese aus einer gewählten
-            // Variable oder aus der internen PV-/Batterie-/Netzbilanz stammt.
+            // Eigene abgegebene Energie =
+            // PV-Tagesenergie
+            // + Batterieentladung heute
+            // - Batterieladung heute.
+            //
+            // Der selbst genutzte Anteil ist die Hausenergie abzüglich
+            // des Netzbezugs. Damit wird auch eine Batterieentladung in der
+            // Nacht berücksichtigt.
+            const batteryChargeEnergy = (
+                Array.isArray(batteries) ? batteries : []
+            ).reduce(
+                (sum, battery) =>
+                    sum + Math.max(
+                        Number(battery?.chargeEnergy || 0),
+                        0
+                    ),
+                0
+            );
+
+            const batteryDischargeEnergy = (
+                Array.isArray(batteries) ? batteries : []
+            ).reduce(
+                (sum, battery) =>
+                    sum + Math.max(
+                        Number(battery?.dischargeEnergy || 0),
+                        0
+                    ),
+                0
+            );
+
+            const ownDeliveredEnergy = Math.max(
+                pvEnergy
+                + batteryDischargeEnergy
+                - batteryChargeEnergy,
+                0
+            );
+
             const selfSuppliedHouseEnergy = Math.max(
                 houseEnergy - Math.max(gridImportEnergy, 0),
                 0
             );
 
-            selfConsumption = pvEnergy > 0
+            selfConsumption = ownDeliveredEnergy > 0
                 ? clampPercent(
-                    (selfSuppliedHouseEnergy / pvEnergy) * 100
+                    (
+                        selfSuppliedHouseEnergy /
+                        ownDeliveredEnergy
+                    ) * 100
                 )
                 : 0;
         }
@@ -6514,8 +6548,19 @@ HTML;
             $houseEnergy - $gridImportEnergy,
             0.0
         );
-        $selfConsumption = $pvEnergy > 0.0
-            ? ($selfSuppliedHouseEnergy / $pvEnergy) * 100.0
+
+        $ownDeliveredEnergy = max(
+            $pvEnergy
+            + $batteryDischargeEnergy
+            - $batteryChargeEnergy,
+            0.0
+        );
+
+        $selfConsumption = $ownDeliveredEnergy > 0.0
+            ? (
+                $selfSuppliedHouseEnergy /
+                $ownDeliveredEnergy
+            ) * 100.0
             : 0.0;
 
         if ((bool) ($payload['autarkyVariableAvailable'] ?? false)) {
