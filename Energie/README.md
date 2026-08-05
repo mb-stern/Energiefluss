@@ -273,7 +273,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ### Version 1.3 (05.08.2026)
 - Die errechneten Variablen können unterhalb der Modulinstanz zur weiteren Verwendung erstellt werden.
-- Eigenverbrauchsberrchnung berücksichtigt nun auch die Batterie
+- Eigenverbrauchsberechnung berücksichtigt nun auch die Batterie
 
 ### Version 1.2 (04.08.2026)
 - Automatische Berechnung des Hausverbrauchs überarbeitet.
