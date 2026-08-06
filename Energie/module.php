@@ -562,7 +562,7 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'HousePower',
-                            'caption' => 'Hausleistung (W, optional – hat immer Vorrang)',
+                            'caption' => 'Hausleistung (W, optional – sonst interne Berechnung)',
                         ],
                         [
                             'type'    => 'SelectVariable',
