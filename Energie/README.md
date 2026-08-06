@@ -275,6 +275,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 - Strom der Batterie wird ausgeblendet, wenn er nicht konfiguriert ist.
 - Batteriestatus wird in Compact nun korrekt angezeigt.
 - Fenster mit Batteriedaten wird in der Compact nun angezeigt.
+- In der Konfiguration unglücklich beschriebener Tagesverbrauch für das Netz klar formuliert.
 
 ### Version 1.3 (05.08.2026)
 - Die errechneten Variablen können unterhalb der Modulinstanz zur weiteren Verwendung erstellt werden.
