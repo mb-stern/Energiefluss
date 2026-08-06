@@ -3758,11 +3758,23 @@ class Energiefluss extends IPSModuleStrict
         if (activeBatteries[0]) {
             addEntity('battery_soc_184', 'sensor.symcon_battery_soc', activeBatteries[0].hasSoc);
             addEntity('battery_power_190', 'sensor.symcon_battery_power', activeBatteries[0].hasPower);
-            addEntity(
-                'battery_current_191',
-                'sensor.symcon_battery_current',
-                activeBatteries[0].hasCurrent
-            );
+            if (full) {
+                // Full wird separat behandelt. Für Compact/Lite darf kein
+                // ungültiger Entity-Wert "none" übergeben werden, da dadurch
+                // das komplette Batteriefenster verschwinden kann.
+                entities['battery_current_191'] =
+                    activeBatteries[0].hasCurrent
+                        ? 'sensor.symcon_battery_current'
+                        : 'none';
+            } else {
+                // Exakt dasselbe Muster wie bei der Batteriespannung:
+                // Nur bei tatsächlich konfigurierter Variable hinzufügen.
+                addEntity(
+                    'battery_current_191',
+                    'sensor.symcon_battery_current',
+                    activeBatteries[0].hasCurrent
+                );
+            }
             addEntity('battery_voltage_183', 'sensor.symcon_battery_voltage', activeBatteries[0].hasVoltage);
             addEntity('battery_temp_182', 'sensor.symcon_battery_temperature', activeBatteries[0].hasTemperature);
             addEntity('battery_status', 'sensor.symcon_battery_status', activeBatteries[0].hasStatus);
@@ -3772,11 +3784,18 @@ class Energiefluss extends IPSModuleStrict
         if (activeBatteries[1]) {
             addEntity('battery2_soc_184', 'sensor.symcon_battery2_soc', activeBatteries[1].hasSoc);
             addEntity('battery2_power_190', 'sensor.symcon_battery2_power', activeBatteries[1].hasPower);
-            addEntity(
-                'battery2_current_191',
-                'sensor.symcon_battery2_current',
-                activeBatteries[1].hasCurrent
-            );
+            if (full) {
+                entities['battery2_current_191'] =
+                    activeBatteries[1].hasCurrent
+                        ? 'sensor.symcon_battery2_current'
+                        : 'none';
+            } else {
+                addEntity(
+                    'battery2_current_191',
+                    'sensor.symcon_battery2_current',
+                    activeBatteries[1].hasCurrent
+                );
+            }
             addEntity('battery2_voltage_183', 'sensor.symcon_battery2_voltage', activeBatteries[1].hasVoltage);
             addEntity('battery2_temp_182', 'sensor.symcon_battery2_temperature', activeBatteries[1].hasTemperature);
             addEntity('battery2_status', 'sensor.symcon_battery2_status', activeBatteries[1].hasStatus);
@@ -4144,6 +4163,7 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_load_energy': ssState(d.houseEnergy || 0, 'kWh'),
             'sensor.symcon_battery_soc': ssState(Math.round(Number(bat1.soc || 0)), '%'),
             'sensor.symcon_battery_power': ssState(Number(bat1.value || 0), 'W'),
+            'sensor.symcon_battery_current': ssState(Number(bat1.current || 0), 'A'),
             'sensor.symcon_battery_voltage': ssState(Number(bat1.voltage || 0), 'V'),
             'sensor.symcon_battery_temperature': ssState(
                 Number(bat1.temperature || 0),
@@ -4155,6 +4175,7 @@ class Energiefluss extends IPSModuleStrict
             },
             'sensor.symcon_battery2_soc': ssState(Math.round(Number(bat2.soc || 0)), '%'),
             'sensor.symcon_battery2_power': ssState(Number(bat2.value || 0), 'W'),
+            'sensor.symcon_battery2_current': ssState(Number(bat2.current || 0), 'A'),
             'sensor.symcon_battery2_voltage': ssState(Number(bat2.voltage || 0), 'V'),
             'sensor.symcon_battery2_temperature': ssState(
                 Number(bat2.temperature || 0),
@@ -4169,19 +4190,6 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_battery2_charge_energy': ssState(bat2.chargeEnergy || 0, 'kWh'),
             'sensor.symcon_battery2_discharge_energy': ssState(bat2.dischargeEnergy || 0, 'kWh')
         };
-
-        // Wie bei der Spannung wird auch der Strom-State nur angelegt,
-        // wenn tatsächlich eine Stromvariable konfiguriert ist.
-        if (bat1.hasCurrent === true) {
-            states['sensor.symcon_battery_current'] =
-                ssState(Number(bat1.current || 0), 'A');
-        }
-
-        if (bat2.hasCurrent === true) {
-            states['sensor.symcon_battery2_current'] =
-                ssState(Number(bat2.current || 0), 'A');
-        }
-
         activePvs.forEach((pv, i) => {
             const stringNo = i + 1;
 
