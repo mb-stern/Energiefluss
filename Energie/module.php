@@ -3758,7 +3758,11 @@ class Energiefluss extends IPSModuleStrict
         if (activeBatteries[0]) {
             addEntity('battery_soc_184', 'sensor.symcon_battery_soc', activeBatteries[0].hasSoc);
             addEntity('battery_power_190', 'sensor.symcon_battery_power', activeBatteries[0].hasPower);
-            addEntity('battery_current_191', 'sensor.symcon_battery_current');
+            addEntity(
+                'battery_current_191',
+                'sensor.symcon_battery_current',
+                activeBatteries[0].hasCurrent
+            );
             addEntity('battery_voltage_183', 'sensor.symcon_battery_voltage', activeBatteries[0].hasVoltage);
             addEntity('battery_temp_182', 'sensor.symcon_battery_temperature', activeBatteries[0].hasTemperature);
             addEntity('battery_status', 'sensor.symcon_battery_status', activeBatteries[0].hasStatus);
@@ -3768,7 +3772,11 @@ class Energiefluss extends IPSModuleStrict
         if (activeBatteries[1]) {
             addEntity('battery2_soc_184', 'sensor.symcon_battery2_soc', activeBatteries[1].hasSoc);
             addEntity('battery2_power_190', 'sensor.symcon_battery2_power', activeBatteries[1].hasPower);
-            addEntity('battery2_current_191', 'sensor.symcon_battery2_current');
+            addEntity(
+                'battery2_current_191',
+                'sensor.symcon_battery2_current',
+                activeBatteries[1].hasCurrent
+            );
             addEntity('battery2_voltage_183', 'sensor.symcon_battery2_voltage', activeBatteries[1].hasVoltage);
             addEntity('battery2_temp_182', 'sensor.symcon_battery2_temperature', activeBatteries[1].hasTemperature);
             addEntity('battery2_status', 'sensor.symcon_battery2_status', activeBatteries[1].hasStatus);

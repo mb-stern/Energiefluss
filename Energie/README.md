@@ -271,6 +271,9 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.4 (06.08.2026)
+- Strom der Batterie wird ausgeblendet, wenn er nicht konfiguriert ist.
+
 ### Version 1.3 (05.08.2026)
 - Die errechneten Variablen können unterhalb der Modulinstanz zur weiteren Verwendung erstellt werden.
 - Eigenverbrauchsberechnung berücksichtigt nun auch die Batterie
