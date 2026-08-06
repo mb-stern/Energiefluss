@@ -271,9 +271,15 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.4 (06.08.2026)
+- Strom der Batterie wird ausgeblendet, wenn er nicht konfiguriert ist.
+- Batteriestatus wird in Compact nun korrekt angezeigt.
+- Fenster mit Batteriedaten wird in der Compact nun angezeigt.
+- In der Konfiguration unglücklich beschriebener Tagesverbrauch für das Netz klar formuliert.
+
 ### Version 1.3 (05.08.2026)
 - Die errechneten Variablen können unterhalb der Modulinstanz zur weiteren Verwendung erstellt werden.
-- Eigenverbrauchsberchnung berücksichtigt nun auch die Batterie
+- Eigenverbrauchsberechnung berücksichtigt nun auch die Batterie
 
 ### Version 1.2 (04.08.2026)
 - Automatische Berechnung des Hausverbrauchs überarbeitet.
@@ -283,7 +289,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 ### Version 1.1 (03.08.2026)
 - Die Energiemenge (kwh) für den Hausverbrauch kann nun selber definiert werden, analog der Leistung.
 - Die Energiemenge lässt sich nun analog der Leistung in drei verschiedenen Modi berechen.
-- Der Status der Batterieen kann nun angezeigt werden.
+- Der Status der Batterien kann nun angezeigt werden.
 - Verbrauchern kann eine Mindestleistung hinterlegt werden, unter deren sie ausgeblendet werden.
 - Maximal 2 Verbraucher können als AUX-Verbraucher markiert werden, damit diese prominent dargestellt werden.
 

@@ -51,14 +51,13 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('AutarkyVariable', 0);
         $this->RegisterPropertyInteger('SelfConsumptionVariable', 0);
 
-        // Berechnungsart ausschließlich für die aktuelle Hausleistung (W):
-        // auto: konfigurierte Hausleistungsvariable verwenden, sonst Bilanz
+        // Interne Berechnungsart für die aktuelle Hausleistung (W),
+        // falls keine gültige Hausleistungsvariable verknüpft ist:
         // balance: PV + Batterie + Netzsaldo
         // inverter-grid: Wechselrichterleistung + Netzsaldo
         //
-        // Die Hausenergie (kWh) wird unabhängig davon immer über die
-        // vollständige Tagesenergiebilanz berechnet.
-        $this->RegisterPropertyString('HouseCalculationMode', 'auto');
+        // Eine gültige HousePower-Variable hat immer Vorrang.
+        $this->RegisterPropertyString('HouseCalculationMode', 'balance');
         // energy = Tagesenergien, power = aktuelle Leistungen, no = ausblenden.
         $this->RegisterPropertyString('AutarkyCalculationMode', 'energy');
         // Alte Eigenschaften bleiben zur Abwärtskompatibilität registriert,
@@ -411,12 +410,12 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'GridImportEnergy',
-                            'caption' => 'Netzbezug gesamt (kWh)',
+                            'caption' => 'Netzbezug heute (kWh)',
                         ],
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'GridExportEnergy',
-                            'caption' => 'Netzeinspeisung gesamt (kWh)',
+                            'caption' => 'Netzeinspeisung heute (kWh)',
                         ],
                         [
                             'type'    => 'Label',
@@ -548,12 +547,8 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'    => 'Select',
                             'name'    => 'HouseCalculationMode',
-                            'caption' => 'Berechnung der Hausleistung (W)',
+                            'caption' => 'Interne Berechnung der Hausleistung (nur ohne verknüpfte Variable)',
                             'options' => [
-                                [
-                                    'caption' => 'Automatisch: Hausleistungsvariable verwenden, sonst PV + Batterie + Netz',
-                                    'value'   => 'auto',
-                                ],
                                 [
                                     'caption' => 'PV-Leistung + Batterie + Netzsaldo',
                                     'value'   => 'balance',
@@ -567,7 +562,7 @@ class Energiefluss extends IPSModuleStrict
                         [
                             'type'    => 'SelectVariable',
                             'name'    => 'HousePower',
-                            'caption' => 'Hausleistung (W, nur bei Automatisch)',
+                            'caption' => 'Hausleistung (W, optional – sonst interne Berechnung)',
                         ],
                         [
                             'type'    => 'SelectVariable',
@@ -3597,6 +3592,15 @@ class Energiefluss extends IPSModuleStrict
         const wide = requestedLayout.endsWith('-wide');
         const style = requestedLayout.replace('-wide', '');
         const full = style === 'full';
+        const compact = style === 'compact';
+
+        // Der originale Sunsynk-Compact-Cardstyle besitzt kein separates
+        // Batteriedatenfenster. Damit Compact trotzdem dieselben
+        // Batteriedetails wie Lite/Large und Full zeigt, wird nur der
+        // interne Cardstyle auf "lite" gesetzt. Die übrige Modullogik
+        // bleibt weiterhin Compact.
+        const cardStyle = compact ? 'lite' : style;
+
         const showEnergyDetails = style !== 'compact';
 
         const activePvs = pvs.filter(pv => pv.hasPower);
@@ -3758,20 +3762,55 @@ class Energiefluss extends IPSModuleStrict
         if (activeBatteries[0]) {
             addEntity('battery_soc_184', 'sensor.symcon_battery_soc', activeBatteries[0].hasSoc);
             addEntity('battery_power_190', 'sensor.symcon_battery_power', activeBatteries[0].hasPower);
-            addEntity('battery_current_191', 'sensor.symcon_battery_current');
+            if (full) {
+                // Full wird separat behandelt. Für Compact/Lite darf kein
+                // ungültiger Entity-Wert "none" übergeben werden, da dadurch
+                // das komplette Batteriefenster verschwinden kann.
+                entities['battery_current_191'] =
+                    activeBatteries[0].hasCurrent
+                        ? 'sensor.symcon_battery_current'
+                        : 'none';
+            } else {
+                // Exakt dasselbe Muster wie bei der Batteriespannung:
+                // Nur bei tatsächlich konfigurierter Variable hinzufügen.
+                addEntity(
+                    'battery_current_191',
+                    'sensor.symcon_battery_current',
+                    activeBatteries[0].hasCurrent
+                );
+            }
             addEntity('battery_voltage_183', 'sensor.symcon_battery_voltage', activeBatteries[0].hasVoltage);
             addEntity('battery_temp_182', 'sensor.symcon_battery_temperature', activeBatteries[0].hasTemperature);
-            addEntity('battery_status', 'sensor.symcon_battery_status', activeBatteries[0].hasStatus);
+            addEntity(
+                'battery_status',
+                'sensor.symcon_battery_status',
+                activeBatteries[0].hasStatus
+            );
             addEntity('day_battery_charge_70', 'sensor.symcon_battery_charge_energy', activeBatteries[0].hasChargeEnergy);
             addEntity('day_battery_discharge_71', 'sensor.symcon_battery_discharge_energy', activeBatteries[0].hasDischargeEnergy);
         }
         if (activeBatteries[1]) {
             addEntity('battery2_soc_184', 'sensor.symcon_battery2_soc', activeBatteries[1].hasSoc);
             addEntity('battery2_power_190', 'sensor.symcon_battery2_power', activeBatteries[1].hasPower);
-            addEntity('battery2_current_191', 'sensor.symcon_battery2_current');
+            if (full) {
+                entities['battery2_current_191'] =
+                    activeBatteries[1].hasCurrent
+                        ? 'sensor.symcon_battery2_current'
+                        : 'none';
+            } else {
+                addEntity(
+                    'battery2_current_191',
+                    'sensor.symcon_battery2_current',
+                    activeBatteries[1].hasCurrent
+                );
+            }
             addEntity('battery2_voltage_183', 'sensor.symcon_battery2_voltage', activeBatteries[1].hasVoltage);
             addEntity('battery2_temp_182', 'sensor.symcon_battery2_temperature', activeBatteries[1].hasTemperature);
-            addEntity('battery2_status', 'sensor.symcon_battery2_status', activeBatteries[1].hasStatus);
+            addEntity(
+                'battery2_status',
+                'sensor.symcon_battery2_status',
+                activeBatteries[1].hasStatus
+            );
             addEntity('day_battery2_charge_70', 'sensor.symcon_battery2_charge_energy', activeBatteries[1].hasChargeEnergy);
             addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
         }
@@ -3825,7 +3864,7 @@ class Energiefluss extends IPSModuleStrict
         );
 
         const cfg = {
-            cardstyle: style,
+            cardstyle: cardStyle,
             wide,
             large_font: true,
             show_solar: activePvs.length > 0,
@@ -5913,30 +5952,27 @@ class Energiefluss extends IPSModuleStrict
         );
 
         const houseCalculationMode = [
-            'auto',
             'balance',
             'inverter-grid'
         ].includes(d.houseCalculationMode)
             ? d.houseCalculationMode
-            : 'auto';
+            : 'balance';
 
         let haus;
 
-        if (houseCalculationMode === 'inverter-grid') {
+        // Eine verknüpfte Hausleistungsvariable hat immer Vorrang.
+        if (
+            d.available?.housePowerConfigured &&
+            Number.isFinite(Number(d.housePower))
+        ) {
+            haus = Math.max(Number(d.housePower), 0);
+        } else if (houseCalculationMode === 'inverter-grid') {
             // Wechselrichterleistung gesamt + Netzbezug − Netzeinspeisung.
             haus = calculatedHouseInverterGrid;
-        } else if (houseCalculationMode === 'balance') {
+        } else {
             // PV + Batterieentladung − Batterieladung
             // + Netzbezug − Netzeinspeisung.
             haus = calculatedHouseBalance;
-        } else {
-            // Bisheriges Verhalten: konfigurierte Hausverbrauchsvariable
-            // hat Vorrang, ansonsten wird die vollständige Bilanz verwendet.
-            haus =
-                d.available?.housePowerConfigured &&
-                Number.isFinite(Number(d.housePower))
-                    ? Math.max(Number(d.housePower), 0)
-                    : calculatedHouseBalance;
         }
 
         // Neue technische Ansicht.
@@ -6511,20 +6547,22 @@ HTML;
         );
 
         $houseMode = (string) (
-            $payload['houseCalculationMode'] ?? 'auto'
+            $payload['houseCalculationMode'] ?? 'balance'
         );
 
-        if ($houseMode === 'inverter-grid') {
-            $housePower = $calculatedHouseInverterGrid;
-        } elseif ($houseMode === 'balance') {
-            $housePower = $calculatedHouseBalance;
-        } else {
-            $housePowerConfigured = (bool) (
-                $payload['available']['housePowerConfigured'] ?? false
+        $housePowerConfigured = (bool) (
+            $payload['available']['housePowerConfigured'] ?? false
+        );
+
+        if ($housePowerConfigured) {
+            $housePower = max(
+                (float) ($payload['housePower'] ?? 0.0),
+                0.0
             );
-            $housePower = $housePowerConfigured
-                ? max((float) ($payload['housePower'] ?? 0.0), 0.0)
-                : $calculatedHouseBalance;
+        } elseif ($houseMode === 'inverter-grid') {
+            $housePower = $calculatedHouseInverterGrid;
+        } else {
+            $housePower = $calculatedHouseBalance;
         }
 
         $houseEnergy = max(
