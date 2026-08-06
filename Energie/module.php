@@ -4276,6 +4276,7 @@ class Energiefluss extends IPSModuleStrict
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
         applyConfiguredBatteryStatus(card, d);
+        compactFullTechnicalDataWindows(card, d);
         applyAuxVisualOverrides(card, d);
 
         // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
@@ -4302,6 +4303,10 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 applyConfiguredBatteryStatus(
+                    card,
+                    card.__symconLastData || d
+                );
+                compactFullTechnicalDataWindows(
                     card,
                     card.__symconLastData || d
                 );
@@ -4341,6 +4346,10 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     applyConfiguredBatteryStatus(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    compactFullTechnicalDataWindows(
                         card,
                         card.__symconLastData || d
                     );
@@ -4541,6 +4550,384 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
         }
+    }
+
+
+    function compactFullTechnicalDataWindows(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const fullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        if (!fullLayout) return;
+
+        const batteries = Array.isArray(d.batteries)
+            ? d.batteries
+            : [];
+        const battery = batteries[0] || {};
+
+        const panels = [
+            {
+                name: 'battery',
+                rows: [
+                    {
+                        selectors: [
+                            '#battery_power_190',
+                            '[id="battery_power_190"]'
+                        ],
+                        visible: battery.hasPower === true
+                    },
+                    {
+                        selectors: [
+                            '#battery_voltage_183',
+                            '[id="battery_voltage_183"]'
+                        ],
+                        visible: battery.hasVoltage === true
+                    },
+                    {
+                        selectors: [
+                            '#battery_current_191',
+                            '[id="battery_current_191"]'
+                        ],
+                        visible: battery.hasCurrent === true
+                    },
+                    {
+                        selectors: [
+                            '#battery_temp_182',
+                            '[id="battery_temp_182"]'
+                        ],
+                        visible: battery.hasTemperature === true
+                    },
+                    {
+                        selectors: [
+                            '#battery_state_msg',
+                            '[id="battery_state_msg"]'
+                        ],
+                        visible: battery.hasStatus === true
+                    }
+                ]
+            },
+            {
+                name: 'smartmeter',
+                rows: [
+                    {
+                        selectors: [
+                            '#grid_power_169',
+                            '[id="grid_power_169"]'
+                        ],
+                        visible: entityAvailable(d, 'gridPower')
+                            || Number(d.gridVariableId || 0) > 0
+                    },
+                    {
+                        selectors: [
+                            '#grid_ct_power_172',
+                            '[id="grid_ct_power_172"]'
+                        ],
+                        visible: entityAvailable(d, 'gridPower')
+                            || Number(d.gridVariableId || 0) > 0
+                    },
+                    {
+                        selectors: [
+                            '#grid_ct_power_total',
+                            '[id="grid_ct_power_total"]'
+                        ],
+                        visible:
+                            entityAvailable(d, 'gridPhaseL1')
+                            || entityAvailable(d, 'gridPhaseL2')
+                            || entityAvailable(d, 'gridPhaseL3')
+                    },
+                    {
+                        selectors: [
+                            '#grid_ct_power_L2',
+                            '[id="grid_ct_power_L2"]'
+                        ],
+                        visible: entityAvailable(d, 'gridPhaseL2')
+                    },
+                    {
+                        selectors: [
+                            '#grid_ct_power_L3',
+                            '[id="grid_ct_power_L3"]'
+                        ],
+                        visible: entityAvailable(d, 'gridPhaseL3')
+                    },
+                    {
+                        selectors: [
+                            '#grid_voltage',
+                            '[id="grid_voltage"]'
+                        ],
+                        visible: entityAvailable(d, 'gridVoltageL1')
+                    },
+                    {
+                        selectors: [
+                            '#load_frequency_192',
+                            '[id="load_frequency_192"]'
+                        ],
+                        visible: entityAvailable(d, 'gridFrequency')
+                    },
+                    {
+                        selectors: [
+                            '#grid_connected_status_194',
+                            '[id="grid_connected_status_194"]'
+                        ],
+                        visible: entityAvailable(d, 'gridStatus')
+                    }
+                ]
+            },
+            {
+                name: 'inverter',
+                rows: [
+                    {
+                        selectors: [
+                            '#inverter_power_175',
+                            '[id="inverter_power_175"]'
+                        ],
+                        visible:
+                            entityAvailable(d, 'inverterPower')
+                            || d.inverterPowerAvailable === true
+                    },
+                    {
+                        selectors: [
+                            '#inverter_current_164',
+                            '[id="inverter_current_164"]'
+                        ],
+                        visible: entityAvailable(d, 'inverterCurrentL1')
+                    },
+                    {
+                        selectors: [
+                            '#inverter_current_L2',
+                            '[id="inverter_current_L2"]'
+                        ],
+                        visible: entityAvailable(d, 'inverterCurrentL2')
+                    },
+                    {
+                        selectors: [
+                            '#inverter_current_L3',
+                            '[id="inverter_current_L3"]'
+                        ],
+                        visible: entityAvailable(d, 'inverterCurrentL3')
+                    },
+                    {
+                        selectors: [
+                            '#radiator_temp_91',
+                            '[id="radiator_temp_91"]'
+                        ],
+                        visible: entityAvailable(d, 'inverterTemperature')
+                    },
+                    {
+                        selectors: [
+                            '#dc_transformer_temp_90',
+                            '[id="dc_transformer_temp_90"]'
+                        ],
+                        visible: entityAvailable(d, 'inverter2Temperature')
+                    }
+                ]
+            }
+        ];
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        const findNode = selectors => {
+            for (const root of roots) {
+                const node = root.querySelector?.(selectors.join(','));
+                if (node) return node;
+            }
+            return null;
+        };
+
+        const rowContainer = node => {
+            if (!node) return null;
+
+            let current = node;
+            for (let depth = 0; depth < 3 && current; depth++) {
+                if (
+                    String(current.tagName || '').toLowerCase() === 'g'
+                ) {
+                    return current;
+                }
+                current = current.parentElement;
+            }
+
+            return node;
+        };
+
+        const findPanelGroup = rows => {
+            const containers = rows
+                .map(row => row.container)
+                .filter(Boolean);
+
+            if (!containers.length) return null;
+
+            let candidate = containers[0];
+
+            while (candidate && candidate !== card.shadowRoot) {
+                if (
+                    String(candidate.tagName || '').toLowerCase() === 'g'
+                ) {
+                    const contained = containers.filter(node =>
+                        candidate.contains?.(node)
+                    ).length;
+
+                    const rects =
+                        candidate.querySelectorAll?.('rect') || [];
+
+                    if (contained >= 2 && rects.length > 0) {
+                        return candidate;
+                    }
+                }
+                candidate = candidate.parentElement;
+            }
+
+            return null;
+        };
+
+        panels.forEach(panel => {
+            const resolvedRows = panel.rows.map(row => {
+                const node = findNode(row.selectors);
+                return {
+                    ...row,
+                    node,
+                    container: rowContainer(node)
+                };
+            }).filter(row => row.node && row.container);
+
+            if (!resolvedRows.length) return;
+
+            resolvedRows.forEach(row => {
+                const display = row.visible ? '' : 'none';
+
+                if (row.visible) {
+                    row.container.style?.removeProperty('display');
+                    row.container.style?.removeProperty('visibility');
+                    row.container.removeAttribute?.('display');
+                    row.container.removeAttribute?.('visibility');
+                } else {
+                    row.container.style?.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+                    row.container.style?.setProperty(
+                        'visibility',
+                        'hidden',
+                        'important'
+                    );
+                    row.container.setAttribute?.('display', display);
+                }
+            });
+
+            const visibleRows = resolvedRows.filter(row => row.visible);
+            if (!visibleRows.length) return;
+
+            const boxes = visibleRows.map(row => {
+                try {
+                    return {
+                        row,
+                        box: row.container.getBBox()
+                    };
+                } catch {
+                    return null;
+                }
+            }).filter(Boolean).sort(
+                (a, b) => a.box.y - b.box.y
+            );
+
+            if (!boxes.length) return;
+
+            const originalTop = boxes[0].box.y;
+            const rowGap = 4;
+            let cursorY = originalTop;
+
+            boxes.forEach(item => {
+                const baseTransform =
+                    item.row.container.dataset
+                        ?.symconCompactBaseTransform
+                    ?? item.row.container.getAttribute?.('transform')
+                    ?? '';
+
+                if (
+                    item.row.container.dataset &&
+                    item.row.container.dataset
+                        .symconCompactBaseTransform === undefined
+                ) {
+                    item.row.container.dataset
+                        .symconCompactBaseTransform = baseTransform;
+                }
+
+                const deltaY = cursorY - item.box.y;
+                const cleanBase = baseTransform
+                    .replace(
+                        /\s*translate\(\s*0(?:px)?\s*,\s*[-\d.]+(?:px)?\s*\)\s*$/i,
+                        ''
+                    )
+                    .trim();
+
+                item.row.container.setAttribute?.(
+                    'transform',
+                    `${cleanBase} translate(0, ${deltaY})`.trim()
+                );
+
+                cursorY += Math.max(item.box.height, 12) + rowGap;
+            });
+
+            const panelGroup = findPanelGroup(resolvedRows);
+            if (!panelGroup) return;
+
+            let background = null;
+            let backgroundArea = 0;
+
+            panelGroup.querySelectorAll?.('rect').forEach(rect => {
+                try {
+                    const box = rect.getBBox();
+                    const area = box.width * box.height;
+                    if (
+                        area > backgroundArea &&
+                        box.width > 40 &&
+                        box.height > 25
+                    ) {
+                        background = rect;
+                        backgroundArea = area;
+                    }
+                } catch {
+                    // SVG node not measurable yet.
+                }
+            });
+
+            if (!background) return;
+
+            if (
+                background.dataset &&
+                background.dataset.symconOriginalHeight === undefined
+            ) {
+                background.dataset.symconOriginalHeight =
+                    background.getAttribute('height') || '';
+            }
+
+            try {
+                const bgBox = background.getBBox();
+                const bottomPadding = 9;
+                const wantedHeight = Math.max(
+                    28,
+                    cursorY - bgBox.y + bottomPadding
+                );
+
+                const originalHeight = Number(
+                    background.dataset?.symconOriginalHeight
+                );
+
+                if (
+                    Number.isFinite(originalHeight) &&
+                    originalHeight > 0
+                ) {
+                    background.setAttribute(
+                        'height',
+                        String(Math.min(originalHeight, wantedHeight))
+                    );
+                }
+            } catch {
+                // Ignore until the next render pass.
+            }
+        });
     }
 
 
