@@ -273,8 +273,8 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ### Version 1.4 (06.08.2026)
 - Strom der Batterie wird ausgeblendet, wenn er nicht konfiguriert ist.
-- Batteriestatus in Compact ausgeblendet da nicht vorgesehen.
-- Fenster für Batteriedaten wird in der Compact nun angezeigt.
+- Batteriestatus wird in Compact nun korrekt angezeigt.
+- Fenster mit Batteriedaten wird in der Compact nun angezeigt.
 
 ### Version 1.3 (05.08.2026)
 - Die errechneten Variablen können unterhalb der Modulinstanz zur weiteren Verwendung erstellt werden.
