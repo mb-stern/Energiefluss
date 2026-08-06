@@ -3953,20 +3953,7 @@ class Energiefluss extends IPSModuleStrict
                     ? AC.discharge
                     : AC.charge,
                 charge_colour: AC.charge,
-                // Das Compact-Layout benötigt den aktivierten
-                // Batteriedetailbereich, damit das Fenster mit Leistung,
-                // Spannung und Strom gerendert wird. Die Anzeige wird daher
-                // nicht mehr über die allgemeine Compact-Detailsperre
-                // showEnergyDetails abgeschaltet.
-                show_daily:
-                    !!activeBatteries[0]
-                    && (
-                        activeBatteries[0].hasPower
-                        || activeBatteries[0].hasVoltage
-                        || activeBatteries[0].hasCurrent
-                        || activeBatteries[0].hasChargeEnergy
-                        || activeBatteries[0].hasDischargeEnergy
-                    ),
+                show_daily: showEnergyDetails && !!activeBatteries[0] && (activeBatteries[0].hasChargeEnergy || activeBatteries[0].hasDischargeEnergy),
                 animation_speed: Math.max(1, Math.round(6 / flowSpeedFactor)),
                 max_power: 10000,
                 auto_scale: false,
@@ -3996,15 +3983,7 @@ class Energiefluss extends IPSModuleStrict
                     ? AC.discharge
                     : AC.charge,
                 charge_colour: AC.charge,
-                show_daily:
-                    !!activeBatteries[1]
-                    && (
-                        activeBatteries[1].hasPower
-                        || activeBatteries[1].hasVoltage
-                        || activeBatteries[1].hasCurrent
-                        || activeBatteries[1].hasChargeEnergy
-                        || activeBatteries[1].hasDischargeEnergy
-                    ),
+                show_daily: showEnergyDetails && !!activeBatteries[1] && (activeBatteries[1].hasChargeEnergy || activeBatteries[1].hasDischargeEnergy),
                 show_absolute: true,
                 auto_scale: false,
                 dynamic_colour: false,
