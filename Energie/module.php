@@ -3759,39 +3759,25 @@ class Energiefluss extends IPSModuleStrict
             addEntity('battery_soc_184', 'sensor.symcon_battery_soc', activeBatteries[0].hasSoc);
             addEntity('battery_power_190', 'sensor.symcon_battery_power', activeBatteries[0].hasPower);
             if (full) {
+                // Full wird separat behandelt. Für Compact/Lite darf kein
+                // ungültiger Entity-Wert "none" übergeben werden, da dadurch
+                // das komplette Batteriefenster verschwinden kann.
                 entities['battery_current_191'] =
                     activeBatteries[0].hasCurrent
                         ? 'sensor.symcon_battery_current'
                         : 'none';
             } else {
-                // Compact/Lite benötigen die vollständige ursprüngliche
-                // Batterie-Entity-Struktur für das Detailfenster.
+                // Exakt dasselbe Muster wie bei der Batteriespannung:
+                // Nur bei tatsächlich konfigurierter Variable hinzufügen.
                 addEntity(
                     'battery_current_191',
-                    'sensor.symcon_battery_current'
+                    'sensor.symcon_battery_current',
+                    activeBatteries[0].hasCurrent
                 );
             }
-
-            addEntity(
-                'battery_voltage_183',
-                'sensor.symcon_battery_voltage',
-                activeBatteries[0].hasVoltage
-            );
-            addEntity(
-                'battery_temp_182',
-                'sensor.symcon_battery_temperature',
-                activeBatteries[0].hasTemperature
-            );
-
-            // Der benutzerdefinierte Batteriestatus gehört nur in Full.
-            // In Compact/Lite verändert er die interne Geometrie der Card
-            // und kann das Detailfenster überlagern.
-            addEntity(
-                'battery_status',
-                'sensor.symcon_battery_status',
-                !currentTechnicalLayout.startsWith('compact')
-                && activeBatteries[0].hasStatus
-            );
+            addEntity('battery_voltage_183', 'sensor.symcon_battery_voltage', activeBatteries[0].hasVoltage);
+            addEntity('battery_temp_182', 'sensor.symcon_battery_temperature', activeBatteries[0].hasTemperature);
+            addEntity('battery_status', 'sensor.symcon_battery_status', activeBatteries[0].hasStatus);
             addEntity('day_battery_charge_70', 'sensor.symcon_battery_charge_energy', activeBatteries[0].hasChargeEnergy);
             addEntity('day_battery_discharge_71', 'sensor.symcon_battery_discharge_energy', activeBatteries[0].hasDischargeEnergy);
         }
@@ -3806,26 +3792,13 @@ class Energiefluss extends IPSModuleStrict
             } else {
                 addEntity(
                     'battery2_current_191',
-                    'sensor.symcon_battery2_current'
+                    'sensor.symcon_battery2_current',
+                    activeBatteries[1].hasCurrent
                 );
             }
-
-            addEntity(
-                'battery2_voltage_183',
-                'sensor.symcon_battery2_voltage',
-                activeBatteries[1].hasVoltage
-            );
-            addEntity(
-                'battery2_temp_182',
-                'sensor.symcon_battery2_temperature',
-                activeBatteries[1].hasTemperature
-            );
-            addEntity(
-                'battery2_status',
-                'sensor.symcon_battery2_status',
-                !currentTechnicalLayout.startsWith('compact')
-                && activeBatteries[1].hasStatus
-            );
+            addEntity('battery2_voltage_183', 'sensor.symcon_battery2_voltage', activeBatteries[1].hasVoltage);
+            addEntity('battery2_temp_182', 'sensor.symcon_battery2_temperature', activeBatteries[1].hasTemperature);
+            addEntity('battery2_status', 'sensor.symcon_battery2_status', activeBatteries[1].hasStatus);
             addEntity('day_battery2_charge_70', 'sensor.symcon_battery2_charge_energy', activeBatteries[1].hasChargeEnergy);
             addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
         }
@@ -4561,13 +4534,6 @@ class Energiefluss extends IPSModuleStrict
 
     function applyConfiguredBatteryStatus(card, d) {
         if (!card || !card.shadowRoot || !d) return;
-
-        // In Compact/Compact Wide ist für den zusätzlichen Batteriestatus
-        // kein sauberer Platz vorgesehen. In Lite/Lite Wide und Full/Full
-        // Wide bleibt er dagegen sichtbar.
-        if (currentTechnicalLayout.startsWith('compact')) {
-            return;
-        }
 
         const batteries = Array.isArray(d.batteries)
             ? d.batteries
