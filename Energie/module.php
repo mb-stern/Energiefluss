@@ -3789,7 +3789,7 @@ class Energiefluss extends IPSModuleStrict
             addEntity(
                 'battery_status',
                 'sensor.symcon_battery_status',
-                !compact && activeBatteries[0].hasStatus
+                activeBatteries[0].hasStatus
             );
             addEntity('day_battery_charge_70', 'sensor.symcon_battery_charge_energy', activeBatteries[0].hasChargeEnergy);
             addEntity('day_battery_discharge_71', 'sensor.symcon_battery_discharge_energy', activeBatteries[0].hasDischargeEnergy);
@@ -3814,7 +3814,7 @@ class Energiefluss extends IPSModuleStrict
             addEntity(
                 'battery2_status',
                 'sensor.symcon_battery2_status',
-                !compact && activeBatteries[1].hasStatus
+                activeBatteries[1].hasStatus
             );
             addEntity('day_battery2_charge_70', 'sensor.symcon_battery2_charge_energy', activeBatteries[1].hasChargeEnergy);
             addEntity('day_battery2_discharge_71', 'sensor.symcon_battery2_discharge_energy', activeBatteries[1].hasDischargeEnergy);
@@ -4551,13 +4551,6 @@ class Energiefluss extends IPSModuleStrict
 
     function applyConfiguredBatteryStatus(card, d) {
         if (!card || !card.shadowRoot || !d) return;
-
-        // Compact verwendet intern den Lite-Cardstyle ausschließlich für
-        // das Batteriedatenfenster. Der zusätzliche Status bleibt dort
-        // ausgeblendet, weil er in dieser Geometrie falsch positioniert ist.
-        if (currentTechnicalLayout.startsWith('compact')) {
-            return;
-        }
 
         const batteries = Array.isArray(d.batteries)
             ? d.batteries
