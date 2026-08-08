@@ -90,6 +90,7 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyBoolean('CreateVariableBatteryPower', false);
         $this->RegisterPropertyBoolean('CreateVariableBatteryChargeEnergy', false);
         $this->RegisterPropertyBoolean('CreateVariableBatteryDischargeEnergy', false);
+        $this->RegisterPropertyBoolean('CreateVariableBatteryRuntime', false);
         $this->RegisterPropertyBoolean('CreateVariableWallboxPower', false);
         $this->RegisterPropertyBoolean('CreateVariableWallboxEnergy', false);
 
@@ -620,14 +621,14 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'ValidationTextBox'],
                                 ],
                                 [
-                                    'caption' => 'Leistungs-Variable',
+                                    'caption' => 'Leistungs-Variable (W)',
                                     'name'    => 'VariableID',
                                     'width'   => '230px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Tagesverbrauch (optional)',
+                                    'caption' => 'Tagesverbrauch (kWh, optional)',
                                     'name'    => 'DailyVariableID',
                                     'width'   => '210px',
                                     'add'     => 0,
@@ -746,6 +747,11 @@ class Energiefluss extends IPSModuleStrict
                             'type'    => 'CheckBox',
                             'name'    => 'CreateVariableBatteryDischargeEnergy',
                             'caption' => 'Batterie-Entladeenergie heute (kWh)',
+                        ],
+                        [
+                            'type'    => 'CheckBox',
+                            'name'    => 'CreateVariableBatteryRuntime',
+                            'caption' => 'Batterie-Laufzeit (String)',
                         ],
                         [
                             'type'    => 'CheckBox',
@@ -6453,6 +6459,12 @@ HTML;
             '~Electricity',
             110
         );
+        $this->ConfigureCalculatedStringVariable(
+            'CreateVariableBatteryRuntime',
+            'CalculatedBatteryRuntime',
+            'Batterie-Laufzeit',
+            115
+        );
         $this->ConfigureCalculatedVariable(
             'CreateVariableWallboxPower',
             'CalculatedWallboxPower',
@@ -6494,6 +6506,185 @@ HTML;
         ) {
             $this->UnregisterVariable($ident);
         }
+    }
+
+    private function ConfigureCalculatedStringVariable(
+        string $property,
+        string $ident,
+        string $name,
+        int $position
+    ): void {
+        if ($this->ReadPropertyBoolean($property)) {
+            $variableID = @$this->GetIDForIdent($ident);
+
+            if (
+                !is_int($variableID) ||
+                $variableID <= 0 ||
+                !IPS_VariableExists($variableID)
+            ) {
+                $this->RegisterVariableString(
+                    $ident,
+                    $name,
+                    '',
+                    $position
+                );
+            }
+
+            return;
+        }
+
+        $variableID = @$this->GetIDForIdent($ident);
+        if (
+            is_int($variableID) &&
+            $variableID > 0 &&
+            IPS_VariableExists($variableID)
+        ) {
+            $this->UnregisterVariable($ident);
+        }
+    }
+
+    private function FormatBatteryRuntime(float $hours): string
+    {
+        if (!is_finite($hours) || $hours < 0.0) {
+            return '--';
+        }
+
+        $totalMinutes = (int) round($hours * 60.0);
+        $days = intdiv($totalMinutes, 1440);
+        $remaining = $totalMinutes % 1440;
+        $wholeHours = intdiv($remaining, 60);
+        $minutes = $remaining % 60;
+
+        if ($days > 0) {
+            return sprintf(
+                '%d d %d h %d min',
+                $days,
+                $wholeHours,
+                $minutes
+            );
+        }
+
+        if ($wholeHours > 0) {
+            return sprintf(
+                '%d h %d min',
+                $wholeHours,
+                $minutes
+            );
+        }
+
+        return sprintf('%d min', $minutes);
+    }
+
+    private function CalculateBatteryRuntimeString(array $batteries): string
+    {
+        if ($batteries === []) {
+            return '--';
+        }
+
+        $totalPower = 0.0;
+        $availableDischargeEnergy = 0.0;
+        $missingChargeEnergy = 0.0;
+
+        $totalCapacity = 0.0;
+        $weightedSoc = 0.0;
+        $weightedMinSoc = 0.0;
+
+        foreach ($batteries as $battery) {
+            if (!is_array($battery)) {
+                continue;
+            }
+
+            $capacity = max(
+                (float) ($battery['capacityKWh'] ?? 0.0),
+                0.0
+            );
+            $soc = min(
+                max((float) ($battery['soc'] ?? 0.0), 0.0),
+                100.0
+            );
+            $minSoc = min(
+                max(
+                    (float) (
+                        $battery['maxDischargeSoc'] ?? 0.0
+                    ),
+                    0.0
+                ),
+                100.0
+            );
+            $power = (float) ($battery['value'] ?? 0.0);
+
+            if ($capacity <= 0.0) {
+                continue;
+            }
+
+            $totalCapacity += $capacity;
+            $weightedSoc += $capacity * $soc;
+            $weightedMinSoc += $capacity * $minSoc;
+            $totalPower += $power;
+
+            $availableDischargeEnergy +=
+                $capacity
+                * max($soc - $minSoc, 0.0)
+                / 100.0;
+
+            $missingChargeEnergy +=
+                $capacity
+                * max(100.0 - $soc, 0.0)
+                / 100.0;
+        }
+
+        if ($totalCapacity <= 0.0) {
+            return '--';
+        }
+
+        $currentSoc = (int) round(
+            $weightedSoc / $totalCapacity
+        );
+        $dischargeLimit = (int) round(
+            $weightedMinSoc / $totalCapacity
+        );
+
+        // Positive Batterieleistung = Entladen zum Haus.
+        if ($totalPower > 1.0) {
+            $hours = $availableDischargeEnergy
+                / ($totalPower / 1000.0);
+
+            $formatted = $this->FormatBatteryRuntime($hours);
+
+            if ($formatted === '--') {
+                return '--';
+            }
+
+            return sprintf(
+                '%s (%d %% → %d %%)',
+                $formatted,
+                $currentSoc,
+                $dischargeLimit
+            );
+        }
+
+        // Negative Batterieleistung = Laden.
+        if ($totalPower < -1.0) {
+            $hours = $missingChargeEnergy
+                / (abs($totalPower) / 1000.0);
+
+            $formatted = $this->FormatBatteryRuntime($hours);
+
+            if ($formatted === '--') {
+                return '--';
+            }
+
+            return sprintf(
+                '%s (%d %% → 100 %%)',
+                $formatted,
+                $currentSoc
+            );
+        }
+
+        return sprintf(
+            'Haltend (%d %%)',
+            $currentSoc
+        );
     }
 
     private function UpdateCalculatedVariables(array $payload): void
@@ -6713,6 +6904,30 @@ HTML;
             // Aktualisierungen durch Fließkommaabweichungen.
             if (abs($currentValue - $newValue) > $tolerance) {
                 $this->SetValue($ident, $newValue);
+            }
+        }
+
+        $runtimeVariableID = @$this->GetIDForIdent(
+            'CalculatedBatteryRuntime'
+        );
+        if (
+            is_int($runtimeVariableID) &&
+            $runtimeVariableID > 0 &&
+            IPS_VariableExists($runtimeVariableID)
+        ) {
+            $runtime = $this->CalculateBatteryRuntimeString(
+                $batteries
+            );
+            $currentRuntime = (string) GetValue(
+                $runtimeVariableID
+            );
+
+            // String nur aktualisieren, wenn sich der Text ändert.
+            if ($currentRuntime !== $runtime) {
+                $this->SetValue(
+                    'CalculatedBatteryRuntime',
+                    $runtime
+                );
             }
         }
     }
