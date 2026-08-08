@@ -273,6 +273,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ### Version 1.5 (08.08.2026)
 - Laufzeit der Batterie kann nun als Variable ausgegeben werden.
+- In der Konfiguration die geforderten Werte klar formuliert.
 
 ### Version 1.4 (06.08.2026)
 - Strom der Batterie wird ausgeblendet, wenn er nicht konfiguriert ist.
