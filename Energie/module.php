@@ -621,14 +621,14 @@ class Energiefluss extends IPSModuleStrict
                                     'edit'    => ['type' => 'ValidationTextBox'],
                                 ],
                                 [
-                                    'caption' => 'Leistungs-Variable (kWh)',
+                                    'caption' => 'Leistungs-Variable (W)',
                                     'name'    => 'VariableID',
                                     'width'   => '230px',
                                     'add'     => 0,
                                     'edit'    => ['type' => 'SelectVariable'],
                                 ],
                                 [
-                                    'caption' => 'Tagesverbrauch (optional)',
+                                    'caption' => 'Tagesverbrauch (kWh, optional)',
                                     'name'    => 'DailyVariableID',
                                     'width'   => '210px',
                                     'add'     => 0,
