@@ -4341,6 +4341,47 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
+
+    function positionLiteDailyEnergyAtCardPosition(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const isLite =
+            currentTechnicalLayout === 'lite' ||
+            currentTechnicalLayout === 'lite-wide';
+
+        if (!isLite) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            const valueNodes = root.querySelectorAll?.(
+                '[id="daily_load_value"]'
+            ) || [];
+
+            valueNodes.forEach(node => {
+                node.setAttribute?.('x', '365');
+                node.setAttribute?.('y', '175');
+
+                node.querySelectorAll?.('tspan').forEach(tspan => {
+                    tspan.setAttribute?.('x', '365');
+                });
+            });
+
+            const labelNodes = root.querySelectorAll?.(
+                '[id="daily_load"]'
+            ) || [];
+
+            labelNodes.forEach(node => {
+                node.setAttribute?.('x', '365');
+                node.setAttribute?.('y', '189');
+
+                node.querySelectorAll?.('tspan').forEach(tspan => {
+                    tspan.setAttribute?.('x', '365');
+                });
+            });
+        }
+    }
+
     async function applySunsynkViewOverrides(card, d = null) {
         // Keine Geometrie und keine Wechselrichterwerte nachträglich verändern.
         // Die WR-Leistung wird ausschließlich über inverter_power_175 von der
@@ -4356,6 +4397,7 @@ class Energiefluss extends IPSModuleStrict
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
+        positionLiteDailyEnergyAtCardPosition(card);
         compactSmartMeterValues(card, d);
         compactInverterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
@@ -4385,6 +4427,7 @@ class Energiefluss extends IPSModuleStrict
                     card,
                     card.__symconLastData || d
                 );
+                positionLiteDailyEnergyAtCardPosition(card);
                 compactSmartMeterValues(
                     card,
                     card.__symconLastData || d
