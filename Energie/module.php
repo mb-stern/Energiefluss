@@ -4637,6 +4637,35 @@ class Energiefluss extends IPSModuleStrict
                 node.setAttribute?.('y', String(firstY + index * spacing));
                 node.removeAttribute?.('transform');
             });
+
+            // Auch der Smartmeter-Rahmen selbst folgt nun der Anzahl der
+            // tatsächlich sichtbaren Werte. Die Originalbox liegt bei
+            // x=234, y=153, width=70, height=70 und ist damit auf y=188
+            // zentriert. Diese Flussachse bleibt unverändert, damit die
+            // horizontalen Netzlinien weiterhin exakt in die Box laufen.
+            const boxCentreY = 188;
+            const boxHeight = Math.max(24, 18 + (visible.length - 1) * spacing);
+            const boxY = boxCentreY - boxHeight / 2;
+
+            const gridSvg = root.querySelector?.('#Grid');
+            let meterBox = null;
+
+            if (gridSvg) {
+                // Die Smartmeter-Box ist der 70x70-Rahmen bei x=234.
+                // Nicht über die Reihenfolge der übrigen Grid-Rechtecke gehen,
+                // damit Non-Essential-Load-Boxen unberührt bleiben.
+                meterBox = Array.from(gridSvg.querySelectorAll?.('rect') || [])
+                    .find(rect => {
+                        const x = Number(rect.getAttribute?.('x'));
+                        const width = Number(rect.getAttribute?.('width'));
+                        return Math.abs(x - 234) < 0.5 && Math.abs(width - 70) < 0.5;
+                    }) || null;
+            }
+
+            if (meterBox) {
+                meterBox.setAttribute?.('y', String(boxY));
+                meterBox.setAttribute?.('height', String(boxHeight));
+            }
         }
     }
 
