@@ -2916,81 +2916,44 @@ class Energiefluss extends IPSModuleStrict
         }
 
         // Netz:
-        // Bis 600px nur EIN Gesamtwert (Saldo) anzeigen.
+        // Immer nur EIN Gesamtwert (Saldo) anzeigen.
         // positiv = Netzbezug -> rot
         // negativ = Einspeisung -> grün
-        // Ab 601px bleiben Bezug und Einspeisung wie bisher getrennt sichtbar.
-        const gridImport = Math.max(grid, 0);
-        const gridExport = Math.max(-grid, 0);
-
         const gridInfo = document.getElementById('pfc-info-grid');
         const gridImportEl = document.getElementById('pfc-grid-import');
         const gridExportEl = document.getElementById('pfc-grid-export');
         const gridSub = document.getElementById('pfc-grid-sub');
 
-        const compactGrid = window.matchMedia('(max-width: 600px)').matches;
+        const isExport = grid < 0;
+        const gridColor = isExport ? AC.export : AC.import;
 
-        if (compactGrid) {
-            const isExport = grid < 0;
-            const gridColor = isExport ? AC.export : AC.import;
+        // Oben nur die gesamte aktuelle Netzleistung.
+        if (gridImportEl) {
+            gridImportEl.textContent = fmt(Math.abs(grid));
+            gridImportEl.style.color = gridColor;
+            gridImportEl.style.display = '';
+        }
 
-            // Oben nur die gesamte aktuelle Netzleistung.
-            if (gridImportEl) {
-                gridImportEl.textContent = fmt(Math.abs(grid));
-                gridImportEl.style.color = gridColor;
-                gridImportEl.style.display = '';
-            }
+        if (gridExportEl) {
+            gridExportEl.textContent = '';
+            gridExportEl.style.display = 'none';
+        }
 
-            if (gridExportEl) {
-                gridExportEl.textContent = '';
-                gridExportEl.style.display = 'none';
+        // Darunter Bezug / Einspeisung mit den vorhandenen Energiewerten.
+        if (gridSub) {
+            const energy = [];
+            if (d.gridImportEnergy) {
+                energy.push('→ ' + d.gridImportEnergy);
             }
+            if (d.gridExportEnergy) {
+                energy.push('← ' + d.gridExportEnergy);
+            }
+            gridSub.innerHTML = energy.join('<br>');
+            gridSub.style.display = '';
+        }
 
-            // Darunter wieder wie früher in kleiner Schrift:
-            // Bezug / Einspeisung mit den vorhandenen Energiewerten.
-            if (gridSub) {
-                const energy = [];
-                if (d.gridImportEnergy) {
-                    energy.push('→ ' + d.gridImportEnergy);
-                }
-                if (d.gridExportEnergy) {
-                    energy.push('← ' + d.gridExportEnergy);
-                }
-                gridSub.innerHTML = energy.join('<br>');
-                gridSub.style.display = '';
-            }
-
-            if (gridInfo) {
-                gridInfo.style.borderColor = gridColor;
-            }
-        } else {
-            if (gridImportEl) {
-                gridImportEl.textContent = `→ ${fmt(gridImport)}`;
-                gridImportEl.style.color = AC.import;
-                gridImportEl.style.display = '';
-            }
-
-            if (gridExportEl) {
-                gridExportEl.textContent = `← ${fmt(gridExport)}`;
-                gridExportEl.style.color = AC.export;
-                gridExportEl.style.display = '';
-            }
-
-            if (gridSub) {
-                const energy = [];
-                if (d.gridImportEnergy) {
-                    energy.push('Bezug ' + d.gridImportEnergy);
-                }
-                if (d.gridExportEnergy) {
-                    energy.push('Einspeisung ' + d.gridExportEnergy);
-                }
-                gridSub.innerHTML = energy.join('<br>');
-                gridSub.style.display = '';
-            }
-
-            if (gridInfo) {
-                gridInfo.style.borderColor = 'rgba(255,255,255,.16)';
-            }
+        if (gridInfo) {
+            gridInfo.style.borderColor = gridColor;
         }
 
         requestAnimationFrame(alignHomeInfoToSolarBottom);
