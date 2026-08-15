@@ -3628,6 +3628,15 @@ class Energiefluss extends IPSModuleStrict
             ...inactiveConsumers
         ].slice(0, maxConsumers);
 
+        // Die Original-Sunsynk-Full-Ansicht behandelt exakt drei
+        // zusätzliche Verbraucher inkonsistent. Für diesen einen Fall
+        // verwenden wir intern die 4er-Geometrie und entfernen den
+        // unbenutzten vierten Slot nach dem Rendern vollständig.
+        window.__symconFullThreeConsumers =
+            full &&
+            auxGroups.length === 0 &&
+            activeGroups.length === 3;
+
         // Nur diese Texte dürfen später geometrisch zentriert werden.
         // Dadurch bleiben PV-Stringwerte, Spannungen, Ströme und sonstige
         // Beschriftungen vollständig unangetastet.
@@ -3970,12 +3979,8 @@ class Energiefluss extends IPSModuleStrict
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
                 max_power: 12000,
                 auto_scale: false,
-                // Die Original-Sunsynk-Full-Ansicht besitzt keinen
-                // eigenen Darstellungszweig für exakt drei Verbraucher.
-                // Deshalb nur für die Geometrie die 4er-Anordnung verwenden.
-                // Der vierte Slot bleibt tatsächlich unbelegt.
                 additional_loads:
-                    full && auxGroups.length === 0 && activeGroups.length === 3
+                    window.__symconFullThreeConsumers
                         ? 4
                         : activeGroups.length,
 
@@ -4012,12 +4017,12 @@ class Energiefluss extends IPSModuleStrict
                 load1_name: activeGroups[0]?.name || '', load2_name: activeGroups[1]?.name || '',
                 load3_name: activeGroups[2]?.name || '', load4_name: activeGroups[3]?.name || '',
                 load5_name: activeGroups[4]?.name || '', load6_name: activeGroups[5]?.name || '',
-                load1_icon: activeGroups[0] ? normalizeConsumerIcon(activeGroups[0].icon) : '',
-                load2_icon: activeGroups[1] ? normalizeConsumerIcon(activeGroups[1].icon) : '',
-                load3_icon: activeGroups[2] ? normalizeConsumerIcon(activeGroups[2].icon) : '',
-                load4_icon: activeGroups[3] ? normalizeConsumerIcon(activeGroups[3].icon) : '',
-                load5_icon: activeGroups[4] ? normalizeConsumerIcon(activeGroups[4].icon) : '',
-                load6_icon: activeGroups[5] ? normalizeConsumerIcon(activeGroups[5].icon) : ''
+                load1_icon: normalizeConsumerIcon(activeGroups[0]?.icon),
+                load2_icon: normalizeConsumerIcon(activeGroups[1]?.icon),
+                load3_icon: normalizeConsumerIcon(activeGroups[2]?.icon),
+                load4_icon: normalizeConsumerIcon(activeGroups[3]?.icon),
+                load5_icon: normalizeConsumerIcon(activeGroups[4]?.icon),
+                load6_icon: normalizeConsumerIcon(activeGroups[5]?.icon)
             },
             grid: {
                 colour: AC.import,
@@ -4237,6 +4242,90 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
+
+    function removeUnusedFourthConsumerForThree(card) {
+        if (
+            !window.__symconFullThreeConsumers ||
+            !card ||
+            !card.shadowRoot
+        ) {
+            return;
+        }
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        const hideNode = node => {
+            if (!node) return;
+            node.setAttribute?.('display', 'none');
+            node.style?.setProperty('display', 'none', 'important');
+            node.style?.setProperty('visibility', 'hidden', 'important');
+            node.style?.setProperty('opacity', '0', 'important');
+            node.style?.setProperty('pointer-events', 'none', 'important');
+        };
+
+        for (const root of roots) {
+            // Leistungswert und eventueller Zusatzwert des vierten Loads.
+            root.querySelectorAll?.(
+                '#ess_load4_value, #ess_load4_value_extra'
+            ).forEach(hideNode);
+
+            // Der vierte Name teilt sich in der Original-Card teilweise
+            // dieselbe ID mit dem dritten. Der rechte Text (x >= 412)
+            // gehört zum vierten Slot.
+            root.querySelectorAll?.('[id="ess-load4"]').forEach(node => {
+                const x = Number(node.getAttribute?.('x'));
+                if (Number.isFinite(x) && x >= 412) {
+                    hideNode(node);
+                }
+            });
+
+            // Auch die beiden unteren Rahmen haben in der Original-Card
+            // teilweise dieselbe ID. Nur der rechte Rahmen ist Slot 4.
+            root.querySelectorAll?.('rect[id="es-load4"]').forEach(rect => {
+                const x = Number(rect.getAttribute?.('x'));
+                if (Number.isFinite(x) && x >= 412) {
+                    hideNode(rect);
+                }
+            });
+
+            // Standard-ha-icon des vierten Slots samt foreignObject entfernen.
+            root.querySelectorAll?.(
+                'ha-icon.essload4-small-icon, .essload4-small-icon'
+            ).forEach(icon => {
+                const foreignObject = icon.closest?.('foreignObject');
+                if (foreignObject) {
+                    const iconId = foreignObject.dataset?.symconIconId;
+                    hideNode(foreignObject);
+
+                    if (iconId) {
+                        root.querySelectorAll?.(
+                            `[data-symcon-native-icon="${iconId}"]`
+                        ).forEach(hideNode);
+                    }
+                }
+
+                hideNode(icon);
+            });
+
+            // Falls unser Font-Awesome-Ersatz bereits als natives SVG
+            // aus dem foreignObject herauskopiert wurde, den rechten
+            // Load4-Klon ebenfalls sicher entfernen.
+            root.querySelectorAll?.('[data-symcon-native-icon]').forEach(node => {
+                try {
+                    const box = node.getBBox?.();
+                    if (
+                        box &&
+                        box.x >= 420 &&
+                        box.y >= 110 &&
+                        box.y <= 180
+                    ) {
+                        hideNode(node);
+                    }
+                } catch (_) {}
+            });
+        }
+    }
+
     async function applySunsynkViewOverrides(card, d = null) {
         // Keine Geometrie und keine Wechselrichterwerte nachträglich verändern.
         // Die WR-Leistung wird ausschließlich über inverter_power_175 von der
@@ -4245,6 +4334,7 @@ class Energiefluss extends IPSModuleStrict
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
+        removeUnusedFourthConsumerForThree(card);
         alignConsumerNamesToPowerBoxes(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyHouseLoadWattColour(card, d);
@@ -4261,6 +4351,7 @@ class Energiefluss extends IPSModuleStrict
         // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
+                removeUnusedFourthConsumerForThree(card);
                 alignConsumerNamesToPowerBoxes(card);
                 applyAdditionalLoadWattColourByGeometry(card);
                 applyHouseLoadWattColour(
@@ -4308,7 +4399,8 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
-                    alignConsumerNamesToPowerBoxes(card);
+                    removeUnusedFourthConsumerForThree(card);
+                alignConsumerNamesToPowerBoxes(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                     applyHouseLoadWattColour(
                         card,
