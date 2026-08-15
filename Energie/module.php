@@ -4239,7 +4239,6 @@ class Energiefluss extends IPSModuleStrict
 
         applyAdditionalLoadColours(card);
         alignConsumerNamesToPowerBoxes(card);
-        shiftLowerLeftConsumerIcon(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyHouseLoadWattColour(card, d);
         applyDynamicHouseSourceIcon(card, d);
@@ -4256,7 +4255,6 @@ class Energiefluss extends IPSModuleStrict
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
                 alignConsumerNamesToPowerBoxes(card);
-                shiftLowerLeftConsumerIcon(card);
                 applyAdditionalLoadWattColourByGeometry(card);
                 applyHouseLoadWattColour(
                     card,
@@ -4304,7 +4302,6 @@ class Energiefluss extends IPSModuleStrict
                     scheduled = false;
                     applyAdditionalLoadColours(card);
                     alignConsumerNamesToPowerBoxes(card);
-                    shiftLowerLeftConsumerIcon(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                     applyHouseLoadWattColour(
                         card,
@@ -5381,25 +5378,6 @@ class Energiefluss extends IPSModuleStrict
                         'important'
                     );
                 });
-            });
-        }
-    }
-
-    function shiftLowerLeftConsumerIcon(card) {
-        if (!card || !card.shadowRoot) return;
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        for (const root of roots) {
-            root.querySelectorAll?.('.essload3-small-icon').forEach(icon => {
-                // In der 4er-/6er-Verbraucheranordnung ist Load 3 der untere
-                // linke Verbraucher. Die Originalkarte positioniert sein Icon
-                // relativ weit zur Mitte. Nur diesen SVG-Platzhalter etwas nach
-                // links versetzen, damit er Abstand zur Hausbeschriftung hält.
-                const foreignObject = icon.closest?.('foreignObject');
-                if (!foreignObject) return;
-
-                foreignObject.setAttribute('x', '400');
             });
         }
     }
