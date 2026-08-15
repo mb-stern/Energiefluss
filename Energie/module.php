@@ -4710,6 +4710,147 @@ class Energiefluss extends IPSModuleStrict
 
 
     function compactBatteryValues(card, d) {
+        // Full / Full Wide besitzt in der Original-Sunsynk-Card einen
+        // eigenen festen Batterierahmen in #battery_data:
+        // x=159, y=329.75, width=70, height=70. Die Messwerte stehen dort
+        // ursprünglich bei ca. y=346 / 365.3 / 386. Diesen Rahmen behandeln
+        // wir direkt, statt ihn geometrisch zu erraten.
+        const isFullBatteryLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        if (isFullBatteryLayout) {
+            const roots = getOpenShadowRoots(card.shadowRoot);
+            const batteries = Array.isArray(d.batteries)
+                ? d.batteries
+                : [];
+            const battery = batteries[0];
+
+            if (!battery) return;
+
+            for (const root of roots) {
+                const batteryData = root.querySelector?.('#battery_data');
+                if (!batteryData) continue;
+
+                const frame = Array.from(
+                    batteryData.querySelectorAll?.(':scope > rect') || []
+                ).find(rect => {
+                    const x = Number(rect.getAttribute?.('x'));
+                    const width = Number(rect.getAttribute?.('width'));
+                    return (
+                        Math.abs(x - 159) < 0.5 &&
+                        Math.abs(width - 70) < 0.5
+                    );
+                });
+
+                if (!frame) continue;
+
+                const definitions = [
+                    {
+                        selector: '[id="battery_voltage_183"]',
+                        available: battery.hasVoltage === true
+                    },
+                    {
+                        selector: '[id="battery_current_191"]',
+                        available: battery.hasCurrent === true
+                    },
+                    {
+                        selector: '[id="data.batteryPower_190"]',
+                        available: battery.hasPower === true
+                    }
+                ];
+
+                const visible = [];
+
+                definitions.forEach(definition => {
+                    const candidates = Array.from(
+                        batteryData.querySelectorAll?.(
+                            definition.selector
+                        ) || []
+                    );
+
+                    // Im Full-Layout ist die relevante Variante diejenige
+                    // im Bereich der großen Batteriebox (x ungefähr 193).
+                    const node = candidates.find(candidate => {
+                        const x = Number(candidate.getAttribute?.('x'));
+                        const y = Number(candidate.getAttribute?.('y'));
+                        return (
+                            Number.isFinite(x) &&
+                            Number.isFinite(y) &&
+                            x >= 185 && x <= 205 &&
+                            y >= 335 && y <= 395
+                        );
+                    });
+
+                    if (!node) return;
+
+                    if (!node.dataset.symconFullOriginalY) {
+                        node.dataset.symconFullOriginalY = String(
+                            node.getAttribute?.('y') || '0'
+                        );
+                    }
+
+                    if (!definition.available) {
+                        node.setAttribute?.('display', 'none');
+                        node.style?.setProperty(
+                            'display',
+                            'none',
+                            'important'
+                        );
+                        return;
+                    }
+
+                    node.removeAttribute?.('display');
+                    node.style?.removeProperty('display');
+                    visible.push(node);
+                });
+
+                if (!visible.length) {
+                    frame.style?.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+                    continue;
+                }
+
+                frame.style?.removeProperty('display');
+                frame.removeAttribute?.('display');
+
+                // Originalzeilenabstand beibehalten, aber die vorhandenen
+                // Zeilen lückenlos zusammenziehen. Der Rahmen bekommt oben
+                // und unten bewusst reichlich Luft, damit er nicht an der
+                // Schrift klebt.
+                const spacing = 20;
+                const centerY = 364.875; // Mitte des Originalrahmens
+                const firstY =
+                    centerY - ((visible.length - 1) * spacing / 2);
+
+                visible.forEach((node, index) => {
+                    node.setAttribute?.(
+                        'y',
+                        String(firstY + index * spacing)
+                    );
+                });
+
+                // Ca. 12 px Innenabstand ober-/unterhalb der Textzeilen.
+                // Text selbst ist etwa 14 px hoch; deshalb 26 px Grundhöhe
+                // plus je 20 px für jede weitere Zeile.
+                const frameHeight =
+                    30 + ((visible.length - 1) * spacing);
+                const frameY = centerY - (frameHeight / 2);
+
+                frame.setAttribute?.('y', String(frameY));
+                frame.setAttribute?.('height', String(frameHeight));
+                frame.setAttribute?.('rx', '7.5');
+                frame.setAttribute?.('ry', '7.5');
+            }
+
+            // Wichtig: Die bisherige generische Compact/Large-Logik darf
+            // den soeben direkt gesetzten Full-Rahmen nicht wieder verändern.
+            return;
+        }
+
         if (!card || !card.shadowRoot || !d) return;
 
         const roots = getOpenShadowRoots(card.shadowRoot);
@@ -4781,25 +4922,9 @@ class Energiefluss extends IPSModuleStrict
             const boxSvg = root.querySelector?.(boxSelector);
             if (!boxSvg) return;
 
-            let rects = Array.from(
+            const rects = Array.from(
                 boxSvg.querySelectorAll?.(':scope > rect') || []
             );
-
-            const isFullLayout =
-                currentTechnicalLayout === 'full' ||
-                currentTechnicalLayout === 'full-wide';
-
-            if (isFullLayout) {
-                const fullRects = Array.from(
-                    root.querySelectorAll?.('rect') || []
-                );
-
-                fullRects.forEach(rect => {
-                    if (!rects.includes(rect)) {
-                        rects.push(rect);
-                    }
-                });
-            }
 
             if (!rects.length) return;
 
@@ -4808,14 +4933,8 @@ class Energiefluss extends IPSModuleStrict
             const availableNodes = [];
 
             valueDefinitions.forEach(([selector, available]) => {
-                const searchRoot =
-                    currentTechnicalLayout === 'full' ||
-                    currentTechnicalLayout === 'full-wide'
-                        ? root
-                        : boxSvg;
-
                 const nodes = Array.from(
-                    searchRoot.querySelectorAll?.(selector) || []
+                    boxSvg.querySelectorAll?.(selector) || []
                 );
 
                 nodes.forEach(remember);
@@ -4900,72 +5019,13 @@ class Energiefluss extends IPSModuleStrict
                 }
 
                 const centerY = y + (height / 2);
-                let distance;
+                const contains =
+                    rowCenterY >= y - 8 &&
+                    rowCenterY <= y + height + 8;
 
-                if (
-                    currentTechnicalLayout === 'full' ||
-                    currentTechnicalLayout === 'full-wide'
-                ) {
-                    try {
-                        const rb = rect.getBBox?.();
-                        const textBoxes = rows
-                            .map(item => item.node.getBBox?.())
-                            .filter(Boolean);
-
-                        if (!rb || !textBoxes.length) return;
-
-                        const minTextX = Math.min(
-                            ...textBoxes.map(box => box.x)
-                        );
-                        const maxTextX = Math.max(
-                            ...textBoxes.map(box => box.x + box.width)
-                        );
-                        const minTextY = Math.min(
-                            ...textBoxes.map(box => box.y)
-                        );
-                        const maxTextY = Math.max(
-                            ...textBoxes.map(box => box.y + box.height)
-                        );
-
-                        const encloses =
-                            rb.x <= minTextX + 4 &&
-                            rb.x + rb.width >= maxTextX - 4 &&
-                            rb.y <= minTextY + 8 &&
-                            rb.y + rb.height >= maxTextY - 8;
-
-                        // Nur ein echter Rahmen um die Batterietexte kommt
-                        // in Full in Frage. Sehr große Hintergrund-Rechtecke
-                        // werden zusätzlich ausgeschlossen.
-                        if (
-                            !encloses ||
-                            rb.width > 220 ||
-                            rb.height > 180 ||
-                            rb.width < 45 ||
-                            rb.height < 18
-                        ) {
-                            return;
-                        }
-
-                        const textCenterX =
-                            (minTextX + maxTextX) / 2;
-                        const rectCenterX =
-                            rb.x + rb.width / 2;
-
-                        distance =
-                            Math.abs(centerY - rowCenterY) +
-                            Math.abs(rectCenterX - textCenterX);
-                    } catch (_) {
-                        return;
-                    }
-                } else {
-                    const contains =
-                        rowCenterY >= y - 8 &&
-                        rowCenterY <= y + height + 8;
-
-                    distance =
-                        Math.abs(centerY - rowCenterY) +
-                        (contains ? 0 : 1000);
-                }
+                const distance =
+                    Math.abs(centerY - rowCenterY) +
+                    (contains ? 0 : 1000);
 
                 if (distance < frameDistance) {
                     frameDistance = distance;
@@ -5007,7 +5067,7 @@ class Energiefluss extends IPSModuleStrict
             }
 
             // Ein Wert: kompakte Box. Mehrere Werte: gleicher Card-Zeilenabstand.
-            const padding = 22;
+            const padding = 12;
             const newHeight = Math.max(
                 24,
                 padding + ((rows.length - 1) * spacing)
