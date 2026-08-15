@@ -4001,9 +4001,7 @@ class Energiefluss extends IPSModuleStrict
                 aux_colour: AC.room,
                 aux_off_colour: AC.room,
                 aux_dynamic_colour: false,
-                // Hausbezeichnung bewusst ausblenden, damit die originalen
-                // Sunsynk-Verbraucher-Icons der unteren Reihe mehr Platz haben.
-                essential_name: '',
+                essential_name: 'Haus',
                 load1_name: activeGroups[0]?.name || '', load2_name: activeGroups[1]?.name || '',
                 load3_name: activeGroups[2]?.name || '', load4_name: activeGroups[3]?.name || '',
                 load5_name: activeGroups[4]?.name || '', load6_name: activeGroups[5]?.name || '',
