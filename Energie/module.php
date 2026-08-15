@@ -4680,8 +4680,9 @@ class Energiefluss extends IPSModuleStrict
             if (!visible.length) continue;
 
             // Die WR-Werte liegen im Original ungefähr im Bereich y=174..214.
-            // Den vorhandenen 13-px-Zeilenabstand behalten wir bei und
-            // zentrieren weniger vorhandene Werte innerhalb dieses Bereichs.
+            // Den vorhandenen 13-px-Zeilenabstand behalten wir bei. Zusätzlich
+            // wird nun auch der Rahmen selbst auf die tatsächlich sichtbaren
+            // Zeilen verkleinert bzw. vergrößert.
             const spacing = 13;
             const centreY = 194;
             const firstY = centreY - ((visible.length - 1) * spacing / 2);
@@ -4690,6 +4691,37 @@ class Energiefluss extends IPSModuleStrict
                 node.setAttribute?.('y', String(firstY + index * spacing));
                 node.removeAttribute?.('transform');
             });
+
+            // Original: x=145.15, y=162, width=70, height=50/60.
+            // Pro sichtbarer Zeile werden 13 px benötigt, zusätzlich bleibt
+            // oben und unten genügend Innenabstand. Vier Zeilen ergeben damit
+            // praktisch wieder die originale 60-px-Box.
+            const boxHeight = Math.max(24, 20 + (visible.length - 1) * spacing);
+            const boxY = centreY - boxHeight / 2;
+
+            const inverterSvg = root.querySelector?.('#Inverter');
+            const box =
+                inverterSvg?.querySelector?.(':scope > rect') ||
+                root.querySelector?.('#Inverter > rect');
+
+            if (box) {
+                box.setAttribute?.('y', String(boxY));
+                box.setAttribute?.('height', String(boxHeight));
+            }
+
+            // Die Leitung unterhalb der WR-Box soll weiterhin direkt am
+            // Rahmen beginnen, auch wenn sich dessen Höhe ändert.
+            const inverterPath =
+                root.querySelector?.('#inverter-path') ||
+                inverterSvg?.querySelector?.('#inverter-path');
+
+            if (inverterPath) {
+                const boxBottom = boxY + boxHeight;
+                inverterPath.setAttribute?.(
+                    'd',
+                    `M 180 ${boxBottom} L 180 235`
+                );
+            }
         }
     }
 
