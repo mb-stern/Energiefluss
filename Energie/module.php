@@ -3970,15 +3970,13 @@ class Energiefluss extends IPSModuleStrict
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
                 max_power: 12000,
                 auto_scale: false,
-                // Die originale Sunsynk-Full-Ansicht hat bei exakt drei
-                // zusätzlichen Essential Loads einen fehlerhaften Layout-Zweig:
-                // Die Verbrauchergruppe kann dabei komplett verschwinden.
-                // Für die Geometrie deshalb in Full intern vier Plätze wählen.
-                // Es werden weiterhin ausschließlich die tatsächlich vorhandenen
-                // drei Entities/Namen/Icons übergeben; ein vierter Verbraucher
-                // wird nicht erzeugt.
+                // Die Sunsynk-Full-Ansicht besitzt ohne AUX keinen eigenen
+                // Geometriezweig für exakt drei zusätzliche Verbraucher.
+                // Deshalb bei genau drei echten Verbrauchern intern die
+                // 4er-Geometrie verwenden. Der unbenutzte vierte Slot wird
+                // nach dem Rendern vollständig ausgeblendet.
                 additional_loads:
-                    full && activeGroups.length === 3
+                    full && auxGroups.length === 0 && activeGroups.length === 3
                         ? 4
                         : activeGroups.length,
 
@@ -4240,6 +4238,93 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
+
+    function hideUnusedFourthConsumerSlotForThree(card, d = null) {
+        if (!card || !card.shadowRoot) return;
+
+        const fullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        if (!fullLayout) return;
+
+        const groups = Array.isArray(d?.groups) ? d.groups : [];
+        const configuredConsumers = groups
+            .filter(group => group?.hasPower)
+            .map(group => ({
+                ...group,
+                value: Math.max(Number(group.value || 0), 0),
+                displayThreshold: Math.max(
+                    Number(group.displayThreshold || 0),
+                    0
+                )
+            }));
+
+        const auxGroups = configuredConsumers
+            .filter(group => group.isAux === true)
+            .slice(0, 2);
+
+        if (auxGroups.length > 0) return;
+
+        const visibleNormalConsumers = configuredConsumers
+            .filter(group => !auxGroups.includes(group))
+            .filter(group =>
+                group.displayThreshold <= 0 ||
+                group.value >= group.displayThreshold
+            );
+
+        if (visibleNormalConsumers.length !== 3) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            // Der vierte Slot der von uns nur geometrisch verwendeten
+            // 4er-Anordnung darf bei drei echten Verbrauchern vollständig
+            // unsichtbar bleiben.
+            root.querySelectorAll?.(
+                [
+                    '#ess_load4_value',
+                    '#essload4_value',
+                    '#ess_load4_value_extra',
+                    '#essload4_value_extra',
+                    '#ess_load4_name',
+                    '#essload4_name',
+                    '[id*="essload4"]',
+                    '[id*="ess_load4"]',
+                    '.essload4-small-icon'
+                ].join(',')
+            ).forEach(node => {
+                const target =
+                    node.closest?.('foreignObject') ||
+                    node.closest?.('g') ||
+                    node;
+
+                if (target?.style) {
+                    target.style.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+                } else {
+                    target?.setAttribute?.('display', 'none');
+                }
+            });
+
+            // Bei ha-icon sitzt die eigentliche sichtbare Fläche im
+            // foreignObject. Dieses ebenfalls ausblenden.
+            root.querySelectorAll?.('ha-icon.essload4-small-icon')
+                .forEach(icon => {
+                    const foreignObject = icon.closest?.('foreignObject');
+                    foreignObject?.setAttribute?.('display', 'none');
+                    foreignObject?.style?.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+                });
+        }
+    }
+
     async function applySunsynkViewOverrides(card, d = null) {
         // Keine Geometrie und keine Wechselrichterwerte nachträglich verändern.
         // Die WR-Leistung wird ausschließlich über inverter_power_175 von der
@@ -4248,6 +4333,7 @@ class Energiefluss extends IPSModuleStrict
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
+        hideUnusedFourthConsumerSlotForThree(card, d);
         alignConsumerNamesToPowerBoxes(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyHouseLoadWattColour(card, d);
@@ -4264,6 +4350,10 @@ class Energiefluss extends IPSModuleStrict
         // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
+                hideUnusedFourthConsumerSlotForThree(
+                    card,
+                    card.__symconLastData || d
+                );
                 alignConsumerNamesToPowerBoxes(card);
                 applyAdditionalLoadWattColourByGeometry(card);
                 applyHouseLoadWattColour(
@@ -4311,7 +4401,11 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
-                    alignConsumerNamesToPowerBoxes(card);
+                    hideUnusedFourthConsumerSlotForThree(
+                    card,
+                    card.__symconLastData || d
+                );
+                alignConsumerNamesToPowerBoxes(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                     applyHouseLoadWattColour(
                         card,
