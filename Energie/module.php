@@ -3970,7 +3970,17 @@ class Energiefluss extends IPSModuleStrict
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
                 max_power: 12000,
                 auto_scale: false,
-                additional_loads: activeGroups.length,
+                // Die originale Sunsynk-Full-Ansicht hat bei exakt drei
+                // zusätzlichen Essential Loads einen fehlerhaften Layout-Zweig:
+                // Die Verbrauchergruppe kann dabei komplett verschwinden.
+                // Für die Geometrie deshalb in Full intern vier Plätze wählen.
+                // Es werden weiterhin ausschließlich die tatsächlich vorhandenen
+                // drei Entities/Namen/Icons übergeben; ein vierter Verbraucher
+                // wird nicht erzeugt.
+                additional_loads:
+                    full && activeGroups.length === 3
+                        ? 4
+                        : activeGroups.length,
 
                 // Genau ein markierter Verbraucher wird als großer Haupt-AUX
                 // dargestellt. Bei zwei Einträgen zeigt die Originalkarte
