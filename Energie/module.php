@@ -3593,11 +3593,19 @@ class Energiefluss extends IPSModuleStrict
 
         // AUX bleibt von der Mindestleistung unberührt und verhält sich
         // damit exakt wie vor Einführung der Anzeigeschwelle.
-        const auxGroups = configuredConsumers
-            .filter(group => group.isAux === true)
-            .slice(0, 2);
+        // AUX wird ausschließlich in Full / Full Wide separat dargestellt.
+        // In Compact / Lite (inkl. Wide) werden als AUX markierte Verbraucher
+        // wie normale Verbraucher behandelt, da diese Ansichten keinen
+        // eigenen AUX-Bereich besitzen.
+        const auxGroups = full
+            ? configuredConsumers
+                .filter(group => group.isAux === true)
+                .slice(0, 2)
+            : [];
 
         // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        // Außerhalb von Full gehören damit auch als AUX markierte Einträge
+        // automatisch zu den normalen Verbrauchern.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -4064,11 +4072,21 @@ class Energiefluss extends IPSModuleStrict
 
         // AUX bleibt von der Mindestleistung unberührt und verhält sich
         // damit exakt wie vor Einführung der Anzeigeschwelle.
-        const auxGroups = configuredConsumers
-            .filter(group => group.isAux === true)
-            .slice(0, 2);
+        // Exakt dieselbe AUX-Logik wie in createSunsynkConfig:
+        // Nur Full / Full Wide besitzt einen separaten AUX-Bereich.
+        // In Compact / Lite werden AUX-markierte Einträge als normale
+        // Verbraucher behandelt.
+        const fullLayout =
+            currentTechnicalLayout.startsWith('full');
 
-        // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        const auxGroups = fullLayout
+            ? configuredConsumers
+                .filter(group => group.isAux === true)
+                .slice(0, 2)
+            : [];
+
+        // Außerhalb von Full fallen AUX-markierte Einträge damit ganz normal
+        // durch den Verbraucherfilter samt Anzeigeschwelle.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -4088,9 +4106,6 @@ class Energiefluss extends IPSModuleStrict
         );
 
         // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
-        const fullLayout =
-            currentTechnicalLayout.startsWith('full');
-
         const maxConsumers =
             fullLayout && auxGroups.length > 0
                 ? 2
