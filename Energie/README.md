@@ -273,7 +273,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ### Version 1.6 (15.08.2026)
 - In der Hausansicht wir für die Netzleistung nur noch ein Wert dargestellt.
-- In der Sunsynk-Card verhalten sich die Smartmeter- und Wechselrichter-Box nun dynamsich zum Inhalt. Werden nicht alle Werte gewählt, passt sich die Box nun an.
+- In der Sunsynk-Card verhalten sich die Smartmeter- , Batterie- und Wechselrichter-Box nun dynamsich zum Inhalt. Werden nicht alle Werte gewählt, passt sich die Box nun an.
 - Ein Fehler wurde behoben, dass in der Full-Ansicht genau drei aktive Verbrauchern komplett ausgeblendet wurden.
 - Ein Fehler wurde behoben, dass in der Compact und Large Ansicht AUX-Verbraucher nicht als normale Verbraucher dargestellt wurden.
 
