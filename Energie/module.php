@@ -4359,11 +4359,11 @@ class Energiefluss extends IPSModuleStrict
             ) || [];
 
             valueNodes.forEach(node => {
-                node.setAttribute?.('x', '365');
+                node.setAttribute?.('x', '350');
                 node.setAttribute?.('y', '175');
 
                 node.querySelectorAll?.('tspan').forEach(tspan => {
-                    tspan.setAttribute?.('x', '365');
+                    tspan.setAttribute?.('x', '350');
                 });
             });
 
@@ -4372,11 +4372,11 @@ class Energiefluss extends IPSModuleStrict
             ) || [];
 
             labelNodes.forEach(node => {
-                node.setAttribute?.('x', '365');
+                node.setAttribute?.('x', '350');
                 node.setAttribute?.('y', '189');
 
                 node.querySelectorAll?.('tspan').forEach(tspan => {
-                    tspan.setAttribute?.('x', '365');
+                    tspan.setAttribute?.('x', '350');
                 });
             });
         }
