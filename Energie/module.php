@@ -3823,13 +3823,15 @@ class Energiefluss extends IPSModuleStrict
                 addEntity(
                     'aux_load1_extra',
                     'sensor.symcon_aux1_extra',
-                    !!auxGroups[0]?.hasSoc
+                    !!auxGroups[0]?.hasSoc &&
+                    auxGroups[0]?.isWallbox !== true
                 );
                 addEntity('aux_load2', 'sensor.symcon_aux2', true);
                 addEntity(
                     'aux_load2_extra',
                     'sensor.symcon_aux2_extra',
-                    !!auxGroups[1]?.hasSoc
+                    !!auxGroups[1]?.hasSoc &&
+                    auxGroups[1]?.isWallbox !== true
                 );
             }
         }
