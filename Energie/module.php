@@ -4341,174 +4341,6 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-
-    function positionLiteDailyEnergyAboveHousePower(card) {
-        if (!card || !card.shadowRoot) return;
-
-        const isLite =
-            currentTechnicalLayout === 'lite' ||
-            currentTechnicalLayout === 'lite-wide';
-
-        if (!isLite) return;
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        for (const root of roots) {
-            // Haus-Wattanzeige als Anker verwenden.
-            let housePower = null;
-
-            const houseSelectors = [
-                '#essential_power',
-                '#essential-power',
-                '#essential_load',
-                '#essential-load',
-                '#load_power',
-                '#load-power',
-                '#load_value',
-                '#load-value'
-            ];
-
-            for (const selector of houseSelectors) {
-                const candidate = root.querySelector?.(selector);
-                if (!candidate) continue;
-
-                const shown = String(
-                    candidate.textContent || ''
-                ).trim();
-
-                if (/(?:W|kW)$/i.test(shown)) {
-                    housePower = candidate;
-                    break;
-                }
-            }
-
-            // Fallback über sichtbaren Hausverbrauch-Block.
-            if (!housePower) {
-                const houseLabel = Array.from(
-                    root.querySelectorAll?.('text, tspan') || []
-                ).find(node =>
-                    String(node.textContent || '').trim() ===
-                    'Hausverbrauch'
-                );
-
-                const group = houseLabel?.closest?.('g');
-
-                if (group) {
-                    housePower = Array.from(
-                        group.querySelectorAll?.('text, tspan') || []
-                    ).find(node =>
-                        /[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(
-                            String(node.textContent || '').trim()
-                        )
-                    ) || null;
-                }
-            }
-
-            if (!housePower) continue;
-
-            let powerBox;
-            try {
-                powerBox = housePower.getBBox?.();
-            } catch (_) {
-                powerBox = null;
-            }
-
-            if (!powerBox) continue;
-
-            const centerX =
-                powerBox.x + powerBox.width / 2;
-
-            // Energie-heute-Elemente suchen.
-            const dailyNodes = new Set();
-
-            [
-                '#day_load_energy_84',
-                '[id="day_load_energy_84"]',
-                '[id*="day_load_energy"]'
-            ].forEach(selector => {
-                root.querySelectorAll?.(selector).forEach(node => {
-                    dailyNodes.add(node);
-                    node.querySelectorAll?.('text, tspan')
-                        .forEach(child => dailyNodes.add(child));
-                });
-            });
-
-            root.querySelectorAll?.('text, tspan').forEach(node => {
-                const shown = String(
-                    node.textContent || ''
-                ).trim();
-
-                if (
-                    shown === 'Energie heute' ||
-                    shown === 'Energy today'
-                ) {
-                    dailyNodes.add(node);
-
-                    const group = node.closest?.('g');
-                    group?.querySelectorAll?.('text, tspan')
-                        .forEach(child => {
-                            const value = String(
-                                child.textContent || ''
-                            ).trim();
-
-                            if (
-                                child === node ||
-                                /[-+]?\d[\d.,'’\s]*\s*kWh$/i.test(value)
-                            ) {
-                                dailyNodes.add(child);
-                            }
-                        });
-                }
-            });
-
-            if (!dailyNodes.size) continue;
-
-            const labelNodes = [];
-            const valueNodes = [];
-
-            dailyNodes.forEach(node => {
-                const shown = String(
-                    node.textContent || ''
-                ).trim();
-
-                if (
-                    shown === 'Energie heute' ||
-                    shown === 'Energy today'
-                ) {
-                    labelNodes.push(node);
-                } else if (
-                    /[-+]?\d[\d.,'’\s]*\s*kWh$/i.test(shown)
-                ) {
-                    valueNodes.push(node);
-                }
-            });
-
-            // Energie heute links neben dem Haus platzieren.
-            // Die ursprüngliche vertikale Position der Card bleibt erhalten;
-            // nur X wird relativ zur Haus-Wattanzeige verschoben.
-            const targetX = centerX - 72;
-
-            const place = node => {
-                node.setAttribute?.('x', String(targetX));
-                node.setAttribute?.('text-anchor', 'middle');
-
-                node.style?.setProperty(
-                    'text-anchor',
-                    'middle',
-                    'important'
-                );
-
-                node.querySelectorAll?.('tspan').forEach(tspan => {
-                    tspan.setAttribute?.('x', String(targetX));
-                    tspan.setAttribute?.('text-anchor', 'middle');
-                });
-            };
-
-            labelNodes.forEach(node => place(node));
-            valueNodes.forEach(node => place(node));
-        }
-    }
-
     async function applySunsynkViewOverrides(card, d = null) {
         // Keine Geometrie und keine Wechselrichterwerte nachträglich verändern.
         // Die WR-Leistung wird ausschließlich über inverter_power_175 von der
@@ -4517,7 +4349,6 @@ class Energiefluss extends IPSModuleStrict
         await card.updateComplete;
 
         applyAdditionalLoadColours(card);
-        positionLiteDailyEnergyAboveHousePower(card);
         removeUnusedFourthConsumerForThree(card);
         alignConsumerNamesToPowerBoxes(card);
         applyAdditionalLoadWattColourByGeometry(card);
@@ -4535,7 +4366,6 @@ class Energiefluss extends IPSModuleStrict
         // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
         [0, 80, 250, 600, 1200].forEach(delay => {
             setTimeout(() => {
-                positionLiteDailyEnergyAboveHousePower(card);
                 removeUnusedFourthConsumerForThree(card);
                 alignConsumerNamesToPowerBoxes(card);
                 applyAdditionalLoadWattColourByGeometry(card);
@@ -4584,8 +4414,7 @@ class Energiefluss extends IPSModuleStrict
                 requestAnimationFrame(() => {
                     scheduled = false;
                     applyAdditionalLoadColours(card);
-                    positionLiteDailyEnergyAboveHousePower(card);
-                removeUnusedFourthConsumerForThree(card);
+                    removeUnusedFourthConsumerForThree(card);
                 alignConsumerNamesToPowerBoxes(card);
                     applyAdditionalLoadWattColourByGeometry(card);
                     applyHouseLoadWattColour(
