@@ -2916,81 +2916,44 @@ class Energiefluss extends IPSModuleStrict
         }
 
         // Netz:
-        // Bis 600px nur EIN Gesamtwert (Saldo) anzeigen.
+        // Immer nur EIN Gesamtwert (Saldo) anzeigen.
         // positiv = Netzbezug -> rot
         // negativ = Einspeisung -> grün
-        // Ab 601px bleiben Bezug und Einspeisung wie bisher getrennt sichtbar.
-        const gridImport = Math.max(grid, 0);
-        const gridExport = Math.max(-grid, 0);
-
         const gridInfo = document.getElementById('pfc-info-grid');
         const gridImportEl = document.getElementById('pfc-grid-import');
         const gridExportEl = document.getElementById('pfc-grid-export');
         const gridSub = document.getElementById('pfc-grid-sub');
 
-        const compactGrid = window.matchMedia('(max-width: 600px)').matches;
+        const isExport = grid < 0;
+        const gridColor = isExport ? AC.export : AC.import;
 
-        if (compactGrid) {
-            const isExport = grid < 0;
-            const gridColor = isExport ? AC.export : AC.import;
+        // Oben nur die gesamte aktuelle Netzleistung.
+        if (gridImportEl) {
+            gridImportEl.textContent = fmt(Math.abs(grid));
+            gridImportEl.style.color = gridColor;
+            gridImportEl.style.display = '';
+        }
 
-            // Oben nur die gesamte aktuelle Netzleistung.
-            if (gridImportEl) {
-                gridImportEl.textContent = fmt(Math.abs(grid));
-                gridImportEl.style.color = gridColor;
-                gridImportEl.style.display = '';
-            }
+        if (gridExportEl) {
+            gridExportEl.textContent = '';
+            gridExportEl.style.display = 'none';
+        }
 
-            if (gridExportEl) {
-                gridExportEl.textContent = '';
-                gridExportEl.style.display = 'none';
+        // Darunter Bezug / Einspeisung mit den vorhandenen Energiewerten.
+        if (gridSub) {
+            const energy = [];
+            if (d.gridImportEnergy) {
+                energy.push('→ ' + d.gridImportEnergy);
             }
+            if (d.gridExportEnergy) {
+                energy.push('← ' + d.gridExportEnergy);
+            }
+            gridSub.innerHTML = energy.join('<br>');
+            gridSub.style.display = '';
+        }
 
-            // Darunter wieder wie früher in kleiner Schrift:
-            // Bezug / Einspeisung mit den vorhandenen Energiewerten.
-            if (gridSub) {
-                const energy = [];
-                if (d.gridImportEnergy) {
-                    energy.push('→ ' + d.gridImportEnergy);
-                }
-                if (d.gridExportEnergy) {
-                    energy.push('← ' + d.gridExportEnergy);
-                }
-                gridSub.innerHTML = energy.join('<br>');
-                gridSub.style.display = '';
-            }
-
-            if (gridInfo) {
-                gridInfo.style.borderColor = gridColor;
-            }
-        } else {
-            if (gridImportEl) {
-                gridImportEl.textContent = `→ ${fmt(gridImport)}`;
-                gridImportEl.style.color = AC.import;
-                gridImportEl.style.display = '';
-            }
-
-            if (gridExportEl) {
-                gridExportEl.textContent = `← ${fmt(gridExport)}`;
-                gridExportEl.style.color = AC.export;
-                gridExportEl.style.display = '';
-            }
-
-            if (gridSub) {
-                const energy = [];
-                if (d.gridImportEnergy) {
-                    energy.push('Bezug ' + d.gridImportEnergy);
-                }
-                if (d.gridExportEnergy) {
-                    energy.push('Einspeisung ' + d.gridExportEnergy);
-                }
-                gridSub.innerHTML = energy.join('<br>');
-                gridSub.style.display = '';
-            }
-
-            if (gridInfo) {
-                gridInfo.style.borderColor = 'rgba(255,255,255,.16)';
-            }
+        if (gridInfo) {
+            gridInfo.style.borderColor = gridColor;
         }
 
         requestAnimationFrame(alignHomeInfoToSolarBottom);
@@ -3630,11 +3593,19 @@ class Energiefluss extends IPSModuleStrict
 
         // AUX bleibt von der Mindestleistung unberührt und verhält sich
         // damit exakt wie vor Einführung der Anzeigeschwelle.
-        const auxGroups = configuredConsumers
-            .filter(group => group.isAux === true)
-            .slice(0, 2);
+        // AUX wird ausschließlich in Full / Full Wide separat dargestellt.
+        // In Compact / Lite (inkl. Wide) werden als AUX markierte Verbraucher
+        // wie normale Verbraucher behandelt, da diese Ansichten keinen
+        // eigenen AUX-Bereich besitzen.
+        const auxGroups = full
+            ? configuredConsumers
+                .filter(group => group.isAux === true)
+                .slice(0, 2)
+            : [];
 
         // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        // Außerhalb von Full gehören damit auch als AUX markierte Einträge
+        // automatisch zu den normalen Verbrauchern.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -3664,6 +3635,15 @@ class Energiefluss extends IPSModuleStrict
             ...activeConsumers,
             ...inactiveConsumers
         ].slice(0, maxConsumers);
+
+        // Die Original-Sunsynk-Full-Ansicht behandelt exakt drei
+        // zusätzliche Verbraucher inkonsistent. Für diesen einen Fall
+        // verwenden wir intern die 4er-Geometrie und entfernen den
+        // unbenutzten vierten Slot nach dem Rendern vollständig.
+        window.__symconFullThreeConsumers =
+            full &&
+            auxGroups.length === 0 &&
+            activeGroups.length === 3;
 
         // Nur diese Texte dürfen später geometrisch zentriert werden.
         // Dadurch bleiben PV-Stringwerte, Spannungen, Ströme und sonstige
@@ -3843,13 +3823,15 @@ class Energiefluss extends IPSModuleStrict
                 addEntity(
                     'aux_load1_extra',
                     'sensor.symcon_aux1_extra',
-                    !!auxGroups[0]?.hasSoc
+                    !!auxGroups[0]?.hasSoc &&
+                    auxGroups[0]?.isWallbox !== true
                 );
                 addEntity('aux_load2', 'sensor.symcon_aux2', true);
                 addEntity(
                     'aux_load2_extra',
                     'sensor.symcon_aux2_extra',
-                    !!auxGroups[1]?.hasSoc
+                    !!auxGroups[1]?.hasSoc &&
+                    auxGroups[1]?.isWallbox !== true
                 );
             }
         }
@@ -3868,6 +3850,37 @@ class Energiefluss extends IPSModuleStrict
             activePvs,
             activeBatteries
         );
+
+        const auxDisplayName = group => {
+            if (!group) return '';
+
+            const name = String(group.name || '').trim();
+
+            // Nur bei der als Wallbox markierten AUX-Last den Fahrzeug-SOC
+            // direkt hinter dem Verbrauchernamen anzeigen.
+            if (
+                auxGroups.length === 2 &&
+                group.isWallbox === true &&
+                group.hasSoc === true
+            ) {
+                const rawSoc = String(group.socText || '').trim();
+
+                if (rawSoc !== '') {
+                    const percentMatch =
+                        rawSoc.match(/([-+]?\d+(?:[.,]\d+)?)\s*%/);
+
+                    const soc = percentMatch
+                        ? `${percentMatch[1]}%`
+                        : rawSoc;
+
+                    return [name, soc]
+                        .filter(Boolean)
+                        .join(' · ');
+                }
+            }
+
+            return name;
+        };
 
         const cfg = {
             cardstyle: cardStyle,
@@ -4007,7 +4020,10 @@ class Energiefluss extends IPSModuleStrict
                 animation_speed: Math.max(1, Math.round(4 / flowSpeedFactor)),
                 max_power: 12000,
                 auto_scale: false,
-                additional_loads: activeGroups.length,
+                additional_loads:
+                    window.__symconFullThreeConsumers
+                        ? 4
+                        : activeGroups.length,
 
                 // Genau ein markierter Verbraucher wird als großer Haupt-AUX
                 // dargestellt. Bei zwei Einträgen zeigt die Originalkarte
@@ -4027,11 +4043,11 @@ class Energiefluss extends IPSModuleStrict
                         : 'default',
                 aux_load1_name:
                     auxGroups.length >= 2
-                        ? (auxGroups[0]?.name || 'Aux1')
+                        ? (auxDisplayName(auxGroups[0]) || 'Aux1')
                         : '',
                 aux_load2_name:
                     auxGroups.length >= 2
-                        ? (auxGroups[1]?.name || 'Aux2')
+                        ? (auxDisplayName(auxGroups[1]) || 'Aux2')
                         : '',
                 // Haupt-AUX, Unterverbraucher, Linie, Icon, Werte und Text
                 // verwenden dieselbe konfigurierte Verbraucherfarbe.
@@ -4089,11 +4105,21 @@ class Energiefluss extends IPSModuleStrict
 
         // AUX bleibt von der Mindestleistung unberührt und verhält sich
         // damit exakt wie vor Einführung der Anzeigeschwelle.
-        const auxGroups = configuredConsumers
-            .filter(group => group.isAux === true)
-            .slice(0, 2);
+        // Exakt dieselbe AUX-Logik wie in createSunsynkConfig:
+        // Nur Full / Full Wide besitzt einen separaten AUX-Bereich.
+        // In Compact / Lite werden AUX-markierte Einträge als normale
+        // Verbraucher behandelt.
+        const fullLayout =
+            currentTechnicalLayout.startsWith('full');
 
-        // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        const auxGroups = fullLayout
+            ? configuredConsumers
+                .filter(group => group.isAux === true)
+                .slice(0, 2)
+            : [];
+
+        // Außerhalb von Full fallen AUX-markierte Einträge damit ganz normal
+        // durch den Verbraucherfilter samt Anzeigeschwelle.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -4113,9 +4139,6 @@ class Energiefluss extends IPSModuleStrict
         );
 
         // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
-        const fullLayout =
-            currentTechnicalLayout.startsWith('full');
-
         const maxConsumers =
             fullLayout && auxGroups.length > 0
                 ? 2
@@ -4267,90 +4290,171 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
-    async function applySunsynkViewOverrides(card, d = null) {
-        // Keine Geometrie und keine Wechselrichterwerte nachträglich verändern.
-        // Die WR-Leistung wird ausschließlich über inverter_power_175 von der
-        // Originalkarte dargestellt. Hier werden nur Verbraucherfarben korrigiert.
+
+    function removeUnusedFourthConsumerForThree(card) {
+        if (
+            !window.__symconFullThreeConsumers ||
+            !card ||
+            !card.shadowRoot
+        ) {
+            return;
+        }
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        const hideNode = node => {
+            if (!node) return;
+            node.setAttribute?.('display', 'none');
+            node.style?.setProperty('display', 'none', 'important');
+            node.style?.setProperty('visibility', 'hidden', 'important');
+            node.style?.setProperty('opacity', '0', 'important');
+            node.style?.setProperty('pointer-events', 'none', 'important');
+        };
+
+        for (const root of roots) {
+            // Leistungswert und eventueller Zusatzwert des vierten Loads.
+            root.querySelectorAll?.(
+                '#ess_load4_value, #ess_load4_value_extra'
+            ).forEach(hideNode);
+
+            // Der vierte Name teilt sich in der Original-Card teilweise
+            // dieselbe ID mit dem dritten. Der rechte Text (x >= 412)
+            // gehört zum vierten Slot.
+            root.querySelectorAll?.('[id="ess-load4"]').forEach(node => {
+                const x = Number(node.getAttribute?.('x'));
+                if (Number.isFinite(x) && x >= 412) {
+                    hideNode(node);
+                }
+            });
+
+            // Auch die beiden unteren Rahmen haben in der Original-Card
+            // teilweise dieselbe ID. Nur der rechte Rahmen ist Slot 4.
+            root.querySelectorAll?.('rect[id="es-load4"]').forEach(rect => {
+                const x = Number(rect.getAttribute?.('x'));
+                if (Number.isFinite(x) && x >= 412) {
+                    hideNode(rect);
+                }
+            });
+
+            // Standard-ha-icon des vierten Slots samt foreignObject entfernen.
+            root.querySelectorAll?.(
+                'ha-icon.essload4-small-icon, .essload4-small-icon'
+            ).forEach(icon => {
+                const foreignObject = icon.closest?.('foreignObject');
+                if (foreignObject) {
+                    const iconId = foreignObject.dataset?.symconIconId;
+                    hideNode(foreignObject);
+
+                    if (iconId) {
+                        root.querySelectorAll?.(
+                            `[data-symcon-native-icon="${iconId}"]`
+                        ).forEach(hideNode);
+                    }
+                }
+
+                hideNode(icon);
+            });
+
+            // Falls unser Font-Awesome-Ersatz bereits als natives SVG
+            // aus dem foreignObject herauskopiert wurde, den rechten
+            // Load4-Klon ebenfalls sicher entfernen.
+            root.querySelectorAll?.('[data-symcon-native-icon]').forEach(node => {
+                try {
+                    const box = node.getBBox?.();
+                    if (
+                        box &&
+                        box.x >= 420 &&
+                        box.y >= 110 &&
+                        box.y <= 180
+                    ) {
+                        hideNode(node);
+                    }
+                } catch (_) {}
+            });
+        }
+    }
+
+
+    function positionLiteDailyEnergyAtCardPosition(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const isLite =
+            currentTechnicalLayout === 'lite' ||
+            currentTechnicalLayout === 'lite-wide';
+
+        if (!isLite) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        for (const root of roots) {
+            const valueNodes = root.querySelectorAll?.(
+                '[id="daily_load_value"]'
+            ) || [];
+
+            valueNodes.forEach(node => {
+                node.setAttribute?.('x', '350');
+                node.setAttribute?.('y', '175');
+
+                node.querySelectorAll?.('tspan').forEach(tspan => {
+                    tspan.setAttribute?.('x', '350');
+                });
+            });
+
+            const labelNodes = root.querySelectorAll?.(
+                '[id="daily_load"]'
+            ) || [];
+
+            labelNodes.forEach(node => {
+                node.setAttribute?.('x', '350');
+                node.setAttribute?.('y', '189');
+
+                node.querySelectorAll?.('tspan').forEach(tspan => {
+                    tspan.setAttribute?.('x', '350');
+                });
+            });
+        }
+    }
+
+    function applySunsynkVisualFixes(card, d = null) {
         if (!card) return;
-        await card.updateComplete;
 
         applyAdditionalLoadColours(card);
+        removeUnusedFourthConsumerForThree(card);
         alignConsumerNamesToPowerBoxes(card);
         applyAdditionalLoadWattColourByGeometry(card);
         applyHouseLoadWattColour(card, d);
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
+        positionLiteDailyEnergyAtCardPosition(card);
+        compactBatteryValues(card, d);
+        compactSmartMeterValues(card, d);
+        compactInverterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
         applyAuxVisualOverrides(card, d);
+    }
 
-        // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
-        // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
-        // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
-        [0, 80, 250, 600, 1200].forEach(delay => {
-            setTimeout(() => {
-                alignConsumerNamesToPowerBoxes(card);
-                applyAdditionalLoadWattColourByGeometry(card);
-                applyHouseLoadWattColour(
-                    card,
-                    card.__symconLastData || d
-                );
-                applyDynamicHouseSourceIcon(
-                    card,
-                    card.__symconLastData || d
-                );
-                applyInverterVisualColour(
-                    card,
-                    card.__symconLastData || d
-                );
-                showInverterPowerAboveVoltages(
-                    card,
-                    card.__symconLastData || d
-                );
-                applyConfiguredBatteryStatus(
-                    card,
-                    card.__symconLastData || d
-                );
-                applyAuxVisualOverrides(
-                    card,
-                    card.__symconLastData || d
-                );
-            }, delay);
-        });
+    async function applySunsynkViewOverrides(card, d = null) {
+        if (!card) return;
+        await card.updateComplete;
+
+        // Ein gemeinsamer Durchlauf für alle visuellen Nachkorrekturen.
+        applySunsynkVisualFixes(card, d);
 
         // Lit rendert bei jeder neuen hass-Zuweisung Teile des Shadow-DOM neu.
-        // Deshalb die rein optischen Korrekturen nach jedem Render erneut anwenden.
+        // Nach tatsächlichen DOM-Änderungen die visuellen Korrekturen erneut
+        // gesammelt anwenden. Zusätzliche Timer sind dafür nicht mehr nötig.
         if (!card.__symconVisualObserver && card.shadowRoot) {
             let scheduled = false;
+
             card.__symconVisualObserver = new MutationObserver(() => {
                 if (scheduled) return;
                 scheduled = true;
+
                 requestAnimationFrame(() => {
                     scheduled = false;
-                    applyAdditionalLoadColours(card);
-                    alignConsumerNamesToPowerBoxes(card);
-                    applyAdditionalLoadWattColourByGeometry(card);
-                    applyHouseLoadWattColour(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    applyDynamicHouseSourceIcon(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    applyInverterVisualColour(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    showInverterPowerAboveVoltages(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    applyConfiguredBatteryStatus(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    applyAuxVisualOverrides(
+
+                    applySunsynkVisualFixes(
                         card,
                         card.__symconLastData || d
                     );
@@ -4374,6 +4478,7 @@ class Energiefluss extends IPSModuleStrict
                     }
                 });
             });
+
             card.__symconVisualObserver.observe(card.shadowRoot, {
                 childList: true,
                 subtree: true,
@@ -4450,17 +4555,26 @@ class Energiefluss extends IPSModuleStrict
         const cleanSoc = group => {
             if (!group?.hasSoc) return '';
 
-            // Der Text ist bereits durch IP-Symcon formatiert. Dadurch bleiben
-            // Stringwerte, Profiltexte sowie Präfix und Suffix unverändert.
-            return String(group.socText || '').trim();
+            const raw = String(group.socText || '').trim();
+            if (raw === '') return '';
+
+            const percentMatch =
+                raw.match(/([-+]?\d+(?:[.,]\d+)?)\s*%/);
+
+            return percentMatch
+                ? `${percentMatch[1]}%`
+                : raw;
         };
 
-        const setLabel = (selector, group) => {
+        const setLabel = (selector, group, includeSoc = false) => {
             const node = findNode(selector);
             if (!node || !group) return;
 
             const name = String(group.name || '').trim();
-            const soc = cleanSoc(group);
+            const soc =
+                includeSoc && group.isWallbox === true
+                    ? cleanSoc(group)
+                    : '';
             const wanted = [name, soc].filter(Boolean).join(' · ');
 
             if (
@@ -4472,7 +4586,13 @@ class Energiefluss extends IPSModuleStrict
         };
 
         if (configuredAux.length === 1) {
-            setLabel('#aux_one', configuredAux[0]);
+            // Auch beim einzelnen AUX-Verbraucher den Fahrzeug-SOC
+            // ausschließlich direkt hinter dem Wallbox-Namen anzeigen.
+            setLabel(
+                '#aux_one',
+                configuredAux[0],
+                configuredAux[0]?.isWallbox === true
+            );
 
             // Die Card enthält für den Haupt-AUX mehrere alternative
             // Originalsymbole. Bei einem frei konfigurierten Verbrauchericon
@@ -4498,8 +4618,16 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
         } else {
-            setLabel('#aux_load1', configuredAux[0]);
-            setLabel('#aux_load2', configuredAux[1]);
+            setLabel(
+                '#aux_load1',
+                configuredAux[0],
+                configuredAux[0]?.isWallbox === true
+            );
+            setLabel(
+                '#aux_load2',
+                configuredAux[1],
+                configuredAux[1]?.isWallbox === true
+            );
 
             // AUX1 und AUX2 werden vollständig ohne Icon dargestellt.
             // Es wird kein ungültiger Icon-Name an die Card übergeben.
@@ -4529,22 +4657,53 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
 
-            // Der SOC steht jetzt direkt hinter dem Namen und soll nicht
-            // nochmals als separate Zusatzzeile erscheinen.
+            // Der Wallbox-SOC steht bereits direkt hinter dem Namen.
+            // Deshalb alle separaten SOC-/Zusatztexte der Original-Card
+            // für genau diesen AUX entfernen, damit er nicht zusätzlich
+            // vor dem Namen erscheint.
             [
-                '#aux_load1_extra',
-                '#aux_load2_extra'
-            ].forEach(selector => {
-                const node = findNode(selector);
-                if (!node) return;
-
-                if (node.style?.display !== 'none') {
-                    node.style?.setProperty(
-                        'display',
-                        'none',
-                        'important'
-                    );
+                {
+                    group: configuredAux[0],
+                    selectors: [
+                        '#aux_load1_extra',
+                        '#aux_load1_soc',
+                        '[id*="aux_load1"][id*="soc"]',
+                        '[id*="aux_load1"][id*="extra"]'
+                    ]
+                },
+                {
+                    group: configuredAux[1],
+                    selectors: [
+                        '#aux_load2_extra',
+                        '#aux_load2_soc',
+                        '[id*="aux_load2"][id*="soc"]',
+                        '[id*="aux_load2"][id*="extra"]'
+                    ]
                 }
+            ].forEach(definition => {
+                if (definition.group?.isWallbox !== true) return;
+
+                definition.selectors.forEach(selector => {
+                    for (const root of roots) {
+                        root.querySelectorAll?.(selector).forEach(node => {
+                            node.style?.setProperty(
+                                'display',
+                                'none',
+                                'important'
+                            );
+                            node.style?.setProperty(
+                                'visibility',
+                                'hidden',
+                                'important'
+                            );
+                            node.setAttribute?.('display', 'none');
+                            node.setAttribute?.(
+                                'visibility',
+                                'hidden'
+                            );
+                        });
+                    }
+                });
             });
         }
     }
@@ -4606,6 +4765,802 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+
+
+    function compactBatteryValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+        const batteries = Array.isArray(d.batteries)
+            ? d.batteries
+            : [];
+
+        if (!batteries.length) return;
+
+        const isFull =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        const visibleNode = node => {
+            if (!node) return false;
+
+            if (
+                node.getAttribute?.('display') === 'none' ||
+                node.getAttribute?.('visibility') === 'hidden' ||
+                node.classList?.contains('st12')
+            ) {
+                return false;
+            }
+
+            try {
+                const style = getComputedStyle(node);
+                if (
+                    style.display === 'none' ||
+                    style.visibility === 'hidden' ||
+                    Number(style.opacity) === 0
+                ) {
+                    return false;
+                }
+            } catch (_) {}
+
+            try {
+                const box = node.getBoundingClientRect?.();
+                return !!box && box.width > 0 && box.height > 0;
+            } catch (_) {
+                return false;
+            }
+        };
+
+        const rememberTextY = node => {
+            if (!node.dataset.symconBatteryOriginalY) {
+                node.dataset.symconBatteryOriginalY =
+                    String(node.getAttribute?.('y') || '0');
+            }
+        };
+
+        const rememberFrame = frame => {
+            if (!frame.dataset.symconBatteryOriginalY) {
+                frame.dataset.symconBatteryOriginalY =
+                    String(frame.getAttribute?.('y') || '0');
+            }
+            if (!frame.dataset.symconBatteryOriginalHeight) {
+                frame.dataset.symconBatteryOriginalHeight =
+                    String(frame.getAttribute?.('height') || '0');
+            }
+        };
+
+        const restoreFrame = frame => {
+            rememberFrame(frame);
+            frame.setAttribute?.(
+                'y',
+                frame.dataset.symconBatteryOriginalY
+            );
+            frame.setAttribute?.(
+                'height',
+                frame.dataset.symconBatteryOriginalHeight
+            );
+        };
+
+        const measurementDefs = [
+            {
+                batteryIndex: 0,
+                selectors: [
+                    '[id="battery_voltage_183"]',
+                    '[id="battery1_voltage_183"]'
+                ],
+                available: battery =>
+                    battery?.hasVoltage === true
+            },
+            {
+                batteryIndex: 0,
+                selectors: [
+                    '[id="battery_current_191"]',
+                    '[id="battery1_current_191"]'
+                ],
+                available: battery =>
+                    battery?.hasCurrent === true
+            },
+            {
+                batteryIndex: 0,
+                selectors: [
+                    '[id="data.batteryPower_190"]',
+                    '[id="battery_power_190"]',
+                    '[id="batteryPower_190"]'
+                ],
+                available: battery =>
+                    battery?.hasPower === true
+            },
+            {
+                batteryIndex: 1,
+                selectors: [
+                    '[id="battery2_voltage_183"]'
+                ],
+                available: battery =>
+                    battery?.hasVoltage === true
+            },
+            {
+                batteryIndex: 1,
+                selectors: [
+                    '[id="battery2_current_191"]'
+                ],
+                available: battery =>
+                    battery?.hasCurrent === true
+            },
+            {
+                batteryIndex: 1,
+                selectors: [
+                    '[id="data.battery2Power_190"]',
+                    '[id="battery2_power_190"]',
+                    '[id="battery2Power_190"]'
+                ],
+                available: battery =>
+                    battery?.hasPower === true
+            }
+        ];
+
+        const setMissingHidden = (node, hidden) => {
+            if (hidden) {
+                node.setAttribute?.('display', 'none');
+                node.style?.setProperty(
+                    'display',
+                    'none',
+                    'important'
+                );
+            } else {
+                node.removeAttribute?.('display');
+                node.style?.removeProperty('display');
+            }
+        };
+
+        // Compact / Large(Lite) haben stabile Batterie-Container.
+        // Diese Logik hat bereits zuverlässig funktioniert und wird deshalb
+        // bewusst getrennt vom Full-Layout behandelt.
+        const processStableBox = (
+            root,
+            boxSelector,
+            battery,
+            defs
+        ) => {
+            if (!battery) return;
+
+            const boxSvg = root.querySelector?.(boxSelector);
+            if (!boxSvg) return;
+
+            const rects = Array.from(
+                boxSvg.querySelectorAll?.(':scope > rect') || []
+            );
+
+            const rows = [];
+
+            defs.forEach(def => {
+                const available = def.available(battery);
+
+                const candidates = [];
+                def.selectors.forEach(selector => {
+                    boxSvg.querySelectorAll?.(selector)
+                        .forEach(node => {
+                            if (!candidates.includes(node)) {
+                                candidates.push(node);
+                            }
+                        });
+                });
+
+                candidates.forEach(rememberTextY);
+
+                const node =
+                    candidates.find(visibleNode) ||
+                    candidates[0] ||
+                    null;
+
+                if (!node) return;
+
+                setMissingHidden(node, !available);
+
+                if (available) {
+                    node.removeAttribute?.('display');
+                    node.style?.removeProperty('display');
+                    rows.push({
+                        node,
+                        y: Number(
+                            node.dataset.symconBatteryOriginalY ||
+                            node.getAttribute?.('y') ||
+                            0
+                        )
+                    });
+                }
+            });
+
+            if (!rects.length) return;
+            rects.forEach(restoreFrame);
+
+            if (!rows.length) {
+                // Ohne V/A/W gibt es auch keinen sinnvollen Datenrahmen.
+                // Nur den Rahmen ausblenden, der im selben Bereich sitzt.
+                rects.forEach(frame => {
+                    try {
+                        const fr = frame.getBoundingClientRect?.();
+                        const cr = boxSvg.getBoundingClientRect?.();
+                        if (
+                            fr &&
+                            cr &&
+                            fr.width >= 35 &&
+                            fr.height >= 18 &&
+                            fr.left >= cr.left - 2 &&
+                            fr.right <= cr.right + 2
+                        ) {
+                            frame.style?.setProperty(
+                                'display',
+                                'none',
+                                'important'
+                            );
+                        }
+                    } catch (_) {}
+                });
+                return;
+            }
+
+            rows.sort((a, b) => a.y - b.y);
+            const rowCenter =
+                (rows[0].y + rows[rows.length - 1].y) / 2;
+
+            let frame = null;
+            let best = Number.POSITIVE_INFINITY;
+
+            rects.forEach(candidate => {
+                candidate.style?.removeProperty('display');
+
+                const y = Number(
+                    candidate.dataset.symconBatteryOriginalY || 0
+                );
+                const h = Number(
+                    candidate.dataset.symconBatteryOriginalHeight || 0
+                );
+
+                if (
+                    !Number.isFinite(y) ||
+                    !Number.isFinite(h) ||
+                    h <= 0
+                ) {
+                    return;
+                }
+
+                const centre = y + h / 2;
+                const contains =
+                    rowCenter >= y - 8 &&
+                    rowCenter <= y + h + 8;
+                const score =
+                    Math.abs(centre - rowCenter) +
+                    (contains ? 0 : 1000);
+
+                if (score < best) {
+                    best = score;
+                    frame = candidate;
+                }
+            });
+
+            if (!frame) return;
+
+            const originalY = Number(
+                frame.dataset.symconBatteryOriginalY
+            );
+            const originalH = Number(
+                frame.dataset.symconBatteryOriginalHeight
+            );
+            const centre = originalY + originalH / 2;
+
+            // Rahmen bewusst luftiger als bisher:
+            // 1 Zeile 32, 2 Zeilen 51, 3 Zeilen 70.
+            const spacing = 19;
+            const newHeight =
+                32 + ((rows.length - 1) * spacing);
+            const newY = centre - newHeight / 2;
+
+            frame.setAttribute?.('y', String(newY));
+            frame.setAttribute?.(
+                'height',
+                String(newHeight)
+            );
+
+            const firstY =
+                centre - ((rows.length - 1) * spacing / 2);
+
+            rows.forEach((row, index) => {
+                row.node.setAttribute?.(
+                    'y',
+                    String(firstY + index * spacing)
+                );
+            });
+        };
+
+        // Full hat je nach 1 oder 2 Batterien eine andere Original-Geometrie.
+        // Darum wird hier nicht mit festen x/y-Werten gearbeitet. Stattdessen
+        // wird der tatsächlich sichtbare Rahmen ermittelt, der die sichtbaren
+        // Batterie-V/A/W-Texte umschließt. Dadurch funktioniert derselbe Code
+        // für beide Full-Varianten.
+        const processFull = root => {
+            const measurements = [];
+
+            measurementDefs.forEach(def => {
+                const battery = batteries[def.batteryIndex];
+                if (!battery) return;
+
+                const available = def.available(battery);
+                const candidates = [];
+
+                def.selectors.forEach(selector => {
+                    root.querySelectorAll?.(selector)
+                        .forEach(node => {
+                            if (!candidates.includes(node)) {
+                                candidates.push(node);
+                            }
+                        });
+                });
+
+                candidates.forEach(rememberTextY);
+
+                // In Full existieren mehrere alternative Elemente mit
+                // denselben IDs. Nur die aktuell gerenderte Variante zählt.
+                candidates.forEach(node => {
+                    if (!visibleNode(node)) return;
+
+                    setMissingHidden(node, !available);
+                    if (!available) return;
+
+                    let screen;
+                    try {
+                        screen = node.getBoundingClientRect?.();
+                    } catch (_) {
+                        screen = null;
+                    }
+
+                    if (
+                        !screen ||
+                        screen.width <= 0 ||
+                        screen.height <= 0
+                    ) {
+                        return;
+                    }
+
+                    measurements.push({
+                        node,
+                        batteryIndex: def.batteryIndex,
+                        screen,
+                        cx: screen.left + screen.width / 2,
+                        cy: screen.top + screen.height / 2
+                    });
+                });
+            });
+
+            if (!measurements.length) return;
+
+            const allRects = Array.from(
+                root.querySelectorAll?.('rect') || []
+            );
+
+            const frameCandidates = [];
+
+            allRects.forEach(frame => {
+                if (!visibleNode(frame)) return;
+
+                rememberFrame(frame);
+                restoreFrame(frame);
+
+                let fr;
+                try {
+                    fr = frame.getBoundingClientRect?.();
+                } catch (_) {
+                    fr = null;
+                }
+
+                if (
+                    !fr ||
+                    fr.width < 35 ||
+                    fr.height < 20 ||
+                    fr.width > 240 ||
+                    fr.height > 180
+                ) {
+                    return;
+                }
+
+                const inside = measurements.filter(item =>
+                    item.cx >= fr.left + 2 &&
+                    item.cx <= fr.right - 2 &&
+                    item.cy >= fr.top - 6 &&
+                    item.cy <= fr.bottom + 6
+                );
+
+                if (!inside.length) return;
+
+                // Ein Datenrahmen muss deutlich breiter als der Text selbst
+                // sein. Dadurch fallen kleine Hintergrund-/Statusrechtecke weg.
+                const minTextLeft = Math.min(
+                    ...inside.map(item => item.screen.left)
+                );
+                const maxTextRight = Math.max(
+                    ...inside.map(item => item.screen.right)
+                );
+
+                if (
+                    fr.left > minTextLeft - 4 ||
+                    fr.right < maxTextRight + 4
+                ) {
+                    return;
+                }
+
+                frameCandidates.push({
+                    frame,
+                    rect: fr,
+                    inside,
+                    area: fr.width * fr.height
+                });
+            });
+
+            if (!frameCandidates.length) return;
+
+            // Jedem Messwert den kleinsten Rahmen zuordnen, der ihn umschließt.
+            // Bei einer Batterie ergibt das den einzelnen Full-Rahmen; bei zwei
+            // Batterien automatisch die von der Card verwendete zweite Geometrie.
+            const frameMap = new Map();
+
+            measurements.forEach(item => {
+                const matches = frameCandidates
+                    .filter(candidate =>
+                        candidate.inside.some(
+                            inside => inside.node === item.node
+                        )
+                    )
+                    .sort((a, b) => a.area - b.area);
+
+                if (!matches.length) return;
+
+                const selected = matches[0];
+                if (!frameMap.has(selected.frame)) {
+                    frameMap.set(selected.frame, {
+                        candidate: selected,
+                        nodes: []
+                    });
+                }
+
+                frameMap.get(selected.frame).nodes.push(item);
+            });
+
+            frameMap.forEach(group => {
+                const frame = group.candidate.frame;
+                const nodes = group.nodes;
+
+                if (!nodes.length) return;
+
+                // Zeilen anhand der realen Y-Position gruppieren.
+                // Bei zwei Batterien dürfen zwei Werte nebeneinander in
+                // derselben Zeile stehen und behalten ihre X-Position.
+                const ordered = [...nodes].sort(
+                    (a, b) => a.cy - b.cy
+                );
+                const rows = [];
+
+                ordered.forEach(item => {
+                    let row = rows.find(
+                        existing =>
+                            Math.abs(existing.screenY - item.cy) <= 5
+                    );
+
+                    if (!row) {
+                        row = {
+                            screenY: item.cy,
+                            items: []
+                        };
+                        rows.push(row);
+                    }
+
+                    row.items.push(item);
+                });
+
+                rows.sort(
+                    (a, b) => a.screenY - b.screenY
+                );
+
+                const originalY = Number(
+                    frame.dataset.symconBatteryOriginalY
+                );
+                const originalH = Number(
+                    frame.dataset.symconBatteryOriginalHeight
+                );
+
+                if (
+                    !Number.isFinite(originalY) ||
+                    !Number.isFinite(originalH) ||
+                    originalH <= 0
+                ) {
+                    return;
+                }
+
+                const centre =
+                    originalY + originalH / 2;
+
+                // Gleiche luftige Proportion wie Compact/Large.
+                const spacing = 19;
+                const newHeight =
+                    32 + ((rows.length - 1) * spacing);
+                const newY =
+                    centre - newHeight / 2;
+
+                frame.setAttribute?.(
+                    'y',
+                    String(newY)
+                );
+                frame.setAttribute?.(
+                    'height',
+                    String(newHeight)
+                );
+
+                const firstY =
+                    centre -
+                    ((rows.length - 1) * spacing / 2);
+
+                rows.forEach((row, index) => {
+                    row.items.forEach(item => {
+                        item.node.setAttribute?.(
+                            'y',
+                            String(
+                                firstY +
+                                index * spacing
+                            )
+                        );
+                    });
+                });
+            });
+        };
+
+        for (const root of roots) {
+            if (isFull) {
+                processFull(root);
+                continue;
+            }
+
+            const bat1 = batteries[0];
+            const bat2 = batteries[1];
+
+            processStableBox(
+                root,
+                '#battery_data',
+                bat1,
+                measurementDefs.filter(
+                    def => def.batteryIndex === 0
+                )
+            );
+
+            processStableBox(
+                root,
+                '#battery2_data_lite',
+                bat2,
+                measurementDefs.filter(
+                    def => def.batteryIndex === 1
+                )
+            );
+        }
+    }
+
+    function compactSmartMeterValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        // Dynamische Box-Geometrie ausschließlich in Full / Full Wide.
+        // Compact und Lite bleiben vollständig bei der Original-Sunsynk-Geometrie.
+        const isFullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+        if (!isFullLayout) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        // Die Originalkarte reserviert feste Y-Positionen für L1/L2/L3,
+        // Frequenz und Gesamtleistung. Fehlt dazwischen ein Wert, entsteht
+        // deshalb optisch eine Leerzeile. Wir ordnen ausschließlich die
+        // tatsächlich konfigurierten Werte neu und zentrieren sie in der
+        // bestehenden Smartmeter-Box. Inhalt und Box-Geometrie bleiben gleich.
+        const wanted = [
+            ['inverter_voltage_154', entityAvailable(d, 'gridVoltageL1')],
+            ['inverter_voltage_L2', entityAvailable(d, 'gridVoltageL2')],
+            ['inverter_voltage_L3', entityAvailable(d, 'gridVoltageL3')],
+            ['load_frequency_192', entityAvailable(d, 'gridFrequency')],
+            ['grid_power_169', true]
+        ];
+
+        for (const root of roots) {
+            const visible = [];
+
+            for (const [id, available] of wanted) {
+                const node = root.querySelector?.(`#${id}`) || null;
+                if (!node) continue;
+
+                if (!available) {
+                    node.setAttribute?.('display', 'none');
+                    node.style?.setProperty('display', 'none', 'important');
+                    continue;
+                }
+
+                node.removeAttribute?.('display');
+                node.style?.removeProperty('display');
+                visible.push(node);
+            }
+
+            if (!visible.length) continue;
+
+            // Smartmeter-Box: y=153..223. Die Originalkarte verwendet bei
+            // fünf Zeilen 164/177/190/203/216 (= 13 px Abstand). Genau diesen
+            // Abstand behalten wir bei und zentrieren weniger Zeilen vertikal.
+            const spacing = 13;
+            const centreY = 190;
+            const firstY = centreY - ((visible.length - 1) * spacing / 2);
+
+            visible.forEach((node, index) => {
+                node.setAttribute?.('y', String(firstY + index * spacing));
+                node.removeAttribute?.('transform');
+            });
+
+            // Auch der Smartmeter-Rahmen selbst folgt nun der Anzahl der
+            // tatsächlich sichtbaren Werte. Die Originalbox liegt bei
+            // x=234, y=153, width=70, height=70 und ist damit auf y=188
+            // zentriert. Diese Flussachse bleibt unverändert, damit die
+            // horizontalen Netzlinien weiterhin exakt in die Box laufen.
+            const boxCentreY = 188;
+            const boxHeight = Math.max(24, 18 + (visible.length - 1) * spacing);
+            const boxY = boxCentreY - boxHeight / 2;
+
+            const gridSvg = root.querySelector?.('#Grid');
+            let meterBox = null;
+
+            if (gridSvg) {
+                // Die Smartmeter-Box ist der 70x70-Rahmen bei x=234.
+                // Nicht über die Reihenfolge der übrigen Grid-Rechtecke gehen,
+                // damit Non-Essential-Load-Boxen unberührt bleiben.
+                meterBox = Array.from(gridSvg.querySelectorAll?.('rect') || [])
+                    .find(rect => {
+                        const x = Number(rect.getAttribute?.('x'));
+                        const width = Number(rect.getAttribute?.('width'));
+                        return Math.abs(x - 234) < 0.5 && Math.abs(width - 70) < 0.5;
+                    }) || null;
+            }
+
+            if (meterBox) {
+                meterBox.setAttribute?.('y', String(boxY));
+                meterBox.setAttribute?.('height', String(boxHeight));
+            }
+        }
+    }
+
+    function compactInverterValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        // Dynamische Box-Geometrie ausschließlich in Full / Full Wide.
+        // Compact und Lite bleiben vollständig bei der Original-Sunsynk-Geometrie.
+        const isFullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+        if (!isFullLayout) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        // Die Originalkarte reserviert in der Wechselrichterbox feste Zeilen
+        // für Gesamtleistung sowie die Ströme L1/L2/L3. Nicht konfigurierte
+        // Phasen dürfen deshalb keinen sichtbaren Leerplatz hinterlassen.
+        // Es werden ausschließlich vorhandene Werte neu angeordnet; Inhalt,
+        // Farben und Geometrie der Box bleiben unverändert.
+        const wanted = [
+            ['inverter_power_175',
+                entityAvailable(d, 'inverterPower') ||
+                d.inverterPowerAvailable === true],
+            ['inverter_current_164', entityAvailable(d, 'inverterCurrentL1')],
+            ['inverter_current_L2', entityAvailable(d, 'inverterCurrentL2')],
+            ['inverter_current_L3', entityAvailable(d, 'inverterCurrentL3')]
+        ];
+
+        for (const root of roots) {
+            const visible = [];
+
+            for (const [id, available] of wanted) {
+                const node = root.querySelector?.(`#${id}`) || null;
+                if (!node) continue;
+
+                if (!available) {
+                    node.setAttribute?.('display', 'none');
+                    node.style?.setProperty('display', 'none', 'important');
+                    continue;
+                }
+
+                node.removeAttribute?.('display');
+                node.style?.removeProperty('display');
+                visible.push(node);
+            }
+
+            if (!visible.length) continue;
+
+            // Die WR-Werte liegen im Original ungefähr im Bereich y=174..214.
+            // Den vorhandenen 13-px-Zeilenabstand behalten wir bei. Zusätzlich
+            // wird nun auch der Rahmen selbst auf die tatsächlich sichtbaren
+            // Zeilen verkleinert bzw. vergrößert.
+            const spacing = 13;
+
+            // Die seitliche Netz-/Smartmeter-Flusslinie liegt in der
+            // Originalkarte auf y=187. Die dynamische WR-Box bleibt deshalb
+            // unabhängig von ihrer Höhe exakt auf dieser Flussachse zentriert.
+            const centreY = 187;
+            const firstY = centreY - ((visible.length - 1) * spacing / 2);
+
+            visible.forEach((node, index) => {
+                node.setAttribute?.('y', String(firstY + index * spacing));
+                node.removeAttribute?.('transform');
+            });
+
+            // Original: x=145.15, y=162, width=70, height=50/60.
+            // Pro sichtbarer Zeile werden 13 px benötigt, zusätzlich bleibt
+            // oben und unten genügend Innenabstand. Vier Zeilen ergeben damit
+            // praktisch wieder die originale 60-px-Box.
+            const boxHeight = Math.max(24, 20 + (visible.length - 1) * spacing);
+            const boxY = centreY - boxHeight / 2;
+
+            const inverterSvg = root.querySelector?.('#Inverter');
+            const box =
+                inverterSvg?.querySelector?.(':scope > rect') ||
+                root.querySelector?.('#Inverter > rect');
+
+            if (box) {
+                box.setAttribute?.('y', String(boxY));
+                box.setAttribute?.('height', String(boxHeight));
+            }
+
+            // Alle an die WR-Box angrenzenden Flusslinien bis an den
+            // tatsächlichen Rahmen führen. Die Originalkarte verwendet oben
+            // y=162 und seitlich y=187. Durch die dynamische Höhe ändern sich
+            // nur Ober- und Unterkante; die seitliche Achse bleibt y=187.
+            const boxTop = boxY;
+            const boxBottom = boxY + boxHeight;
+
+            const inverterPath =
+                root.querySelector?.('#inverter-path') ||
+                inverterSvg?.querySelector?.('#inverter-path');
+
+            if (inverterPath) {
+                const current = String(inverterPath.getAttribute?.('d') || '');
+                // X-Koordinate aus dem Originalpfad beibehalten (wichtig für
+                // normale und Wide-Darstellung), nur den Start-Y anpassen.
+                const match = current.match(/^\s*M\s*([\d.]+)\s+[\d.]+\s+L\s*([\d.]+)\s+([\d.]+)/i);
+                if (match) {
+                    inverterPath.setAttribute?.(
+                        'd',
+                        `M ${match[1]} ${boxBottom} L ${match[2]} ${match[3]}`
+                    );
+                }
+            }
+
+            // Obere Essential-Load-Leitung: ihr letztes Segment endet im
+            // Original an y=162. Dieses Ende auf die neue Oberkante setzen.
+            const essentialPath = root.querySelector?.('#es-line');
+            if (essentialPath) {
+                const current = String(essentialPath.getAttribute?.('d') || '');
+                const updated = current.replace(
+                    /(L\s*[\d.]+\s+)[\d.]+\s*$/i,
+                    `$1${boxTop}`
+                );
+                if (updated !== current) {
+                    essentialPath.setAttribute?.('d', updated);
+                }
+            }
+
+            // Falls AUX aktiv ist, startet auch dessen zweite Flusslinie an
+            // der WR-Oberkante. Nur den ersten M-Y-Wert ersetzen.
+            const auxPath = root.querySelector?.('#aux-line2');
+            if (auxPath) {
+                const current = String(auxPath.getAttribute?.('d') || '');
+                const updated = current.replace(
+                    /^(\s*M\s*[\d.]+\s+)[\d.]+/i,
+                    `$1${boxTop}`
+                );
+                if (updated !== current) {
+                    auxPath.setAttribute?.('d', updated);
+                }
+            }
+        }
+    }
 
     function showInverterPowerAboveVoltages(card, d) {
         if (!card || !card.shadowRoot || !d) return;

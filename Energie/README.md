@@ -271,6 +271,15 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.6 (15.08.2026)
+- In der Hausansicht wird für die Netzleistung nur noch ein Wert dargestellt.
+- In der Sunsynk-Card verhalten sich die Smartmeter-, Batterie- und Wechselrichter-Boxen nun dynamisch.
+- Ein Fehler wurde behoben, durch den in der Full-Ansicht bei genau drei aktiven Verbrauchern die Verbraucher komplett ausgeblendet wurden.
+- Ein Fehler wurde behoben, durch den AUX-Verbraucher in der Compact- und Large-Ansicht nicht als normale Verbraucher dargestellt wurden.
+- Die Position des Schriftzuges „Energie heute“ in der Large-Ansicht wurde verbessert.
+- Die Position des SOC bei zwei AUX-Verbrauchern wurde verbessert.
+- Einige Codeoptimierungen und Verbesserungen für schwächere Clients.
+
 ### Version 1.5 (08.08.2026)
 - Laufzeit der Batterie kann nun als Variable ausgegeben werden.
 - In der Konfiguration die geforderten Werte klar formuliert.
