@@ -4244,6 +4244,7 @@ class Energiefluss extends IPSModuleStrict
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
+        compactSmartMeterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
         applyAuxVisualOverrides(card, d);
 
@@ -4267,6 +4268,10 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 showInverterPowerAboveVoltages(
+                    card,
+                    card.__symconLastData || d
+                );
+                compactSmartMeterValues(
                     card,
                     card.__symconLastData || d
                 );
@@ -4306,6 +4311,10 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     showInverterPowerAboveVoltages(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    compactSmartMeterValues(
                         card,
                         card.__symconLastData || d
                     );
@@ -4569,6 +4578,58 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+
+    function compactSmartMeterValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        // Die Originalkarte reserviert feste Y-Positionen für L1/L2/L3,
+        // Frequenz und Gesamtleistung. Fehlt dazwischen ein Wert, entsteht
+        // deshalb optisch eine Leerzeile. Wir ordnen ausschließlich die
+        // tatsächlich konfigurierten Werte neu und zentrieren sie in der
+        // bestehenden Smartmeter-Box. Inhalt und Box-Geometrie bleiben gleich.
+        const wanted = [
+            ['inverter_voltage_154', entityAvailable(d, 'gridVoltageL1')],
+            ['inverter_voltage_L2', entityAvailable(d, 'gridVoltageL2')],
+            ['inverter_voltage_L3', entityAvailable(d, 'gridVoltageL3')],
+            ['load_frequency_192', entityAvailable(d, 'gridFrequency')],
+            ['grid_power_169', true]
+        ];
+
+        for (const root of roots) {
+            const visible = [];
+
+            for (const [id, available] of wanted) {
+                const node = root.querySelector?.(`#${id}`) || null;
+                if (!node) continue;
+
+                if (!available) {
+                    node.setAttribute?.('display', 'none');
+                    node.style?.setProperty('display', 'none', 'important');
+                    continue;
+                }
+
+                node.removeAttribute?.('display');
+                node.style?.removeProperty('display');
+                visible.push(node);
+            }
+
+            if (!visible.length) continue;
+
+            // Smartmeter-Box: y=153..223. Die Originalkarte verwendet bei
+            // fünf Zeilen 164/177/190/203/216 (= 13 px Abstand). Genau diesen
+            // Abstand behalten wir bei und zentrieren weniger Zeilen vertikal.
+            const spacing = 13;
+            const centreY = 190;
+            const firstY = centreY - ((visible.length - 1) * spacing / 2);
+
+            visible.forEach((node, index) => {
+                node.setAttribute?.('y', String(firstY + index * spacing));
+                node.removeAttribute?.('transform');
+            });
+        }
+    }
 
     function showInverterPowerAboveVoltages(card, d) {
         if (!card || !card.shadowRoot || !d) return;
