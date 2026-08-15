@@ -4245,6 +4245,7 @@ class Energiefluss extends IPSModuleStrict
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
         compactSmartMeterValues(card, d);
+        compactInverterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
         applyAuxVisualOverrides(card, d);
 
@@ -4272,6 +4273,10 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 compactSmartMeterValues(
+                    card,
+                    card.__symconLastData || d
+                );
+                compactInverterValues(
                     card,
                     card.__symconLastData || d
                 );
@@ -4315,6 +4320,10 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     compactSmartMeterValues(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    compactInverterValues(
                         card,
                         card.__symconLastData || d
                     );
@@ -4622,6 +4631,59 @@ class Energiefluss extends IPSModuleStrict
             // Abstand behalten wir bei und zentrieren weniger Zeilen vertikal.
             const spacing = 13;
             const centreY = 190;
+            const firstY = centreY - ((visible.length - 1) * spacing / 2);
+
+            visible.forEach((node, index) => {
+                node.setAttribute?.('y', String(firstY + index * spacing));
+                node.removeAttribute?.('transform');
+            });
+        }
+    }
+
+    function compactInverterValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        // Die Originalkarte reserviert in der Wechselrichterbox feste Zeilen
+        // für Gesamtleistung sowie die Ströme L1/L2/L3. Nicht konfigurierte
+        // Phasen dürfen deshalb keinen sichtbaren Leerplatz hinterlassen.
+        // Es werden ausschließlich vorhandene Werte neu angeordnet; Inhalt,
+        // Farben und Geometrie der Box bleiben unverändert.
+        const wanted = [
+            ['inverter_power_175',
+                entityAvailable(d, 'inverterPower') ||
+                d.inverterPowerAvailable === true],
+            ['inverter_current_164', entityAvailable(d, 'inverterCurrentL1')],
+            ['inverter_current_L2', entityAvailable(d, 'inverterCurrentL2')],
+            ['inverter_current_L3', entityAvailable(d, 'inverterCurrentL3')]
+        ];
+
+        for (const root of roots) {
+            const visible = [];
+
+            for (const [id, available] of wanted) {
+                const node = root.querySelector?.(`#${id}`) || null;
+                if (!node) continue;
+
+                if (!available) {
+                    node.setAttribute?.('display', 'none');
+                    node.style?.setProperty('display', 'none', 'important');
+                    continue;
+                }
+
+                node.removeAttribute?.('display');
+                node.style?.removeProperty('display');
+                visible.push(node);
+            }
+
+            if (!visible.length) continue;
+
+            // Die WR-Werte liegen im Original ungefähr im Bereich y=174..214.
+            // Den vorhandenen 13-px-Zeilenabstand behalten wir bei und
+            // zentrieren weniger vorhandene Werte innerhalb dieses Bereichs.
+            const spacing = 13;
+            const centreY = 194;
             const firstY = centreY - ((visible.length - 1) * spacing / 2);
 
             visible.forEach((node, index) => {
