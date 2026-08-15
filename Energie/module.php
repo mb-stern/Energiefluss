@@ -4415,12 +4415,8 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-    async function applySunsynkViewOverrides(card, d = null) {
-        // Keine Geometrie und keine Wechselrichterwerte nachträglich verändern.
-        // Die WR-Leistung wird ausschließlich über inverter_power_175 von der
-        // Originalkarte dargestellt. Hier werden nur Verbraucherfarben korrigiert.
+    function applySunsynkVisualFixes(card, d = null) {
         if (!card) return;
-        await card.updateComplete;
 
         applyAdditionalLoadColours(card);
         removeUnusedFourthConsumerForThree(card);
@@ -4436,49 +4432,21 @@ class Energiefluss extends IPSModuleStrict
         compactInverterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
         applyAuxVisualOverrides(card, d);
+    }
 
-        // Einige Versionen der Originalkarte erzeugen die inneren SVG-Knoten
-        // erst nach dem updateComplete des äußeren Elements. Kurze Wiederholungen
-        // stellen sicher, dass die Verbraucherfarben anschließend gesetzt werden.
-        [0, 80, 250, 600, 1200].forEach(delay => {
+    async function applySunsynkViewOverrides(card, d = null) {
+        if (!card) return;
+        await card.updateComplete;
+
+        // Ein gemeinsamer Durchlauf für alle visuellen Nachkorrekturen.
+        applySunsynkVisualFixes(card, d);
+
+        // Einige innere SVG-Knoten entstehen erst kurz nach updateComplete.
+        // Nur zwei Nachläufe beibehalten; der vorherige 0-ms-Durchlauf war
+        // unmittelbar redundant zum direkten Aufruf oben.
+        [100, 500].forEach(delay => {
             setTimeout(() => {
-                removeUnusedFourthConsumerForThree(card);
-                alignConsumerNamesToPowerBoxes(card);
-                applyAdditionalLoadWattColourByGeometry(card);
-                applyHouseLoadWattColour(
-                    card,
-                    card.__symconLastData || d
-                );
-                applyDynamicHouseSourceIcon(
-                    card,
-                    card.__symconLastData || d
-                );
-                applyInverterVisualColour(
-                    card,
-                    card.__symconLastData || d
-                );
-                showInverterPowerAboveVoltages(
-                    card,
-                    card.__symconLastData || d
-                );
-                positionLiteDailyEnergyAtCardPosition(card);
-                compactBatteryValues(
-                    card,
-                    card.__symconLastData || d
-                );
-                compactSmartMeterValues(
-                    card,
-                    card.__symconLastData || d
-                );
-                compactInverterValues(
-                    card,
-                    card.__symconLastData || d
-                );
-                applyConfiguredBatteryStatus(
-                    card,
-                    card.__symconLastData || d
-                );
-                applyAuxVisualOverrides(
+                applySunsynkVisualFixes(
                     card,
                     card.__symconLastData || d
                 );
@@ -4486,51 +4454,19 @@ class Energiefluss extends IPSModuleStrict
         });
 
         // Lit rendert bei jeder neuen hass-Zuweisung Teile des Shadow-DOM neu.
-        // Deshalb die rein optischen Korrekturen nach jedem Render erneut anwenden.
+        // Nach tatsächlichen DOM-Änderungen die visuellen Korrekturen erneut
+        // gesammelt anwenden.
         if (!card.__symconVisualObserver && card.shadowRoot) {
             let scheduled = false;
+
             card.__symconVisualObserver = new MutationObserver(() => {
                 if (scheduled) return;
                 scheduled = true;
+
                 requestAnimationFrame(() => {
                     scheduled = false;
-                    applyAdditionalLoadColours(card);
-                    removeUnusedFourthConsumerForThree(card);
-                alignConsumerNamesToPowerBoxes(card);
-                    applyAdditionalLoadWattColourByGeometry(card);
-                    applyHouseLoadWattColour(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    applyDynamicHouseSourceIcon(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    applyInverterVisualColour(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    showInverterPowerAboveVoltages(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    compactBatteryValues(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    compactSmartMeterValues(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    compactInverterValues(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    applyConfiguredBatteryStatus(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    applyAuxVisualOverrides(
+
+                    applySunsynkVisualFixes(
                         card,
                         card.__symconLastData || d
                     );
@@ -4554,6 +4490,7 @@ class Energiefluss extends IPSModuleStrict
                     }
                 });
             });
+
             card.__symconVisualObserver.observe(card.shadowRoot, {
                 childList: true,
                 subtree: true,
