@@ -4781,9 +4781,25 @@ class Energiefluss extends IPSModuleStrict
             const boxSvg = root.querySelector?.(boxSelector);
             if (!boxSvg) return;
 
-            const rects = Array.from(
+            let rects = Array.from(
                 boxSvg.querySelectorAll?.(':scope > rect') || []
             );
+
+            const isFullLayout =
+                currentTechnicalLayout === 'full' ||
+                currentTechnicalLayout === 'full-wide';
+
+            if (isFullLayout) {
+                const fullRects = Array.from(
+                    root.querySelectorAll?.('rect') || []
+                );
+
+                fullRects.forEach(rect => {
+                    if (!rects.includes(rect)) {
+                        rects.push(rect);
+                    }
+                });
+            }
 
             if (!rects.length) return;
 
@@ -4792,8 +4808,14 @@ class Energiefluss extends IPSModuleStrict
             const availableNodes = [];
 
             valueDefinitions.forEach(([selector, available]) => {
+                const searchRoot =
+                    currentTechnicalLayout === 'full' ||
+                    currentTechnicalLayout === 'full-wide'
+                        ? root
+                        : boxSvg;
+
                 const nodes = Array.from(
-                    boxSvg.querySelectorAll?.(selector) || []
+                    searchRoot.querySelectorAll?.(selector) || []
                 );
 
                 nodes.forEach(remember);
@@ -4878,13 +4900,72 @@ class Energiefluss extends IPSModuleStrict
                 }
 
                 const centerY = y + (height / 2);
-                const contains =
-                    rowCenterY >= y - 8 &&
-                    rowCenterY <= y + height + 8;
+                let distance;
 
-                const distance =
-                    Math.abs(centerY - rowCenterY) +
-                    (contains ? 0 : 1000);
+                if (
+                    currentTechnicalLayout === 'full' ||
+                    currentTechnicalLayout === 'full-wide'
+                ) {
+                    try {
+                        const rb = rect.getBBox?.();
+                        const textBoxes = rows
+                            .map(item => item.node.getBBox?.())
+                            .filter(Boolean);
+
+                        if (!rb || !textBoxes.length) return;
+
+                        const minTextX = Math.min(
+                            ...textBoxes.map(box => box.x)
+                        );
+                        const maxTextX = Math.max(
+                            ...textBoxes.map(box => box.x + box.width)
+                        );
+                        const minTextY = Math.min(
+                            ...textBoxes.map(box => box.y)
+                        );
+                        const maxTextY = Math.max(
+                            ...textBoxes.map(box => box.y + box.height)
+                        );
+
+                        const encloses =
+                            rb.x <= minTextX + 4 &&
+                            rb.x + rb.width >= maxTextX - 4 &&
+                            rb.y <= minTextY + 8 &&
+                            rb.y + rb.height >= maxTextY - 8;
+
+                        // Nur ein echter Rahmen um die Batterietexte kommt
+                        // in Full in Frage. Sehr große Hintergrund-Rechtecke
+                        // werden zusätzlich ausgeschlossen.
+                        if (
+                            !encloses ||
+                            rb.width > 220 ||
+                            rb.height > 180 ||
+                            rb.width < 45 ||
+                            rb.height < 18
+                        ) {
+                            return;
+                        }
+
+                        const textCenterX =
+                            (minTextX + maxTextX) / 2;
+                        const rectCenterX =
+                            rb.x + rb.width / 2;
+
+                        distance =
+                            Math.abs(centerY - rowCenterY) +
+                            Math.abs(rectCenterX - textCenterX);
+                    } catch (_) {
+                        return;
+                    }
+                } else {
+                    const contains =
+                        rowCenterY >= y - 8 &&
+                        rowCenterY <= y + height + 8;
+
+                    distance =
+                        Math.abs(centerY - rowCenterY) +
+                        (contains ? 0 : 1000);
+                }
 
                 if (distance < frameDistance) {
                     frameDistance = distance;
@@ -4926,7 +5007,7 @@ class Energiefluss extends IPSModuleStrict
             }
 
             // Ein Wert: kompakte Box. Mehrere Werte: gleicher Card-Zeilenabstand.
-            const padding = 12;
+            const padding = 22;
             const newHeight = Math.max(
                 24,
                 padding + ((rows.length - 1) * spacing)
