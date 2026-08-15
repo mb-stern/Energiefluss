@@ -4680,16 +4680,90 @@ class Energiefluss extends IPSModuleStrict
             if (!visible.length) continue;
 
             // Die WR-Werte liegen im Original ungefähr im Bereich y=174..214.
-            // Den vorhandenen 13-px-Zeilenabstand behalten wir bei und
-            // zentrieren weniger vorhandene Werte innerhalb dieses Bereichs.
+            // Den vorhandenen 13-px-Zeilenabstand behalten wir bei. Zusätzlich
+            // wird nun auch der Rahmen selbst auf die tatsächlich sichtbaren
+            // Zeilen verkleinert bzw. vergrößert.
             const spacing = 13;
-            const centreY = 194;
+
+            // Die seitliche Netz-/Smartmeter-Flusslinie liegt in der
+            // Originalkarte auf y=187. Die dynamische WR-Box bleibt deshalb
+            // unabhängig von ihrer Höhe exakt auf dieser Flussachse zentriert.
+            const centreY = 187;
             const firstY = centreY - ((visible.length - 1) * spacing / 2);
 
             visible.forEach((node, index) => {
                 node.setAttribute?.('y', String(firstY + index * spacing));
                 node.removeAttribute?.('transform');
             });
+
+            // Original: x=145.15, y=162, width=70, height=50/60.
+            // Pro sichtbarer Zeile werden 13 px benötigt, zusätzlich bleibt
+            // oben und unten genügend Innenabstand. Vier Zeilen ergeben damit
+            // praktisch wieder die originale 60-px-Box.
+            const boxHeight = Math.max(24, 20 + (visible.length - 1) * spacing);
+            const boxY = centreY - boxHeight / 2;
+
+            const inverterSvg = root.querySelector?.('#Inverter');
+            const box =
+                inverterSvg?.querySelector?.(':scope > rect') ||
+                root.querySelector?.('#Inverter > rect');
+
+            if (box) {
+                box.setAttribute?.('y', String(boxY));
+                box.setAttribute?.('height', String(boxHeight));
+            }
+
+            // Alle an die WR-Box angrenzenden Flusslinien bis an den
+            // tatsächlichen Rahmen führen. Die Originalkarte verwendet oben
+            // y=162 und seitlich y=187. Durch die dynamische Höhe ändern sich
+            // nur Ober- und Unterkante; die seitliche Achse bleibt y=187.
+            const boxTop = boxY;
+            const boxBottom = boxY + boxHeight;
+
+            const inverterPath =
+                root.querySelector?.('#inverter-path') ||
+                inverterSvg?.querySelector?.('#inverter-path');
+
+            if (inverterPath) {
+                const current = String(inverterPath.getAttribute?.('d') || '');
+                // X-Koordinate aus dem Originalpfad beibehalten (wichtig für
+                // normale und Wide-Darstellung), nur den Start-Y anpassen.
+                const match = current.match(/^\s*M\s*([\d.]+)\s+[\d.]+\s+L\s*([\d.]+)\s+([\d.]+)/i);
+                if (match) {
+                    inverterPath.setAttribute?.(
+                        'd',
+                        `M ${match[1]} ${boxBottom} L ${match[2]} ${match[3]}`
+                    );
+                }
+            }
+
+            // Obere Essential-Load-Leitung: ihr letztes Segment endet im
+            // Original an y=162. Dieses Ende auf die neue Oberkante setzen.
+            const essentialPath = root.querySelector?.('#es-line');
+            if (essentialPath) {
+                const current = String(essentialPath.getAttribute?.('d') || '');
+                const updated = current.replace(
+                    /(L\s*[\d.]+\s+)[\d.]+\s*$/i,
+                    `$1${boxTop}`
+                );
+                if (updated !== current) {
+                    essentialPath.setAttribute?.('d', updated);
+                }
+            }
+
+            // Falls AUX aktiv ist, startet auch dessen zweite Flusslinie an
+            // der WR-Oberkante. Nur den ersten M-Y-Wert ersetzen.
+            const auxPath = root.querySelector?.('#aux-line2');
+            if (auxPath) {
+                const current = String(auxPath.getAttribute?.('d') || '');
+                const updated = current.replace(
+                    /^(\s*M\s*[\d.]+\s+)[\d.]+/i,
+                    `$1${boxTop}`
+                );
+                if (updated !== current) {
+                    auxPath.setAttribute?.('d', updated);
+                }
+            }
         }
     }
 
