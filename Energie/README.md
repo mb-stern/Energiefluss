@@ -278,6 +278,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 - Ein Fehler wurde behoben, durch den AUX-Verbraucher in der Compact- und Large-Ansicht nicht als normale Verbraucher dargestellt wurden.
 - Die Position des Schriftzuges „Energie heute“ in der Large-Ansicht wurde verbessert.
 - Die Position des SOC bei zwei AUX-Verbrauchern wurde verbessert.
+- Einige Codeoptimierungen
 
 ### Version 1.5 (08.08.2026)
 - Laufzeit der Batterie kann nun als Variable ausgegeben werden.

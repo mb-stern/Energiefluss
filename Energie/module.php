@@ -4441,21 +4441,9 @@ class Energiefluss extends IPSModuleStrict
         // Ein gemeinsamer Durchlauf für alle visuellen Nachkorrekturen.
         applySunsynkVisualFixes(card, d);
 
-        // Einige innere SVG-Knoten entstehen erst kurz nach updateComplete.
-        // Nur zwei Nachläufe beibehalten; der vorherige 0-ms-Durchlauf war
-        // unmittelbar redundant zum direkten Aufruf oben.
-        [100, 500].forEach(delay => {
-            setTimeout(() => {
-                applySunsynkVisualFixes(
-                    card,
-                    card.__symconLastData || d
-                );
-            }, delay);
-        });
-
         // Lit rendert bei jeder neuen hass-Zuweisung Teile des Shadow-DOM neu.
         // Nach tatsächlichen DOM-Änderungen die visuellen Korrekturen erneut
-        // gesammelt anwenden.
+        // gesammelt anwenden. Zusätzliche Timer sind dafür nicht mehr nötig.
         if (!card.__symconVisualObserver && card.shadowRoot) {
             let scheduled = false;
 
