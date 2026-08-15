@@ -4652,7 +4652,13 @@ class Energiefluss extends IPSModuleStrict
         };
 
         if (configuredAux.length === 1) {
-            setLabel('#aux_one', configuredAux[0]);
+            // Auch beim einzelnen AUX-Verbraucher den Fahrzeug-SOC
+            // ausschließlich direkt hinter dem Wallbox-Namen anzeigen.
+            setLabel(
+                '#aux_one',
+                configuredAux[0],
+                configuredAux[0]?.isWallbox === true
+            );
 
             // Die Card enthält für den Haupt-AUX mehrere alternative
             // Originalsymbole. Bei einem frei konfigurierten Verbrauchericon
