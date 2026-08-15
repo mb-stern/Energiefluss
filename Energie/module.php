@@ -4431,6 +4431,7 @@ class Energiefluss extends IPSModuleStrict
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
         positionLiteDailyEnergyAtCardPosition(card);
+        compactBatteryValues(card, d);
         compactSmartMeterValues(card, d);
         compactInverterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
@@ -4461,6 +4462,10 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 positionLiteDailyEnergyAtCardPosition(card);
+                compactBatteryValues(
+                    card,
+                    card.__symconLastData || d
+                );
                 compactSmartMeterValues(
                     card,
                     card.__symconLastData || d
@@ -4506,6 +4511,10 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     showInverterPowerAboveVoltages(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    compactBatteryValues(
                         card,
                         card.__symconLastData || d
                     );
@@ -4831,6 +4840,580 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+
+
+    function compactBatteryValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+        const batteries = Array.isArray(d.batteries)
+            ? d.batteries
+            : [];
+
+        if (!batteries.length) return;
+
+        const isFull =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+
+        const visibleNode = node => {
+            if (!node) return false;
+
+            if (
+                node.getAttribute?.('display') === 'none' ||
+                node.getAttribute?.('visibility') === 'hidden' ||
+                node.classList?.contains('st12')
+            ) {
+                return false;
+            }
+
+            try {
+                const style = getComputedStyle(node);
+                if (
+                    style.display === 'none' ||
+                    style.visibility === 'hidden' ||
+                    Number(style.opacity) === 0
+                ) {
+                    return false;
+                }
+            } catch (_) {}
+
+            try {
+                const box = node.getBoundingClientRect?.();
+                return !!box && box.width > 0 && box.height > 0;
+            } catch (_) {
+                return false;
+            }
+        };
+
+        const rememberTextY = node => {
+            if (!node.dataset.symconBatteryOriginalY) {
+                node.dataset.symconBatteryOriginalY =
+                    String(node.getAttribute?.('y') || '0');
+            }
+        };
+
+        const rememberFrame = frame => {
+            if (!frame.dataset.symconBatteryOriginalY) {
+                frame.dataset.symconBatteryOriginalY =
+                    String(frame.getAttribute?.('y') || '0');
+            }
+            if (!frame.dataset.symconBatteryOriginalHeight) {
+                frame.dataset.symconBatteryOriginalHeight =
+                    String(frame.getAttribute?.('height') || '0');
+            }
+        };
+
+        const restoreFrame = frame => {
+            rememberFrame(frame);
+            frame.setAttribute?.(
+                'y',
+                frame.dataset.symconBatteryOriginalY
+            );
+            frame.setAttribute?.(
+                'height',
+                frame.dataset.symconBatteryOriginalHeight
+            );
+        };
+
+        const measurementDefs = [
+            {
+                batteryIndex: 0,
+                selectors: [
+                    '[id="battery_voltage_183"]',
+                    '[id="battery1_voltage_183"]'
+                ],
+                available: battery =>
+                    battery?.hasVoltage === true
+            },
+            {
+                batteryIndex: 0,
+                selectors: [
+                    '[id="battery_current_191"]',
+                    '[id="battery1_current_191"]'
+                ],
+                available: battery =>
+                    battery?.hasCurrent === true
+            },
+            {
+                batteryIndex: 0,
+                selectors: [
+                    '[id="data.batteryPower_190"]',
+                    '[id="battery_power_190"]',
+                    '[id="batteryPower_190"]'
+                ],
+                available: battery =>
+                    battery?.hasPower === true
+            },
+            {
+                batteryIndex: 1,
+                selectors: [
+                    '[id="battery2_voltage_183"]'
+                ],
+                available: battery =>
+                    battery?.hasVoltage === true
+            },
+            {
+                batteryIndex: 1,
+                selectors: [
+                    '[id="battery2_current_191"]'
+                ],
+                available: battery =>
+                    battery?.hasCurrent === true
+            },
+            {
+                batteryIndex: 1,
+                selectors: [
+                    '[id="data.battery2Power_190"]',
+                    '[id="battery2_power_190"]',
+                    '[id="battery2Power_190"]'
+                ],
+                available: battery =>
+                    battery?.hasPower === true
+            }
+        ];
+
+        const setMissingHidden = (node, hidden) => {
+            if (hidden) {
+                node.setAttribute?.('display', 'none');
+                node.style?.setProperty(
+                    'display',
+                    'none',
+                    'important'
+                );
+            } else {
+                node.removeAttribute?.('display');
+                node.style?.removeProperty('display');
+            }
+        };
+
+        // Compact / Large(Lite) haben stabile Batterie-Container.
+        // Diese Logik hat bereits zuverlässig funktioniert und wird deshalb
+        // bewusst getrennt vom Full-Layout behandelt.
+        const processStableBox = (
+            root,
+            boxSelector,
+            battery,
+            defs
+        ) => {
+            if (!battery) return;
+
+            const boxSvg = root.querySelector?.(boxSelector);
+            if (!boxSvg) return;
+
+            const rects = Array.from(
+                boxSvg.querySelectorAll?.(':scope > rect') || []
+            );
+
+            const rows = [];
+
+            defs.forEach(def => {
+                const available = def.available(battery);
+
+                const candidates = [];
+                def.selectors.forEach(selector => {
+                    boxSvg.querySelectorAll?.(selector)
+                        .forEach(node => {
+                            if (!candidates.includes(node)) {
+                                candidates.push(node);
+                            }
+                        });
+                });
+
+                candidates.forEach(rememberTextY);
+
+                const node =
+                    candidates.find(visibleNode) ||
+                    candidates[0] ||
+                    null;
+
+                if (!node) return;
+
+                setMissingHidden(node, !available);
+
+                if (available) {
+                    node.removeAttribute?.('display');
+                    node.style?.removeProperty('display');
+                    rows.push({
+                        node,
+                        y: Number(
+                            node.dataset.symconBatteryOriginalY ||
+                            node.getAttribute?.('y') ||
+                            0
+                        )
+                    });
+                }
+            });
+
+            if (!rects.length) return;
+            rects.forEach(restoreFrame);
+
+            if (!rows.length) {
+                // Ohne V/A/W gibt es auch keinen sinnvollen Datenrahmen.
+                // Nur den Rahmen ausblenden, der im selben Bereich sitzt.
+                rects.forEach(frame => {
+                    try {
+                        const fr = frame.getBoundingClientRect?.();
+                        const cr = boxSvg.getBoundingClientRect?.();
+                        if (
+                            fr &&
+                            cr &&
+                            fr.width >= 35 &&
+                            fr.height >= 18 &&
+                            fr.left >= cr.left - 2 &&
+                            fr.right <= cr.right + 2
+                        ) {
+                            frame.style?.setProperty(
+                                'display',
+                                'none',
+                                'important'
+                            );
+                        }
+                    } catch (_) {}
+                });
+                return;
+            }
+
+            rows.sort((a, b) => a.y - b.y);
+            const rowCenter =
+                (rows[0].y + rows[rows.length - 1].y) / 2;
+
+            let frame = null;
+            let best = Number.POSITIVE_INFINITY;
+
+            rects.forEach(candidate => {
+                candidate.style?.removeProperty('display');
+
+                const y = Number(
+                    candidate.dataset.symconBatteryOriginalY || 0
+                );
+                const h = Number(
+                    candidate.dataset.symconBatteryOriginalHeight || 0
+                );
+
+                if (
+                    !Number.isFinite(y) ||
+                    !Number.isFinite(h) ||
+                    h <= 0
+                ) {
+                    return;
+                }
+
+                const centre = y + h / 2;
+                const contains =
+                    rowCenter >= y - 8 &&
+                    rowCenter <= y + h + 8;
+                const score =
+                    Math.abs(centre - rowCenter) +
+                    (contains ? 0 : 1000);
+
+                if (score < best) {
+                    best = score;
+                    frame = candidate;
+                }
+            });
+
+            if (!frame) return;
+
+            const originalY = Number(
+                frame.dataset.symconBatteryOriginalY
+            );
+            const originalH = Number(
+                frame.dataset.symconBatteryOriginalHeight
+            );
+            const centre = originalY + originalH / 2;
+
+            // Rahmen bewusst luftiger als bisher:
+            // 1 Zeile 32, 2 Zeilen 51, 3 Zeilen 70.
+            const spacing = 19;
+            const newHeight =
+                32 + ((rows.length - 1) * spacing);
+            const newY = centre - newHeight / 2;
+
+            frame.setAttribute?.('y', String(newY));
+            frame.setAttribute?.(
+                'height',
+                String(newHeight)
+            );
+
+            const firstY =
+                centre - ((rows.length - 1) * spacing / 2);
+
+            rows.forEach((row, index) => {
+                row.node.setAttribute?.(
+                    'y',
+                    String(firstY + index * spacing)
+                );
+            });
+        };
+
+        // Full hat je nach 1 oder 2 Batterien eine andere Original-Geometrie.
+        // Darum wird hier nicht mit festen x/y-Werten gearbeitet. Stattdessen
+        // wird der tatsächlich sichtbare Rahmen ermittelt, der die sichtbaren
+        // Batterie-V/A/W-Texte umschließt. Dadurch funktioniert derselbe Code
+        // für beide Full-Varianten.
+        const processFull = root => {
+            const measurements = [];
+
+            measurementDefs.forEach(def => {
+                const battery = batteries[def.batteryIndex];
+                if (!battery) return;
+
+                const available = def.available(battery);
+                const candidates = [];
+
+                def.selectors.forEach(selector => {
+                    root.querySelectorAll?.(selector)
+                        .forEach(node => {
+                            if (!candidates.includes(node)) {
+                                candidates.push(node);
+                            }
+                        });
+                });
+
+                candidates.forEach(rememberTextY);
+
+                // In Full existieren mehrere alternative Elemente mit
+                // denselben IDs. Nur die aktuell gerenderte Variante zählt.
+                candidates.forEach(node => {
+                    if (!visibleNode(node)) return;
+
+                    setMissingHidden(node, !available);
+                    if (!available) return;
+
+                    let screen;
+                    try {
+                        screen = node.getBoundingClientRect?.();
+                    } catch (_) {
+                        screen = null;
+                    }
+
+                    if (
+                        !screen ||
+                        screen.width <= 0 ||
+                        screen.height <= 0
+                    ) {
+                        return;
+                    }
+
+                    measurements.push({
+                        node,
+                        batteryIndex: def.batteryIndex,
+                        screen,
+                        cx: screen.left + screen.width / 2,
+                        cy: screen.top + screen.height / 2
+                    });
+                });
+            });
+
+            if (!measurements.length) return;
+
+            const allRects = Array.from(
+                root.querySelectorAll?.('rect') || []
+            );
+
+            const frameCandidates = [];
+
+            allRects.forEach(frame => {
+                if (!visibleNode(frame)) return;
+
+                rememberFrame(frame);
+                restoreFrame(frame);
+
+                let fr;
+                try {
+                    fr = frame.getBoundingClientRect?.();
+                } catch (_) {
+                    fr = null;
+                }
+
+                if (
+                    !fr ||
+                    fr.width < 35 ||
+                    fr.height < 20 ||
+                    fr.width > 240 ||
+                    fr.height > 180
+                ) {
+                    return;
+                }
+
+                const inside = measurements.filter(item =>
+                    item.cx >= fr.left + 2 &&
+                    item.cx <= fr.right - 2 &&
+                    item.cy >= fr.top - 6 &&
+                    item.cy <= fr.bottom + 6
+                );
+
+                if (!inside.length) return;
+
+                // Ein Datenrahmen muss deutlich breiter als der Text selbst
+                // sein. Dadurch fallen kleine Hintergrund-/Statusrechtecke weg.
+                const minTextLeft = Math.min(
+                    ...inside.map(item => item.screen.left)
+                );
+                const maxTextRight = Math.max(
+                    ...inside.map(item => item.screen.right)
+                );
+
+                if (
+                    fr.left > minTextLeft - 4 ||
+                    fr.right < maxTextRight + 4
+                ) {
+                    return;
+                }
+
+                frameCandidates.push({
+                    frame,
+                    rect: fr,
+                    inside,
+                    area: fr.width * fr.height
+                });
+            });
+
+            if (!frameCandidates.length) return;
+
+            // Jedem Messwert den kleinsten Rahmen zuordnen, der ihn umschließt.
+            // Bei einer Batterie ergibt das den einzelnen Full-Rahmen; bei zwei
+            // Batterien automatisch die von der Card verwendete zweite Geometrie.
+            const frameMap = new Map();
+
+            measurements.forEach(item => {
+                const matches = frameCandidates
+                    .filter(candidate =>
+                        candidate.inside.some(
+                            inside => inside.node === item.node
+                        )
+                    )
+                    .sort((a, b) => a.area - b.area);
+
+                if (!matches.length) return;
+
+                const selected = matches[0];
+                if (!frameMap.has(selected.frame)) {
+                    frameMap.set(selected.frame, {
+                        candidate: selected,
+                        nodes: []
+                    });
+                }
+
+                frameMap.get(selected.frame).nodes.push(item);
+            });
+
+            frameMap.forEach(group => {
+                const frame = group.candidate.frame;
+                const nodes = group.nodes;
+
+                if (!nodes.length) return;
+
+                // Zeilen anhand der realen Y-Position gruppieren.
+                // Bei zwei Batterien dürfen zwei Werte nebeneinander in
+                // derselben Zeile stehen und behalten ihre X-Position.
+                const ordered = [...nodes].sort(
+                    (a, b) => a.cy - b.cy
+                );
+                const rows = [];
+
+                ordered.forEach(item => {
+                    let row = rows.find(
+                        existing =>
+                            Math.abs(existing.screenY - item.cy) <= 5
+                    );
+
+                    if (!row) {
+                        row = {
+                            screenY: item.cy,
+                            items: []
+                        };
+                        rows.push(row);
+                    }
+
+                    row.items.push(item);
+                });
+
+                rows.sort(
+                    (a, b) => a.screenY - b.screenY
+                );
+
+                const originalY = Number(
+                    frame.dataset.symconBatteryOriginalY
+                );
+                const originalH = Number(
+                    frame.dataset.symconBatteryOriginalHeight
+                );
+
+                if (
+                    !Number.isFinite(originalY) ||
+                    !Number.isFinite(originalH) ||
+                    originalH <= 0
+                ) {
+                    return;
+                }
+
+                const centre =
+                    originalY + originalH / 2;
+
+                // Gleiche luftige Proportion wie Compact/Large.
+                const spacing = 19;
+                const newHeight =
+                    32 + ((rows.length - 1) * spacing);
+                const newY =
+                    centre - newHeight / 2;
+
+                frame.setAttribute?.(
+                    'y',
+                    String(newY)
+                );
+                frame.setAttribute?.(
+                    'height',
+                    String(newHeight)
+                );
+
+                const firstY =
+                    centre -
+                    ((rows.length - 1) * spacing / 2);
+
+                rows.forEach((row, index) => {
+                    row.items.forEach(item => {
+                        item.node.setAttribute?.(
+                            'y',
+                            String(
+                                firstY +
+                                index * spacing
+                            )
+                        );
+                    });
+                });
+            });
+        };
+
+        for (const root of roots) {
+            if (isFull) {
+                processFull(root);
+                continue;
+            }
+
+            const bat1 = batteries[0];
+            const bat2 = batteries[1];
+
+            processStableBox(
+                root,
+                '#battery_data',
+                bat1,
+                measurementDefs.filter(
+                    def => def.batteryIndex === 0
+                )
+            );
+
+            processStableBox(
+                root,
+                '#battery2_data_lite',
+                bat2,
+                measurementDefs.filter(
+                    def => def.batteryIndex === 1
+                )
+            );
+        }
+    }
 
     function compactSmartMeterValues(card, d) {
         if (!card || !card.shadowRoot || !d) return;
