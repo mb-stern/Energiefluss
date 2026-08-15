@@ -3357,12 +3357,43 @@ class Energiefluss extends IPSModuleStrict
                         ? viewBox[3]
                         : 512;
 
-                // Das Icon etwas kleiner als den von Sunsynk
-                // vorgesehenen Platzhalter darstellen und mittig halten.
+                // Das sichtbare Symbol optisch im von Sunsynk vorgesehenen
+                // Slot zentrieren. Font-Awesome-SVGs nutzen ihren viewBox je nach
+                // Symbol unterschiedlich stark; eine reine viewBox-Zentrierung
+                // kann deshalb sichtbar nach links oder rechts versetzt wirken.
+                let graphicX = vbX;
+                let graphicY = vbY;
+                let graphicWidth = vbWidth;
+                let graphicHeight = vbHeight;
+
+                try {
+                    const bbox = sourceSvg.getBBox();
+                    if (
+                        bbox &&
+                        Number.isFinite(bbox.x) &&
+                        Number.isFinite(bbox.y) &&
+                        Number.isFinite(bbox.width) &&
+                        Number.isFinite(bbox.height) &&
+                        bbox.width > 0 &&
+                        bbox.height > 0
+                    ) {
+                        graphicX = bbox.x;
+                        graphicY = bbox.y;
+                        graphicWidth = bbox.width;
+                        graphicHeight = bbox.height;
+                    }
+                } catch (e) {
+                    // Falls getBBox() in einem Browser/Renderzustand nicht
+                    // verfügbar ist, bleibt die bisherige viewBox-Logik aktiv.
+                }
+
+                // Das Icon etwas kleiner als den von Sunsynk vorgesehenen
+                // Platzhalter darstellen. Die Größe bleibt gegenüber bisher
+                // unverändert; nur die sichtbare Grafik wird sauber zentriert.
                 const iconScaleFactor = 0.82;
                 const scale = Math.min(
-                    width / vbWidth,
-                    height / vbHeight
+                    width / graphicWidth,
+                    height / graphicHeight
                 ) * iconScaleFactor;
 
                 // Kleiner vertikaler Abstand zur Leistungsbox:
@@ -3370,18 +3401,17 @@ class Energiefluss extends IPSModuleStrict
                 const iconOffsetY = -3;
 
                 /*
-                 * Die horizontale Position vollständig von Sunsynk übernehmen.
-                 * Der von Sunsynk erzeugte foreignObject-Platzhalter sitzt
-                 * bereits an der für die jeweilige Ansicht vorgesehenen Stelle.
-                 * Wir verändern daher nur Größe und vertikalen Abstand.
+                 * x/y sowie Breite und Höhe des Sunsynk-Slots bleiben exakt
+                 * unverändert. Zentriert wird nur die tatsächlich sichtbare
+                 * SVG-Grafik innerhalb dieses Slots.
                  */
                 const translateX =
-                    x + ((width - (vbWidth * scale)) / 2) -
-                    (vbX * scale);
+                    x + ((width - (graphicWidth * scale)) / 2) -
+                    (graphicX * scale);
 
                 const translateY =
-                    y + ((height - (vbHeight * scale)) / 2) -
-                    (vbY * scale) +
+                    y + ((height - (graphicHeight * scale)) / 2) -
+                    (graphicY * scale) +
                     iconOffsetY;
 
                 if (!foreignObject.dataset.symconIconId) {
