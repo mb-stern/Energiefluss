@@ -4715,22 +4715,53 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
 
-            // Der SOC steht jetzt direkt hinter dem Namen und soll nicht
-            // nochmals als separate Zusatzzeile erscheinen.
+            // Der Wallbox-SOC steht bereits direkt hinter dem Namen.
+            // Deshalb alle separaten SOC-/Zusatztexte der Original-Card
+            // für genau diesen AUX entfernen, damit er nicht zusätzlich
+            // vor dem Namen erscheint.
             [
-                '#aux_load1_extra',
-                '#aux_load2_extra'
-            ].forEach(selector => {
-                const node = findNode(selector);
-                if (!node) return;
-
-                if (node.style?.display !== 'none') {
-                    node.style?.setProperty(
-                        'display',
-                        'none',
-                        'important'
-                    );
+                {
+                    group: configuredAux[0],
+                    selectors: [
+                        '#aux_load1_extra',
+                        '#aux_load1_soc',
+                        '[id*="aux_load1"][id*="soc"]',
+                        '[id*="aux_load1"][id*="extra"]'
+                    ]
+                },
+                {
+                    group: configuredAux[1],
+                    selectors: [
+                        '#aux_load2_extra',
+                        '#aux_load2_soc',
+                        '[id*="aux_load2"][id*="soc"]',
+                        '[id*="aux_load2"][id*="extra"]'
+                    ]
                 }
+            ].forEach(definition => {
+                if (definition.group?.isWallbox !== true) return;
+
+                definition.selectors.forEach(selector => {
+                    for (const root of roots) {
+                        root.querySelectorAll?.(selector).forEach(node => {
+                            node.style?.setProperty(
+                                'display',
+                                'none',
+                                'important'
+                            );
+                            node.style?.setProperty(
+                                'visibility',
+                                'hidden',
+                                'important'
+                            );
+                            node.setAttribute?.('display', 'none');
+                            node.setAttribute?.(
+                                'visibility',
+                                'hidden'
+                            );
+                        });
+                    }
+                });
             });
         }
     }
