@@ -4483,14 +4483,13 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
 
-            // Direkt oberhalb der Hausleistung:
-            // Label oben, kWh-Wert darunter.
-            const labelY = powerBox.y - 23;
-            const valueY = powerBox.y - 9;
+            // Energie heute links neben dem Haus platzieren.
+            // Die ursprüngliche vertikale Position der Card bleibt erhalten;
+            // nur X wird relativ zur Haus-Wattanzeige verschoben.
+            const targetX = centerX - 72;
 
-            const place = (node, y) => {
-                node.setAttribute?.('x', String(centerX));
-                node.setAttribute?.('y', String(y));
+            const place = node => {
+                node.setAttribute?.('x', String(targetX));
                 node.setAttribute?.('text-anchor', 'middle');
 
                 node.style?.setProperty(
@@ -4500,13 +4499,13 @@ class Energiefluss extends IPSModuleStrict
                 );
 
                 node.querySelectorAll?.('tspan').forEach(tspan => {
-                    tspan.setAttribute?.('x', String(centerX));
+                    tspan.setAttribute?.('x', String(targetX));
                     tspan.setAttribute?.('text-anchor', 'middle');
                 });
             };
 
-            labelNodes.forEach(node => place(node, labelY));
-            valueNodes.forEach(node => place(node, valueY));
+            labelNodes.forEach(node => place(node));
+            valueNodes.forEach(node => place(node));
         }
     }
 
