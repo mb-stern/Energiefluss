@@ -2916,44 +2916,81 @@ class Energiefluss extends IPSModuleStrict
         }
 
         // Netz:
-        // Immer nur EIN Gesamtwert (Saldo) anzeigen.
+        // Bis 600px nur EIN Gesamtwert (Saldo) anzeigen.
         // positiv = Netzbezug -> rot
         // negativ = Einspeisung -> grün
+        // Ab 601px bleiben Bezug und Einspeisung wie bisher getrennt sichtbar.
+        const gridImport = Math.max(grid, 0);
+        const gridExport = Math.max(-grid, 0);
+
         const gridInfo = document.getElementById('pfc-info-grid');
         const gridImportEl = document.getElementById('pfc-grid-import');
         const gridExportEl = document.getElementById('pfc-grid-export');
         const gridSub = document.getElementById('pfc-grid-sub');
 
-        const isExport = grid < 0;
-        const gridColor = isExport ? AC.export : AC.import;
+        const compactGrid = window.matchMedia('(max-width: 600px)').matches;
 
-        // Oben nur die gesamte aktuelle Netzleistung.
-        if (gridImportEl) {
-            gridImportEl.textContent = fmt(Math.abs(grid));
-            gridImportEl.style.color = gridColor;
-            gridImportEl.style.display = '';
-        }
+        if (compactGrid) {
+            const isExport = grid < 0;
+            const gridColor = isExport ? AC.export : AC.import;
 
-        if (gridExportEl) {
-            gridExportEl.textContent = '';
-            gridExportEl.style.display = 'none';
-        }
-
-        // Darunter Bezug / Einspeisung mit den vorhandenen Energiewerten.
-        if (gridSub) {
-            const energy = [];
-            if (d.gridImportEnergy) {
-                energy.push('→ ' + d.gridImportEnergy);
+            // Oben nur die gesamte aktuelle Netzleistung.
+            if (gridImportEl) {
+                gridImportEl.textContent = fmt(Math.abs(grid));
+                gridImportEl.style.color = gridColor;
+                gridImportEl.style.display = '';
             }
-            if (d.gridExportEnergy) {
-                energy.push('← ' + d.gridExportEnergy);
-            }
-            gridSub.innerHTML = energy.join('<br>');
-            gridSub.style.display = '';
-        }
 
-        if (gridInfo) {
-            gridInfo.style.borderColor = gridColor;
+            if (gridExportEl) {
+                gridExportEl.textContent = '';
+                gridExportEl.style.display = 'none';
+            }
+
+            // Darunter wieder wie früher in kleiner Schrift:
+            // Bezug / Einspeisung mit den vorhandenen Energiewerten.
+            if (gridSub) {
+                const energy = [];
+                if (d.gridImportEnergy) {
+                    energy.push('→ ' + d.gridImportEnergy);
+                }
+                if (d.gridExportEnergy) {
+                    energy.push('← ' + d.gridExportEnergy);
+                }
+                gridSub.innerHTML = energy.join('<br>');
+                gridSub.style.display = '';
+            }
+
+            if (gridInfo) {
+                gridInfo.style.borderColor = gridColor;
+            }
+        } else {
+            if (gridImportEl) {
+                gridImportEl.textContent = `→ ${fmt(gridImport)}`;
+                gridImportEl.style.color = AC.import;
+                gridImportEl.style.display = '';
+            }
+
+            if (gridExportEl) {
+                gridExportEl.textContent = `← ${fmt(gridExport)}`;
+                gridExportEl.style.color = AC.export;
+                gridExportEl.style.display = '';
+            }
+
+            if (gridSub) {
+                const energy = [];
+                if (d.gridImportEnergy) {
+                    energy.push('Bezug ' + d.gridImportEnergy);
+                }
+                if (d.gridExportEnergy) {
+                    energy.push('Einspeisung ' + d.gridExportEnergy);
+                }
+                gridSub.innerHTML = energy.join('<br>');
+                gridSub.style.display = '';
+            }
+
+            if (gridInfo) {
+                gridInfo.style.borderColor = 'rgba(255,255,255,.16)';
+            }
         }
 
         requestAnimationFrame(alignHomeInfoToSolarBottom);
@@ -4244,7 +4281,6 @@ class Energiefluss extends IPSModuleStrict
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
-        compactSmartMeterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
         applyAuxVisualOverrides(card, d);
 
@@ -4268,10 +4304,6 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 showInverterPowerAboveVoltages(
-                    card,
-                    card.__symconLastData || d
-                );
-                compactSmartMeterValues(
                     card,
                     card.__symconLastData || d
                 );
@@ -4311,10 +4343,6 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     showInverterPowerAboveVoltages(
-                        card,
-                        card.__symconLastData || d
-                    );
-                    compactSmartMeterValues(
                         card,
                         card.__symconLastData || d
                     );
@@ -4578,58 +4606,6 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
-
-    function compactSmartMeterValues(card, d) {
-        if (!card || !card.shadowRoot || !d) return;
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        // Die Originalkarte reserviert feste Y-Positionen für L1/L2/L3,
-        // Frequenz und Gesamtleistung. Fehlt dazwischen ein Wert, entsteht
-        // deshalb optisch eine Leerzeile. Wir ordnen ausschließlich die
-        // tatsächlich konfigurierten Werte neu und zentrieren sie in der
-        // bestehenden Smartmeter-Box. Inhalt und Box-Geometrie bleiben gleich.
-        const wanted = [
-            ['inverter_voltage_154', entityAvailable(d, 'gridVoltageL1')],
-            ['inverter_voltage_L2', entityAvailable(d, 'gridVoltageL2')],
-            ['inverter_voltage_L3', entityAvailable(d, 'gridVoltageL3')],
-            ['load_frequency_192', entityAvailable(d, 'gridFrequency')],
-            ['grid_power_169', true]
-        ];
-
-        for (const root of roots) {
-            const visible = [];
-
-            for (const [id, available] of wanted) {
-                const node = root.querySelector?.(`#${id}`) || null;
-                if (!node) continue;
-
-                if (!available) {
-                    node.setAttribute?.('display', 'none');
-                    node.style?.setProperty('display', 'none', 'important');
-                    continue;
-                }
-
-                node.removeAttribute?.('display');
-                node.style?.removeProperty('display');
-                visible.push(node);
-            }
-
-            if (!visible.length) continue;
-
-            // Smartmeter-Box: y=153..223. Die Originalkarte verwendet bei
-            // fünf Zeilen 164/177/190/203/216 (= 13 px Abstand). Genau diesen
-            // Abstand behalten wir bei und zentrieren weniger Zeilen vertikal.
-            const spacing = 13;
-            const centreY = 190;
-            const firstY = centreY - ((visible.length - 1) * spacing / 2);
-
-            visible.forEach((node, index) => {
-                node.setAttribute?.('y', String(firstY + index * spacing));
-                node.removeAttribute?.('transform');
-            });
-        }
-    }
 
     function showInverterPowerAboveVoltages(card, d) {
         if (!card || !card.shadowRoot || !d) return;
