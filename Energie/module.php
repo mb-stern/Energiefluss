@@ -3849,6 +3849,37 @@ class Energiefluss extends IPSModuleStrict
             activeBatteries
         );
 
+        const auxDisplayName = group => {
+            if (!group) return '';
+
+            const name = String(group.name || '').trim();
+
+            // Nur bei der als Wallbox markierten AUX-Last den Fahrzeug-SOC
+            // direkt hinter dem Verbrauchernamen anzeigen.
+            if (
+                auxGroups.length === 2 &&
+                group.isWallbox === true &&
+                group.hasSoc === true
+            ) {
+                const rawSoc = String(group.socText || '').trim();
+
+                if (rawSoc !== '') {
+                    const percentMatch =
+                        rawSoc.match(/([-+]?\d+(?:[.,]\d+)?)\s*%/);
+
+                    const soc = percentMatch
+                        ? `${percentMatch[1]}%`
+                        : rawSoc;
+
+                    return [name, soc]
+                        .filter(Boolean)
+                        .join(' · ');
+                }
+            }
+
+            return name;
+        };
+
         const cfg = {
             cardstyle: cardStyle,
             wide,
@@ -4010,11 +4041,11 @@ class Energiefluss extends IPSModuleStrict
                         : 'default',
                 aux_load1_name:
                     auxGroups.length >= 2
-                        ? (auxGroups[0]?.name || 'Aux1')
+                        ? (auxDisplayName(auxGroups[0]) || 'Aux1')
                         : '',
                 aux_load2_name:
                     auxGroups.length >= 2
-                        ? (auxGroups[1]?.name || 'Aux2')
+                        ? (auxDisplayName(auxGroups[1]) || 'Aux2')
                         : '',
                 // Haupt-AUX, Unterverbraucher, Linie, Icon, Werte und Text
                 // verwenden dieselbe konfigurierte Verbraucherfarbe.
@@ -4588,17 +4619,26 @@ class Energiefluss extends IPSModuleStrict
         const cleanSoc = group => {
             if (!group?.hasSoc) return '';
 
-            // Der Text ist bereits durch IP-Symcon formatiert. Dadurch bleiben
-            // Stringwerte, Profiltexte sowie Präfix und Suffix unverändert.
-            return String(group.socText || '').trim();
+            const raw = String(group.socText || '').trim();
+            if (raw === '') return '';
+
+            const percentMatch =
+                raw.match(/([-+]?\d+(?:[.,]\d+)?)\s*%/);
+
+            return percentMatch
+                ? `${percentMatch[1]}%`
+                : raw;
         };
 
-        const setLabel = (selector, group) => {
+        const setLabel = (selector, group, includeSoc = false) => {
             const node = findNode(selector);
             if (!node || !group) return;
 
             const name = String(group.name || '').trim();
-            const soc = cleanSoc(group);
+            const soc =
+                includeSoc && group.isWallbox === true
+                    ? cleanSoc(group)
+                    : '';
             const wanted = [name, soc].filter(Boolean).join(' · ');
 
             if (
@@ -4636,8 +4676,16 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
         } else {
-            setLabel('#aux_load1', configuredAux[0]);
-            setLabel('#aux_load2', configuredAux[1]);
+            setLabel(
+                '#aux_load1',
+                configuredAux[0],
+                configuredAux[0]?.isWallbox === true
+            );
+            setLabel(
+                '#aux_load2',
+                configuredAux[1],
+                configuredAux[1]?.isWallbox === true
+            );
 
             // AUX1 und AUX2 werden vollständig ohne Icon dargestellt.
             // Es wird kein ungültiger Icon-Name an die Card übergeben.

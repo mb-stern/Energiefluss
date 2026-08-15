@@ -276,7 +276,8 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 - In der Sunsynk-Card verhalten sich die Smartmeter- , Batterie- und Wechselrichter-Box nun dynamsich zum Inhalt. Werden nicht alle Werte gewählt, passt sich die Box nun an.
 - Ein Fehler wurde behoben, dass in der Full-Ansicht genau drei aktive Verbrauchern komplett ausgeblendet wurden.
 - Ein Fehler wurde behoben, dass in der Compact und Large Ansicht AUX-Verbraucher nicht als normale Verbraucher dargestellt wurden.
-- Position desSchriftzuges 'Energie heute' in der Large-Ansicht verbessert.
+- Position des Schriftzuges 'Energie heute' in der Large-Ansicht verbessert.
+- Position des SOC bei zwei AUX-Verbrauchrn verbessert
 
 ### Version 1.5 (08.08.2026)
 - Laufzeit der Batterie kann nun als Variable ausgegeben werden.
