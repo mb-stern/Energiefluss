@@ -5123,11 +5123,12 @@ class Energiefluss extends IPSModuleStrict
             );
             const centre = originalY + originalH / 2;
 
-            // Rahmen bewusst luftiger als bisher:
-            // 1 Zeile 32, 2 Zeilen 51, 3 Zeilen 70.
-            const spacing = 19;
+            // Gleiche vertikale Proportionen wie bei der dynamischen
+            // Wechselrichter-/Smartmeter-Box: 13 px Zeilenabstand und
+            // gleichmäßiger Innenabstand ober- und unterhalb des Inhalts.
+            const spacing = 13;
             const newHeight =
-                32 + ((rows.length - 1) * spacing);
+                Math.max(24, 20 + ((rows.length - 1) * spacing));
             const newY = centre - newHeight / 2;
 
             frame.setAttribute?.('y', String(newY));
@@ -5352,10 +5353,13 @@ class Energiefluss extends IPSModuleStrict
                 const centre =
                     originalY + originalH / 2;
 
-                // Gleiche luftige Proportion wie Compact/Large.
-                const spacing = 19;
+                // Auch in Full / Full Wide exakt dieselbe vertikale
+                // Dichte wie bei Wechselrichter und Smartmeter verwenden.
+                // Das gilt unabhängig davon, ob die Card die Geometrie für
+                // eine oder zwei Batterien rendert.
+                const spacing = 13;
                 const newHeight =
-                    32 + ((rows.length - 1) * spacing);
+                    Math.max(24, 20 + ((rows.length - 1) * spacing));
                 const newY =
                     centre - newHeight / 2;
 
