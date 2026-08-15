@@ -4356,6 +4356,7 @@ class Energiefluss extends IPSModuleStrict
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
+        compactBatteryValues(card, d);
         compactSmartMeterValues(card, d);
         compactInverterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
@@ -4382,6 +4383,10 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 showInverterPowerAboveVoltages(
+                    card,
+                    card.__symconLastData || d
+                );
+                compactBatteryValues(
                     card,
                     card.__symconLastData || d
                 );
@@ -4701,6 +4706,157 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+
+    function compactBatteryValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        // Anders als Smartmeter und Wechselrichter ist die Batterie-Datenbox
+        // in allen technischen Ansichten vorhanden. Deshalb wird diese
+        // Anpassung bewusst in Compact, Lite und Full (inkl. Wide) angewendet.
+        const batteries = Array.isArray(d.batteries) ? d.batteries : [];
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        const definitions = [
+            {
+                battery: batteries[0],
+                boxSvg: '#battery_data',
+                values: [
+                    ['#battery_voltage_183', 'hasVoltage'],
+                    ['#battery_current_191', 'hasCurrent'],
+                    ['#battery_power_190', 'hasPower']
+                ]
+            },
+            {
+                battery: batteries[1],
+                boxSvg: '#battery2_data_lite',
+                values: [
+                    ['#battery2_voltage_183', 'hasVoltage'],
+                    ['#battery2_current_191', 'hasCurrent'],
+                    ['#battery2_power_190', 'hasPower']
+                ]
+            }
+        ];
+
+        for (const root of roots) {
+            definitions.forEach(definition => {
+                const battery = definition.battery;
+                if (!battery) return;
+
+                const boxSvg = root.querySelector?.(definition.boxSvg);
+                if (!boxSvg) return;
+
+                // Der erste Rahmen im jeweiligen battery_data-SVG ist die
+                // Datenbox mit Spannung / Strom / Leistung.
+                const box = boxSvg.querySelector?.(':scope > rect') ||
+                    boxSvg.querySelector?.('rect');
+                if (!box) return;
+
+                // Originalgeometrie nur einmal merken, damit wiederholte
+                // Lit-Renders nicht schrittweise die Box verschieben.
+                if (!box.dataset.symconOriginalY) {
+                    box.dataset.symconOriginalY =
+                        String(box.getAttribute?.('y') || '0');
+                }
+                if (!box.dataset.symconOriginalHeight) {
+                    box.dataset.symconOriginalHeight =
+                        String(box.getAttribute?.('height') || '0');
+                }
+
+                const originalY = Number(box.dataset.symconOriginalY || 0);
+                const originalHeight = Number(
+                    box.dataset.symconOriginalHeight || 0
+                );
+                if (!Number.isFinite(originalY) ||
+                    !Number.isFinite(originalHeight) ||
+                    originalHeight <= 0) {
+                    return;
+                }
+
+                const visible = [];
+                const allNodes = [];
+
+                definition.values.forEach(([selector, flag]) => {
+                    const node = root.querySelector?.(selector) || null;
+                    if (!node) return;
+
+                    if (!node.dataset.symconOriginalY) {
+                        node.dataset.symconOriginalY =
+                            String(node.getAttribute?.('y') || '0');
+                    }
+                    allNodes.push(node);
+
+                    const available = battery?.[flag] === true;
+                    if (!available) {
+                        node.setAttribute?.('display', 'none');
+                        node.style?.setProperty(
+                            'display',
+                            'none',
+                            'important'
+                        );
+                        return;
+                    }
+
+                    node.removeAttribute?.('display');
+                    node.style?.removeProperty('display');
+                    visible.push(node);
+                });
+
+                if (!visible.length) {
+                    // Ohne einen einzigen Datenwert ist auch die Datenbox
+                    // selbst überflüssig.
+                    box.setAttribute?.('display', 'none');
+                    box.style?.setProperty('display', 'none', 'important');
+                    return;
+                }
+
+                box.removeAttribute?.('display');
+                box.style?.removeProperty('display');
+
+                // Den von der Originalkarte vorgesehenen Zeilenabstand aus
+                // den ursprünglichen Y-Positionen ableiten. So bleibt die
+                // Darstellung in Compact/Lite/Full proportional zur Card.
+                const originalYs = allNodes
+                    .map(node => Number(node.dataset.symconOriginalY || 0))
+                    .filter(Number.isFinite)
+                    .sort((a, b) => a - b);
+
+                const gaps = [];
+                for (let i = 1; i < originalYs.length; i++) {
+                    const gap = originalYs[i] - originalYs[i - 1];
+                    if (gap > 4 && gap < 40) gaps.push(gap);
+                }
+
+                const spacing = gaps.length
+                    ? gaps.reduce((sum, value) => sum + value, 0) /
+                        gaps.length
+                    : 18;
+
+                const centreY = originalY + (originalHeight / 2);
+                const innerPadding = 14;
+                const boxHeight = Math.max(
+                    24,
+                    innerPadding + ((visible.length - 1) * spacing)
+                );
+                const boxY = centreY - (boxHeight / 2);
+
+                box.setAttribute?.('y', String(boxY));
+                box.setAttribute?.('height', String(boxHeight));
+
+                // Sichtbare Werte mit unverändertem Original-Zeilenabstand
+                // innerhalb des neuen Rahmens zentrieren.
+                const firstY =
+                    centreY - ((visible.length - 1) * spacing / 2);
+
+                visible.forEach((node, index) => {
+                    node.setAttribute?.(
+                        'y',
+                        String(firstY + (index * spacing))
+                    );
+                    node.removeAttribute?.('transform');
+                });
+            });
+        }
+    }
 
     function compactSmartMeterValues(card, d) {
         if (!card || !card.shadowRoot || !d) return;
