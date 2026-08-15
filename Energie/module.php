@@ -3593,11 +3593,19 @@ class Energiefluss extends IPSModuleStrict
 
         // AUX bleibt von der Mindestleistung unberührt und verhält sich
         // damit exakt wie vor Einführung der Anzeigeschwelle.
-        const auxGroups = configuredConsumers
-            .filter(group => group.isAux === true)
-            .slice(0, 2);
+        // AUX wird ausschließlich in Full / Full Wide separat dargestellt.
+        // In Compact / Lite (inkl. Wide) werden als AUX markierte Verbraucher
+        // wie normale Verbraucher behandelt, da diese Ansichten keinen
+        // eigenen AUX-Bereich besitzen.
+        const auxGroups = full
+            ? configuredConsumers
+                .filter(group => group.isAux === true)
+                .slice(0, 2)
+            : [];
 
         // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        // Außerhalb von Full gehören damit auch als AUX markierte Einträge
+        // automatisch zu den normalen Verbrauchern.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -4064,11 +4072,21 @@ class Energiefluss extends IPSModuleStrict
 
         // AUX bleibt von der Mindestleistung unberührt und verhält sich
         // damit exakt wie vor Einführung der Anzeigeschwelle.
-        const auxGroups = configuredConsumers
-            .filter(group => group.isAux === true)
-            .slice(0, 2);
+        // Exakt dieselbe AUX-Logik wie in createSunsynkConfig:
+        // Nur Full / Full Wide besitzt einen separaten AUX-Bereich.
+        // In Compact / Lite werden AUX-markierte Einträge als normale
+        // Verbraucher behandelt.
+        const fullLayout =
+            currentTechnicalLayout.startsWith('full');
 
-        // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
+        const auxGroups = fullLayout
+            ? configuredConsumers
+                .filter(group => group.isAux === true)
+                .slice(0, 2)
+            : [];
+
+        // Außerhalb von Full fallen AUX-markierte Einträge damit ganz normal
+        // durch den Verbraucherfilter samt Anzeigeschwelle.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -4088,9 +4106,6 @@ class Energiefluss extends IPSModuleStrict
         );
 
         // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
-        const fullLayout =
-            currentTechnicalLayout.startsWith('full');
-
         const maxConsumers =
             fullLayout && auxGroups.length > 0
                 ? 2
@@ -4341,6 +4356,8 @@ class Energiefluss extends IPSModuleStrict
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
+        compactBatteryValues(card, d);
+        moveLiteDailyLoadLeft(card);
         compactSmartMeterValues(card, d);
         compactInverterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
@@ -4370,6 +4387,11 @@ class Energiefluss extends IPSModuleStrict
                     card,
                     card.__symconLastData || d
                 );
+                compactBatteryValues(
+                    card,
+                    card.__symconLastData || d
+                );
+                moveLiteDailyLoadLeft(card);
                 compactSmartMeterValues(
                     card,
                     card.__symconLastData || d
@@ -4686,6 +4708,330 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+
+    function compactBatteryValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+        const batteries = Array.isArray(d.batteries) ? d.batteries : [];
+
+        const isActuallyVisible = node => {
+            if (!node) return false;
+
+            if (node.getAttribute?.('display') === 'none') return false;
+            if (node.classList?.contains('st12')) return false;
+
+            try {
+                const style = getComputedStyle(node);
+                if (
+                    style.display === 'none' ||
+                    style.visibility === 'hidden' ||
+                    Number(style.opacity) === 0
+                ) {
+                    return false;
+                }
+            } catch (_) {}
+
+            try {
+                const box = node.getBBox?.();
+                return !!box && box.width >= 0 && box.height >= 0;
+            } catch (_) {
+                return true;
+            }
+        };
+
+        const remember = node => {
+            if (!node) return;
+
+            if (!node.dataset.symconOriginalY) {
+                node.dataset.symconOriginalY =
+                    String(node.getAttribute?.('y') || '0');
+            }
+
+            if (
+                String(node.tagName || '').toLowerCase() === 'rect' &&
+                !node.dataset.symconOriginalHeight
+            ) {
+                node.dataset.symconOriginalHeight =
+                    String(node.getAttribute?.('height') || '0');
+            }
+        };
+
+        const restoreRect = rect => {
+            remember(rect);
+
+            rect.setAttribute?.(
+                'y',
+                rect.dataset.symconOriginalY
+            );
+            rect.setAttribute?.(
+                'height',
+                rect.dataset.symconOriginalHeight
+            );
+        };
+
+        const processBox = (
+            root,
+            boxSelector,
+            battery,
+            valueDefinitions
+        ) => {
+            if (!battery) return;
+
+            const boxSvg = root.querySelector?.(boxSelector);
+            if (!boxSvg) return;
+
+            const rects = Array.from(
+                boxSvg.querySelectorAll?.(':scope > rect') || []
+            );
+
+            if (!rects.length) return;
+
+            rects.forEach(remember);
+
+            const availableNodes = [];
+
+            valueDefinitions.forEach(([selector, available]) => {
+                const nodes = Array.from(
+                    boxSvg.querySelectorAll?.(selector) || []
+                );
+
+                nodes.forEach(remember);
+
+                // Nur die von der Original-Card für das aktuelle Layout
+                // tatsächlich eingeblendete Variante verwenden.
+                const visibleNode = nodes.find(isActuallyVisible);
+                if (!visibleNode) return;
+
+                if (!available) {
+                    visibleNode.setAttribute?.('display', 'none');
+                    visibleNode.style?.setProperty(
+                        'display',
+                        'none',
+                        'important'
+                    );
+                    return;
+                }
+
+                visibleNode.removeAttribute?.('display');
+                visibleNode.style?.removeProperty('display');
+                availableNodes.push(visibleNode);
+            });
+
+            if (!availableNodes.length) {
+                // Nur den Datenrahmen ausblenden, der zu den Messwerten gehört.
+                // Andere Batterie-Rahmen innerhalb desselben SVG bleiben erhalten.
+                rects.forEach(rect => {
+                    try {
+                        const box = rect.getBBox?.();
+                        if (!box) return;
+
+                        const cx = box.x + (box.width / 2);
+                        if (cx >= 150 && cx <= 285) {
+                            rect.style?.setProperty(
+                                'display',
+                                'none',
+                                'important'
+                            );
+                        }
+                    } catch (_) {}
+                });
+                return;
+            }
+
+            // Originalpositionen der sichtbaren Texte ermitteln.
+            const rows = availableNodes
+                .map(node => ({
+                    node,
+                    y: Number(
+                        node.dataset.symconOriginalY ||
+                        node.getAttribute?.('y') ||
+                        0
+                    )
+                }))
+                .filter(item => Number.isFinite(item.y))
+                .sort((a, b) => a.y - b.y);
+
+            if (!rows.length) return;
+
+            const minRowY = rows[0].y;
+            const maxRowY = rows[rows.length - 1].y;
+            const rowCenterY = (minRowY + maxRowY) / 2;
+
+            // Genau den originalen Rahmen wählen, dessen vertikaler Bereich
+            // die aktuell sichtbaren Werte enthält bzw. ihnen am nächsten liegt.
+            let frame = null;
+            let frameDistance = Number.POSITIVE_INFINITY;
+
+            rects.forEach(rect => {
+                restoreRect(rect);
+
+                const y = Number(rect.dataset.symconOriginalY || 0);
+                const height = Number(
+                    rect.dataset.symconOriginalHeight || 0
+                );
+
+                if (!Number.isFinite(y) ||
+                    !Number.isFinite(height) ||
+                    height <= 0) {
+                    return;
+                }
+
+                const centerY = y + (height / 2);
+                const contains =
+                    rowCenterY >= y - 8 &&
+                    rowCenterY <= y + height + 8;
+
+                const distance =
+                    Math.abs(centerY - rowCenterY) +
+                    (contains ? 0 : 1000);
+
+                if (distance < frameDistance) {
+                    frameDistance = distance;
+                    frame = rect;
+                }
+            });
+
+            if (!frame) return;
+
+            // Andere alternative Datenrahmen unangetastet lassen; nur den
+            // gerade sichtbaren/zugehörigen Rahmen dynamisch verändern.
+            frame.style?.removeProperty('display');
+
+            const originalFrameY = Number(
+                frame.dataset.symconOriginalY || 0
+            );
+            const originalFrameHeight = Number(
+                frame.dataset.symconOriginalHeight || 0
+            );
+            const originalCenter =
+                originalFrameY + (originalFrameHeight / 2);
+
+            // Zeilenabstand aus den Originalkoordinaten ableiten.
+            let spacing = 19;
+            if (rows.length >= 2) {
+                const distances = [];
+                for (let i = 1; i < rows.length; i++) {
+                    const diff = rows[i].y - rows[i - 1].y;
+                    if (diff > 5 && diff < 40) {
+                        distances.push(diff);
+                    }
+                }
+
+                if (distances.length) {
+                    spacing =
+                        distances.reduce((a, b) => a + b, 0) /
+                        distances.length;
+                }
+            }
+
+            // Ein Wert: kompakte Box. Mehrere Werte: gleicher Card-Zeilenabstand.
+            const padding = 12;
+            const newHeight = Math.max(
+                24,
+                padding + ((rows.length - 1) * spacing)
+            );
+            const newY = originalCenter - (newHeight / 2);
+
+            frame.setAttribute?.('y', String(newY));
+            frame.setAttribute?.('height', String(newHeight));
+
+            const firstY =
+                originalCenter -
+                ((rows.length - 1) * spacing / 2);
+
+            rows.forEach((item, index) => {
+                item.node.setAttribute?.(
+                    'y',
+                    String(firstY + (index * spacing))
+                );
+            });
+        };
+
+        for (const root of roots) {
+            const bat1 = batteries[0];
+            const bat2 = batteries[1];
+
+            processBox(
+                root,
+                '#battery_data',
+                bat1,
+                [
+                    ['[id="battery_voltage_183"]', !!bat1?.hasVoltage],
+                    ['[id="battery_current_191"]', !!bat1?.hasCurrent],
+                    ['[id="data.batteryPower_190"]', !!bat1?.hasPower]
+                ]
+            );
+
+            processBox(
+                root,
+                '#battery2_data_lite',
+                bat2,
+                [
+                    ['[id="battery2_voltage_183"]', !!bat2?.hasVoltage],
+                    ['[id="battery2_current_191"]', !!bat2?.hasCurrent],
+                    ['[id="data.battery2Power_190"]', !!bat2?.hasPower]
+                ]
+            );
+        }
+    }
+
+    function moveLiteDailyLoadLeft(card) {
+        if (!card || !card.shadowRoot) return;
+
+        const isLite =
+            currentTechnicalLayout === 'lite' ||
+            currentTechnicalLayout === 'lite-wide';
+
+        if (!isLite) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+        const shiftX = -18;
+
+        for (const root of roots) {
+            [
+                '[id="daily_load"]',
+                '[id="daily_load_value"]'
+            ].forEach(selector => {
+                root.querySelectorAll?.(selector).forEach(node => {
+                    if (!isActuallyVisibleLiteNode(node)) return;
+
+                    if (!node.dataset.symconOriginalX) {
+                        node.dataset.symconOriginalX =
+                            String(node.getAttribute?.('x') || '0');
+                    }
+
+                    const originalX = Number(
+                        node.dataset.symconOriginalX || 0
+                    );
+
+                    if (Number.isFinite(originalX)) {
+                        node.setAttribute?.(
+                            'x',
+                            String(originalX + shiftX)
+                        );
+                    }
+                });
+            });
+        }
+    }
+
+    function isActuallyVisibleLiteNode(node) {
+        if (!node) return false;
+        if (node.getAttribute?.('display') === 'none') return false;
+        if (node.classList?.contains('st12')) return false;
+
+        try {
+            const style = getComputedStyle(node);
+            return (
+                style.display !== 'none' &&
+                style.visibility !== 'hidden' &&
+                Number(style.opacity) !== 0
+            );
+        } catch (_) {
+            return true;
+        }
+    }
 
     function compactSmartMeterValues(card, d) {
         if (!card || !card.shadowRoot || !d) return;
