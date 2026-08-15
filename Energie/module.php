@@ -2916,81 +2916,44 @@ class Energiefluss extends IPSModuleStrict
         }
 
         // Netz:
-        // Bis 600px nur EIN Gesamtwert (Saldo) anzeigen.
+        // Immer nur EIN Gesamtwert (Saldo) anzeigen.
         // positiv = Netzbezug -> rot
         // negativ = Einspeisung -> grün
-        // Ab 601px bleiben Bezug und Einspeisung wie bisher getrennt sichtbar.
-        const gridImport = Math.max(grid, 0);
-        const gridExport = Math.max(-grid, 0);
-
         const gridInfo = document.getElementById('pfc-info-grid');
         const gridImportEl = document.getElementById('pfc-grid-import');
         const gridExportEl = document.getElementById('pfc-grid-export');
         const gridSub = document.getElementById('pfc-grid-sub');
 
-        const compactGrid = window.matchMedia('(max-width: 600px)').matches;
+        const isExport = grid < 0;
+        const gridColor = isExport ? AC.export : AC.import;
 
-        if (compactGrid) {
-            const isExport = grid < 0;
-            const gridColor = isExport ? AC.export : AC.import;
+        // Oben nur die gesamte aktuelle Netzleistung.
+        if (gridImportEl) {
+            gridImportEl.textContent = fmt(Math.abs(grid));
+            gridImportEl.style.color = gridColor;
+            gridImportEl.style.display = '';
+        }
 
-            // Oben nur die gesamte aktuelle Netzleistung.
-            if (gridImportEl) {
-                gridImportEl.textContent = fmt(Math.abs(grid));
-                gridImportEl.style.color = gridColor;
-                gridImportEl.style.display = '';
-            }
+        if (gridExportEl) {
+            gridExportEl.textContent = '';
+            gridExportEl.style.display = 'none';
+        }
 
-            if (gridExportEl) {
-                gridExportEl.textContent = '';
-                gridExportEl.style.display = 'none';
+        // Darunter Bezug / Einspeisung mit den vorhandenen Energiewerten.
+        if (gridSub) {
+            const energy = [];
+            if (d.gridImportEnergy) {
+                energy.push('→ ' + d.gridImportEnergy);
             }
+            if (d.gridExportEnergy) {
+                energy.push('← ' + d.gridExportEnergy);
+            }
+            gridSub.innerHTML = energy.join('<br>');
+            gridSub.style.display = '';
+        }
 
-            // Darunter wieder wie früher in kleiner Schrift:
-            // Bezug / Einspeisung mit den vorhandenen Energiewerten.
-            if (gridSub) {
-                const energy = [];
-                if (d.gridImportEnergy) {
-                    energy.push('→ ' + d.gridImportEnergy);
-                }
-                if (d.gridExportEnergy) {
-                    energy.push('← ' + d.gridExportEnergy);
-                }
-                gridSub.innerHTML = energy.join('<br>');
-                gridSub.style.display = '';
-            }
-
-            if (gridInfo) {
-                gridInfo.style.borderColor = gridColor;
-            }
-        } else {
-            if (gridImportEl) {
-                gridImportEl.textContent = `→ ${fmt(gridImport)}`;
-                gridImportEl.style.color = AC.import;
-                gridImportEl.style.display = '';
-            }
-
-            if (gridExportEl) {
-                gridExportEl.textContent = `← ${fmt(gridExport)}`;
-                gridExportEl.style.color = AC.export;
-                gridExportEl.style.display = '';
-            }
-
-            if (gridSub) {
-                const energy = [];
-                if (d.gridImportEnergy) {
-                    energy.push('Bezug ' + d.gridImportEnergy);
-                }
-                if (d.gridExportEnergy) {
-                    energy.push('Einspeisung ' + d.gridExportEnergy);
-                }
-                gridSub.innerHTML = energy.join('<br>');
-                gridSub.style.display = '';
-            }
-
-            if (gridInfo) {
-                gridInfo.style.borderColor = 'rgba(255,255,255,.16)';
-            }
+        if (gridInfo) {
+            gridInfo.style.borderColor = gridColor;
         }
 
         requestAnimationFrame(alignHomeInfoToSolarBottom);
@@ -4281,6 +4244,8 @@ class Energiefluss extends IPSModuleStrict
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
+        compactSmartMeterValues(card, d);
+        compactInverterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
         applyAuxVisualOverrides(card, d);
 
@@ -4304,6 +4269,14 @@ class Energiefluss extends IPSModuleStrict
                     card.__symconLastData || d
                 );
                 showInverterPowerAboveVoltages(
+                    card,
+                    card.__symconLastData || d
+                );
+                compactSmartMeterValues(
+                    card,
+                    card.__symconLastData || d
+                );
+                compactInverterValues(
                     card,
                     card.__symconLastData || d
                 );
@@ -4343,6 +4316,14 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
                     showInverterPowerAboveVoltages(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    compactSmartMeterValues(
+                        card,
+                        card.__symconLastData || d
+                    );
+                    compactInverterValues(
                         card,
                         card.__symconLastData || d
                     );
@@ -4606,6 +4587,228 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+
+    function compactSmartMeterValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        // Dynamische Box-Geometrie ausschließlich in Full / Full Wide.
+        // Compact und Lite bleiben vollständig bei der Original-Sunsynk-Geometrie.
+        const isFullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+        if (!isFullLayout) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        // Die Originalkarte reserviert feste Y-Positionen für L1/L2/L3,
+        // Frequenz und Gesamtleistung. Fehlt dazwischen ein Wert, entsteht
+        // deshalb optisch eine Leerzeile. Wir ordnen ausschließlich die
+        // tatsächlich konfigurierten Werte neu und zentrieren sie in der
+        // bestehenden Smartmeter-Box. Inhalt und Box-Geometrie bleiben gleich.
+        const wanted = [
+            ['inverter_voltage_154', entityAvailable(d, 'gridVoltageL1')],
+            ['inverter_voltage_L2', entityAvailable(d, 'gridVoltageL2')],
+            ['inverter_voltage_L3', entityAvailable(d, 'gridVoltageL3')],
+            ['load_frequency_192', entityAvailable(d, 'gridFrequency')],
+            ['grid_power_169', true]
+        ];
+
+        for (const root of roots) {
+            const visible = [];
+
+            for (const [id, available] of wanted) {
+                const node = root.querySelector?.(`#${id}`) || null;
+                if (!node) continue;
+
+                if (!available) {
+                    node.setAttribute?.('display', 'none');
+                    node.style?.setProperty('display', 'none', 'important');
+                    continue;
+                }
+
+                node.removeAttribute?.('display');
+                node.style?.removeProperty('display');
+                visible.push(node);
+            }
+
+            if (!visible.length) continue;
+
+            // Smartmeter-Box: y=153..223. Die Originalkarte verwendet bei
+            // fünf Zeilen 164/177/190/203/216 (= 13 px Abstand). Genau diesen
+            // Abstand behalten wir bei und zentrieren weniger Zeilen vertikal.
+            const spacing = 13;
+            const centreY = 190;
+            const firstY = centreY - ((visible.length - 1) * spacing / 2);
+
+            visible.forEach((node, index) => {
+                node.setAttribute?.('y', String(firstY + index * spacing));
+                node.removeAttribute?.('transform');
+            });
+
+            // Auch der Smartmeter-Rahmen selbst folgt nun der Anzahl der
+            // tatsächlich sichtbaren Werte. Die Originalbox liegt bei
+            // x=234, y=153, width=70, height=70 und ist damit auf y=188
+            // zentriert. Diese Flussachse bleibt unverändert, damit die
+            // horizontalen Netzlinien weiterhin exakt in die Box laufen.
+            const boxCentreY = 188;
+            const boxHeight = Math.max(24, 18 + (visible.length - 1) * spacing);
+            const boxY = boxCentreY - boxHeight / 2;
+
+            const gridSvg = root.querySelector?.('#Grid');
+            let meterBox = null;
+
+            if (gridSvg) {
+                // Die Smartmeter-Box ist der 70x70-Rahmen bei x=234.
+                // Nicht über die Reihenfolge der übrigen Grid-Rechtecke gehen,
+                // damit Non-Essential-Load-Boxen unberührt bleiben.
+                meterBox = Array.from(gridSvg.querySelectorAll?.('rect') || [])
+                    .find(rect => {
+                        const x = Number(rect.getAttribute?.('x'));
+                        const width = Number(rect.getAttribute?.('width'));
+                        return Math.abs(x - 234) < 0.5 && Math.abs(width - 70) < 0.5;
+                    }) || null;
+            }
+
+            if (meterBox) {
+                meterBox.setAttribute?.('y', String(boxY));
+                meterBox.setAttribute?.('height', String(boxHeight));
+            }
+        }
+    }
+
+    function compactInverterValues(card, d) {
+        if (!card || !card.shadowRoot || !d) return;
+
+        // Dynamische Box-Geometrie ausschließlich in Full / Full Wide.
+        // Compact und Lite bleiben vollständig bei der Original-Sunsynk-Geometrie.
+        const isFullLayout =
+            currentTechnicalLayout === 'full' ||
+            currentTechnicalLayout === 'full-wide';
+        if (!isFullLayout) return;
+
+        const roots = getOpenShadowRoots(card.shadowRoot);
+
+        // Die Originalkarte reserviert in der Wechselrichterbox feste Zeilen
+        // für Gesamtleistung sowie die Ströme L1/L2/L3. Nicht konfigurierte
+        // Phasen dürfen deshalb keinen sichtbaren Leerplatz hinterlassen.
+        // Es werden ausschließlich vorhandene Werte neu angeordnet; Inhalt,
+        // Farben und Geometrie der Box bleiben unverändert.
+        const wanted = [
+            ['inverter_power_175',
+                entityAvailable(d, 'inverterPower') ||
+                d.inverterPowerAvailable === true],
+            ['inverter_current_164', entityAvailable(d, 'inverterCurrentL1')],
+            ['inverter_current_L2', entityAvailable(d, 'inverterCurrentL2')],
+            ['inverter_current_L3', entityAvailable(d, 'inverterCurrentL3')]
+        ];
+
+        for (const root of roots) {
+            const visible = [];
+
+            for (const [id, available] of wanted) {
+                const node = root.querySelector?.(`#${id}`) || null;
+                if (!node) continue;
+
+                if (!available) {
+                    node.setAttribute?.('display', 'none');
+                    node.style?.setProperty('display', 'none', 'important');
+                    continue;
+                }
+
+                node.removeAttribute?.('display');
+                node.style?.removeProperty('display');
+                visible.push(node);
+            }
+
+            if (!visible.length) continue;
+
+            // Die WR-Werte liegen im Original ungefähr im Bereich y=174..214.
+            // Den vorhandenen 13-px-Zeilenabstand behalten wir bei. Zusätzlich
+            // wird nun auch der Rahmen selbst auf die tatsächlich sichtbaren
+            // Zeilen verkleinert bzw. vergrößert.
+            const spacing = 13;
+
+            // Die seitliche Netz-/Smartmeter-Flusslinie liegt in der
+            // Originalkarte auf y=187. Die dynamische WR-Box bleibt deshalb
+            // unabhängig von ihrer Höhe exakt auf dieser Flussachse zentriert.
+            const centreY = 187;
+            const firstY = centreY - ((visible.length - 1) * spacing / 2);
+
+            visible.forEach((node, index) => {
+                node.setAttribute?.('y', String(firstY + index * spacing));
+                node.removeAttribute?.('transform');
+            });
+
+            // Original: x=145.15, y=162, width=70, height=50/60.
+            // Pro sichtbarer Zeile werden 13 px benötigt, zusätzlich bleibt
+            // oben und unten genügend Innenabstand. Vier Zeilen ergeben damit
+            // praktisch wieder die originale 60-px-Box.
+            const boxHeight = Math.max(24, 20 + (visible.length - 1) * spacing);
+            const boxY = centreY - boxHeight / 2;
+
+            const inverterSvg = root.querySelector?.('#Inverter');
+            const box =
+                inverterSvg?.querySelector?.(':scope > rect') ||
+                root.querySelector?.('#Inverter > rect');
+
+            if (box) {
+                box.setAttribute?.('y', String(boxY));
+                box.setAttribute?.('height', String(boxHeight));
+            }
+
+            // Alle an die WR-Box angrenzenden Flusslinien bis an den
+            // tatsächlichen Rahmen führen. Die Originalkarte verwendet oben
+            // y=162 und seitlich y=187. Durch die dynamische Höhe ändern sich
+            // nur Ober- und Unterkante; die seitliche Achse bleibt y=187.
+            const boxTop = boxY;
+            const boxBottom = boxY + boxHeight;
+
+            const inverterPath =
+                root.querySelector?.('#inverter-path') ||
+                inverterSvg?.querySelector?.('#inverter-path');
+
+            if (inverterPath) {
+                const current = String(inverterPath.getAttribute?.('d') || '');
+                // X-Koordinate aus dem Originalpfad beibehalten (wichtig für
+                // normale und Wide-Darstellung), nur den Start-Y anpassen.
+                const match = current.match(/^\s*M\s*([\d.]+)\s+[\d.]+\s+L\s*([\d.]+)\s+([\d.]+)/i);
+                if (match) {
+                    inverterPath.setAttribute?.(
+                        'd',
+                        `M ${match[1]} ${boxBottom} L ${match[2]} ${match[3]}`
+                    );
+                }
+            }
+
+            // Obere Essential-Load-Leitung: ihr letztes Segment endet im
+            // Original an y=162. Dieses Ende auf die neue Oberkante setzen.
+            const essentialPath = root.querySelector?.('#es-line');
+            if (essentialPath) {
+                const current = String(essentialPath.getAttribute?.('d') || '');
+                const updated = current.replace(
+                    /(L\s*[\d.]+\s+)[\d.]+\s*$/i,
+                    `$1${boxTop}`
+                );
+                if (updated !== current) {
+                    essentialPath.setAttribute?.('d', updated);
+                }
+            }
+
+            // Falls AUX aktiv ist, startet auch dessen zweite Flusslinie an
+            // der WR-Oberkante. Nur den ersten M-Y-Wert ersetzen.
+            const auxPath = root.querySelector?.('#aux-line2');
+            if (auxPath) {
+                const current = String(auxPath.getAttribute?.('d') || '');
+                const updated = current.replace(
+                    /^(\s*M\s*[\d.]+\s+)[\d.]+/i,
+                    `$1${boxTop}`
+                );
+                if (updated !== current) {
+                    auxPath.setAttribute?.('d', updated);
+                }
+            }
+        }
+    }
 
     function showInverterPowerAboveVoltages(card, d) {
         if (!card || !card.shadowRoot || !d) return;
