@@ -3593,19 +3593,11 @@ class Energiefluss extends IPSModuleStrict
 
         // AUX bleibt von der Mindestleistung unberührt und verhält sich
         // damit exakt wie vor Einführung der Anzeigeschwelle.
-        // AUX wird ausschließlich in Full / Full Wide separat dargestellt.
-        // In Compact / Lite (inkl. Wide) werden als AUX markierte Verbraucher
-        // wie normale Verbraucher behandelt, da diese Ansichten keinen
-        // eigenen AUX-Bereich besitzen.
-        const auxGroups = full
-            ? configuredConsumers
-                .filter(group => group.isAux === true)
-                .slice(0, 2)
-            : [];
+        const auxGroups = configuredConsumers
+            .filter(group => group.isAux === true)
+            .slice(0, 2);
 
         // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
-        // Außerhalb von Full gehören damit auch als AUX markierte Einträge
-        // automatisch zu den normalen Verbrauchern.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -4072,21 +4064,11 @@ class Energiefluss extends IPSModuleStrict
 
         // AUX bleibt von der Mindestleistung unberührt und verhält sich
         // damit exakt wie vor Einführung der Anzeigeschwelle.
-        // Exakt dieselbe AUX-Logik wie in createSunsynkConfig:
-        // Nur Full / Full Wide besitzt einen separaten AUX-Bereich.
-        // In Compact / Lite werden AUX-markierte Einträge als normale
-        // Verbraucher behandelt.
-        const fullLayout =
-            currentTechnicalLayout.startsWith('full');
+        const auxGroups = configuredConsumers
+            .filter(group => group.isAux === true)
+            .slice(0, 2);
 
-        const auxGroups = fullLayout
-            ? configuredConsumers
-                .filter(group => group.isAux === true)
-                .slice(0, 2)
-            : [];
-
-        // Außerhalb von Full fallen AUX-markierte Einträge damit ganz normal
-        // durch den Verbraucherfilter samt Anzeigeschwelle.
+        // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -4106,6 +4088,9 @@ class Energiefluss extends IPSModuleStrict
         );
 
         // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
+        const fullLayout =
+            currentTechnicalLayout.startsWith('full');
+
         const maxConsumers =
             fullLayout && auxGroups.length > 0
                 ? 2
@@ -4356,7 +4341,6 @@ class Energiefluss extends IPSModuleStrict
         applyDynamicHouseSourceIcon(card, d);
         applyInverterVisualColour(card, d);
         showInverterPowerAboveVoltages(card, d);
-        moveLiteDailyLoadLeft(card);
         compactSmartMeterValues(card, d);
         compactInverterValues(card, d);
         applyConfiguredBatteryStatus(card, d);
@@ -4386,7 +4370,6 @@ class Energiefluss extends IPSModuleStrict
                     card,
                     card.__symconLastData || d
                 );
-                moveLiteDailyLoadLeft(card);
                 compactSmartMeterValues(
                     card,
                     card.__symconLastData || d
@@ -4703,186 +4686,6 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
-
-    function moveLiteDailyLoadLeft(card) {
-        if (!card || !card.shadowRoot) return;
-
-        const isLite =
-            currentTechnicalLayout === 'lite' ||
-            currentTechnicalLayout === 'lite-wide';
-
-        if (!isLite) return;
-
-        const roots = getOpenShadowRoots(card.shadowRoot);
-
-        for (const root of roots) {
-            const housePowerCandidates = [
-                '#essential_power',
-                '#essential-power',
-                '#essential_load',
-                '#essential-load',
-                '#load_power',
-                '#load-power',
-                '#load_value',
-                '#load-value'
-            ];
-
-            let housePowerNode = null;
-
-            for (const selector of housePowerCandidates) {
-                const candidate = root.querySelector?.(selector);
-                if (
-                    candidate &&
-                    isActuallyVisibleLiteNode(candidate)
-                ) {
-                    housePowerNode = candidate;
-                    break;
-                }
-            }
-
-            if (!housePowerNode) {
-                root.querySelectorAll?.('text, tspan').forEach(node => {
-                    if (housePowerNode) return;
-
-                    const shown = String(
-                        node.textContent || ''
-                    ).trim();
-
-                    if (
-                        /[-+]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(shown) &&
-                        isActuallyVisibleLiteNode(node)
-                    ) {
-                        try {
-                            const box = node.getBBox?.();
-                            // Hausleistung sitzt in Lite zentral im unteren
-                            // Bereich. Netz-/PV-/Batteriewerte liegen deutlich
-                            // weiter außen.
-                            if (
-                                box &&
-                                box.x >= 180 &&
-                                box.x <= 360 &&
-                                box.y >= 250
-                            ) {
-                                housePowerNode = node;
-                            }
-                        } catch (_) {}
-                    }
-                });
-            }
-
-            if (!housePowerNode) continue;
-
-            let powerBox;
-            try {
-                powerBox = housePowerNode.getBBox?.();
-            } catch (_) {
-                powerBox = null;
-            }
-
-            if (!powerBox) continue;
-
-            const centerX =
-                powerBox.x + (powerBox.width / 2);
-            const targetY =
-                Math.max(12, powerBox.y - 12);
-
-            const dailyNodes = [];
-
-            [
-                '#daily_load',
-                '#daily_load_value',
-                '[id*="daily_load"]'
-            ].forEach(selector => {
-                root.querySelectorAll?.(selector)
-                    .forEach(node => {
-                        if (
-                            isActuallyVisibleLiteNode(node) &&
-                            !dailyNodes.includes(node)
-                        ) {
-                            dailyNodes.push(node);
-                        }
-                    });
-            });
-
-            // Falls die Card die Übersetzung ohne eindeutige ID rendert,
-            // zusätzlich exakt nach dem sichtbaren Text suchen.
-            root.querySelectorAll?.('text, tspan').forEach(node => {
-                const shown = String(
-                    node.textContent || ''
-                ).trim();
-
-                if (
-                    /^(Energie heute|Daily Load)$/i.test(shown) &&
-                    isActuallyVisibleLiteNode(node) &&
-                    !dailyNodes.includes(node)
-                ) {
-                    dailyNodes.push(node);
-                }
-            });
-
-            if (!dailyNodes.length) continue;
-
-            dailyNodes.forEach(node => {
-                node.setAttribute?.('x', String(centerX));
-                node.setAttribute?.(
-                    'text-anchor',
-                    'middle'
-                );
-                node.style?.setProperty(
-                    'text-anchor',
-                    'middle',
-                    'important'
-                );
-
-                // Beschriftung und Wert direkt übereinander über der
-                // Haus-Wattanzeige anordnen.
-                const shown = String(
-                    node.textContent || ''
-                ).trim();
-
-                const isLabel =
-                    /^(Energie heute|Daily Load)$/i.test(shown);
-
-                node.setAttribute?.(
-                    'y',
-                    String(
-                        isLabel
-                            ? targetY - 11
-                            : targetY
-                    )
-                );
-
-                node.querySelectorAll?.('tspan')
-                    .forEach(tspan => {
-                        tspan.setAttribute?.(
-                            'x',
-                            String(centerX)
-                        );
-                        tspan.setAttribute?.(
-                            'text-anchor',
-                            'middle'
-                        );
-                    });
-            });
-        }
-    }
-
-    function isActuallyVisibleLiteNode(node) {
-        if (!node) return false;
-        if (node.getAttribute?.('display') === 'none') return false;
-        if (node.classList?.contains('st12')) return false;
-
-        try {
-            const style = getComputedStyle(node);
-            return (
-                style.display !== 'none' &&
-                style.visibility !== 'hidden' &&
-                Number(style.opacity) !== 0
-            );
-        } catch (_) {
-            return true;
-        }
-    }
 
     function compactSmartMeterValues(card, d) {
         if (!card || !card.shadowRoot || !d) return;
