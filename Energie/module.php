@@ -2960,9 +2960,45 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox) {
+        // Nur für die Hausansicht:
+        // Die Wallbox wird separat dargestellt. Deshalb ihre Tagesenergie
+        // auch aus der angezeigten Hausenergie herausrechnen, analog zur
+        // bereits separat behandelten Wallbox-Leistung.
+        //
+        // d.houseEnergy selbst wird NICHT verändert. Damit bleiben sämtliche
+        // berechneten IP-Symcon-Variablen und die technische Ansicht unberührt.
+        const visualHouseEnergy = Math.max(
+            Number(d.houseEnergy || 0) -
+            (
+                d.hasWallbox && wallbox?.hasEnergy
+                    ? Math.max(Number(wallbox.energyValue || 0), 0)
+                    : 0
+            ),
+            0
+        );
+
+        const houseViewData = {
+            ...d,
+            houseEnergy: visualHouseEnergy
+        };
+
         if (!pfcCard) {
-            updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox);
-            pfcPendingData = [d, grid, haus, pvs, batteries, wallbox];
+            updatePfcInfoCards(
+                houseViewData,
+                grid,
+                haus,
+                pvs,
+                batteries,
+                wallbox
+            );
+            pfcPendingData = [
+                houseViewData,
+                grid,
+                haus,
+                pvs,
+                batteries,
+                wallbox
+            ];
             ensurePowerFlowCard().catch(() => {});
             return;
         }
@@ -3009,7 +3045,14 @@ class Energiefluss extends IPSModuleStrict
         pfcCard.hass = { states };
 
         applyPfcBatteryFlowColor(batteryTotal);
-        updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox);
+        updatePfcInfoCards(
+            houseViewData,
+            grid,
+            haus,
+            pvs,
+            batteries,
+            wallbox
+        );
 
         installPfcShadowOverrides(pfcCard);
         applyPfcBackgroundColors(d);
@@ -4164,12 +4207,10 @@ class Energiefluss extends IPSModuleStrict
             0
         );
 
-        // Nur für die Full-/Full-Wide-Visualisierung:
-        // AUX-Verbraucher werden separat dargestellt und dürfen deshalb nicht
-        // nochmals im angezeigten Hausverbrauch enthalten sein.
-        //
-        // Wichtig: Diese Werte existieren ausschließlich im virtuellen
-        // Home-Assistant-Datenmodell der Sunsynk-Card. Die vom Modul erzeugten
+        // Nur für Full / Full Wide:
+        // AUX-Verbraucher werden separat dargestellt und dürfen deshalb
+        // nicht nochmals in der angezeigten Hausleistung/-energie enthalten sein.
+        // Die zugrunde liegenden Payload-Werte und damit die berechneten
         // IP-Symcon-Variablen bleiben vollständig unverändert.
         const auxTotalPower = auxGroups.reduce(
             (sum, group) =>
