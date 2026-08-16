@@ -2960,9 +2960,45 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox) {
+        // Nur für die Hausansicht:
+        // Die Wallbox wird separat dargestellt. Deshalb ihre Tagesenergie
+        // auch aus der angezeigten Hausenergie herausrechnen, analog zur
+        // bereits separat behandelten Wallbox-Leistung.
+        //
+        // d.houseEnergy selbst wird NICHT verändert. Damit bleiben sämtliche
+        // berechneten IP-Symcon-Variablen und die technische Ansicht unberührt.
+        const visualHouseEnergy = Math.max(
+            Number(d.houseEnergy || 0) -
+            (
+                d.hasWallbox && wallbox?.hasEnergy
+                    ? Math.max(Number(wallbox.energyValue || 0), 0)
+                    : 0
+            ),
+            0
+        );
+
+        const houseViewData = {
+            ...d,
+            houseEnergy: visualHouseEnergy
+        };
+
         if (!pfcCard) {
-            updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox);
-            pfcPendingData = [d, grid, haus, pvs, batteries, wallbox];
+            updatePfcInfoCards(
+                houseViewData,
+                grid,
+                haus,
+                pvs,
+                batteries,
+                wallbox
+            );
+            pfcPendingData = [
+                houseViewData,
+                grid,
+                haus,
+                pvs,
+                batteries,
+                wallbox
+            ];
             ensurePowerFlowCard().catch(() => {});
             return;
         }
@@ -3009,7 +3045,14 @@ class Energiefluss extends IPSModuleStrict
         pfcCard.hass = { states };
 
         applyPfcBatteryFlowColor(batteryTotal);
-        updatePfcInfoCards(d, grid, haus, pvs, batteries, wallbox);
+        updatePfcInfoCards(
+            houseViewData,
+            grid,
+            haus,
+            pvs,
+            batteries,
+            wallbox
+        );
 
         installPfcShadowOverrides(pfcCard);
         applyPfcBackgroundColors(d);
@@ -4164,6 +4207,38 @@ class Energiefluss extends IPSModuleStrict
             0
         );
 
+        // Nur für Full / Full Wide:
+        // AUX-Verbraucher werden separat dargestellt und dürfen deshalb
+        // nicht nochmals in der angezeigten Hausleistung/-energie enthalten sein.
+        // Die zugrunde liegenden Payload-Werte und damit die berechneten
+        // IP-Symcon-Variablen bleiben vollständig unverändert.
+        const auxTotalPower = auxGroups.reduce(
+            (sum, group) =>
+                sum + Math.max(Number(group.value || 0), 0),
+            0
+        );
+
+        const auxTotalEnergy = auxGroups.reduce(
+            (sum, group) =>
+                sum + (
+                    group.hasDaily
+                        ? Math.max(Number(group.dailyValue || 0), 0)
+                        : 0
+                ),
+            0
+        );
+
+        const visualHousePower = fullLayout
+            ? Math.max(Number(haus || 0) - auxTotalPower, 0)
+            : Math.max(Number(haus || 0), 0);
+
+        const visualHouseEnergy = fullLayout
+            ? Math.max(
+                Number(d.houseEnergy || 0) - auxTotalEnergy,
+                0
+            )
+            : Math.max(Number(d.houseEnergy || 0), 0);
+
         const states = {
             'sensor.symcon_grid': ssState(d.gridPhaseL1Available ? d.gridPhaseL1 : grid, 'W'),
             'sensor.symcon_grid_power': ssState(grid, 'W'),
@@ -4175,7 +4250,7 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_grid_l3': ssState(d.gridPhaseL3 || 0, 'W'),
             'sensor.symcon_grid_status': { state: String(d.gridConnectedStatus ?? 'on-grid'), attributes: {} },
             'sensor.symcon_grid_frequency': ssState(d.gridFrequency || 0, 'Hz'),
-            'sensor.symcon_home': ssState(haus || 0, 'W'),
+            'sensor.symcon_home': ssState(visualHousePower, 'W'),
             'sensor.symcon_inverter': ssState(d.inverterPower || 0, 'W'),
             'sensor.symcon_inverter_temperature': ssState(
                 d.inverterTemperature || 0,
@@ -4201,7 +4276,10 @@ class Energiefluss extends IPSModuleStrict
             ),
             'sensor.symcon_grid_import_energy': ssState(d.gridImportEnergyValue || 0, 'kWh'),
             'sensor.symcon_grid_export_energy': ssState(d.gridExportEnergyValue || 0, 'kWh'),
-            'sensor.symcon_load_energy': ssState(d.houseEnergy || 0, 'kWh'),
+            'sensor.symcon_load_energy': ssState(
+                visualHouseEnergy,
+                'kWh'
+            ),
             'sensor.symcon_battery_soc': ssState(Math.round(Number(bat1.soc || 0)), '%'),
             'sensor.symcon_battery_power': ssState(Number(bat1.value || 0), 'W'),
             'sensor.symcon_battery_current': ssState(Number(bat1.current || 0), 'A'),
@@ -4247,19 +4325,6 @@ class Energiefluss extends IPSModuleStrict
             states[`sensor.symcon_branch${i + 1}`] = ssState(group.value || 0, 'W');
             states[`sensor.symcon_branch${i + 1}_daily`] = ssState(group.dailyValue || 0, 'kWh');
         });
-
-        const auxTotalPower = auxGroups.reduce(
-            (sum, group) => sum + Math.max(Number(group.value || 0), 0),
-            0
-        );
-        const auxTotalEnergy = auxGroups.reduce(
-            (sum, group) => sum + (
-                group.hasDaily
-                    ? Math.max(Number(group.dailyValue || 0), 0)
-                    : 0
-            ),
-            0
-        );
 
         states['sensor.symcon_aux_total'] = ssState(auxTotalPower, 'W');
         states['sensor.symcon_aux_energy'] = ssState(auxTotalEnergy, 'kWh');

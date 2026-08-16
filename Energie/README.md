@@ -279,6 +279,7 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 - Die Position des Schriftzuges „Energie heute“ in der Large-Ansicht wurde verbessert.
 - Die Position des SOC bei zwei AUX-Verbrauchern wurde verbessert.
 - Einige Codeoptimierungen und Verbesserungen für schwächere Clients.
+- In der Full-Ansicht werden die AUX-Verbraucher aus dem Hausverbrauch herausgerechnet, damit die Darstellung stimmt.
 
 ### Version 1.5 (08.08.2026)
 - Laufzeit der Batterie kann nun als Variable ausgegeben werden.
