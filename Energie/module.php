@@ -373,7 +373,7 @@ class Energiefluss extends IPSModuleStrict
                                 [
                                     'caption' => 'Fluss umkehren',
                                     'name'    => 'InvertFlow',
-                                    'width'   => '850px',
+                                    'width'   => '50px',
                                     'add'     => false,
                                     'edit'    => ['type' => 'CheckBox'],
                                 ],
