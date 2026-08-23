@@ -7171,8 +7171,6 @@ class Energiefluss extends IPSModuleStrict
                     stableCount = 1;
                 }
 
-                // Die bewährte Sicherheitsregel bleibt unverändert:
-                // Erst zwei identische Treffer hintereinander werden akzeptiert.
                 if (stableCount >= 2) {
                     activateVisualizationStorageScope(scope);
                     return;
@@ -7182,12 +7180,10 @@ class Energiefluss extends IPSModuleStrict
                 stableCount = 0;
             }
 
-            // Keine künstliche 150-ms-Wartezeit mehr:
-            // Solange Flutter sein Layout aufbaut, prüfen wir bei jedem
-            // Browser-Frame erneut. Dadurch wird unmittelbar nach dem zweiten
-            // stabilen Treffer geladen.
-            if (attempts < 240) {
-                requestAnimationFrame(probe);
+            // Flutter braucht nach F5 je nach Seite einige Frames, bis alle
+            // Plattform-Views ihre endgültige Geometrie besitzen.
+            if (attempts < 40) {
+                window.setTimeout(probe, 150);
             } else {
                 // Sollte Symcon ausnahmsweise keine stabile Widget-ID liefern,
                 // bleibt die Kachel benutzbar. Es wird dann nur nichts unter
@@ -7203,7 +7199,7 @@ class Energiefluss extends IPSModuleStrict
             }
         };
 
-        requestAnimationFrame(probe);
+        requestAnimationFrame(() => window.setTimeout(probe, 50));
     }
 
     function storeTechnicalLayout() {
