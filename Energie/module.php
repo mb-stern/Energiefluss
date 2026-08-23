@@ -1182,6 +1182,13 @@ class Energiefluss extends IPSModuleStrict
         background: transparent;
         overflow: hidden;
 
+        /*
+         * Beim Start noch nicht sichtbar.
+         * visibility:hidden erhält Größe und Geometrie vollständig,
+         * damit die Widget-Erkennung weiterhin zuverlässig funktioniert.
+         */
+        visibility: hidden;
+
         /* Grafik und Bedienung bewusst trennen:
            oben nur die Visualisierung, unten der klickbare Umschalter. */
         display: flex;
@@ -7123,6 +7130,19 @@ class Energiefluss extends IPSModuleStrict
         return 'widget-fallback';
     }
 
+    function revealEnergyFlow() {
+        const root = document.getElementById('eflow');
+        if (!root) {
+            return;
+        }
+
+        // Erst im nächsten Browser-Frame einblenden, damit das zuvor mit dem
+        // richtigen Widget-Zustand ausgeführte setState() bereits gerendert ist.
+        requestAnimationFrame(() => {
+            root.style.visibility = 'visible';
+        });
+    }
+
     function activateDetectedWidgetScope(scope) {
         if (!/^widget-\d+$/.test(String(scope || ''))) {
             return false;
@@ -7194,6 +7214,7 @@ class Energiefluss extends IPSModuleStrict
             setState(lastStateData);
         }
 
+        revealEnergyFlow();
         return true;
     }
 
@@ -7232,6 +7253,11 @@ class Energiefluss extends IPSModuleStrict
 
             if (attempts < 40) {
                 window.setTimeout(probe, 150);
+            } else {
+                // Sicherheitsfallback: Sollte Symcon keine stabile Widget-ID
+                // liefern, bleibt die bereits nach Wärmepumpen-Prinzip geladene
+                // Browseransicht sichtbar und die Kachel nicht dauerhaft leer.
+                revealEnergyFlow();
             }
         };
 
