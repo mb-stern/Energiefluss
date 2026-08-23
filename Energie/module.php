@@ -6694,7 +6694,116 @@ class Energiefluss extends IPSModuleStrict
      *
      * Die Auswahl wird lokal im Browser/Handy gespeichert.
      */
-    const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
+    /*
+     * Browser-Speicher pro konkreter Visualisierungs-Kachel.
+     * Dadurch können mehrere Kacheln derselben Modulinstanz im selben
+     * Browser unterschiedliche Ansichten behalten.
+     */
+    function getVisualizationStorageScope() {
+        const parts = [];
+
+        try {
+            const frame = window.frameElement;
+            if (frame) {
+                const add = (name, value) => {
+                    const text = String(value || '').trim();
+                    if (text !== '') {
+                        parts.push(name + '=' + text);
+                    }
+                };
+
+                add('frame-id', frame.id);
+                add('frame-name', frame.getAttribute('name'));
+                add('frame-src', frame.getAttribute('src'));
+
+                ['data-id', 'data-tile-id', 'data-object-id', 'data-instance-id', 'data-configuration-id']
+                    .forEach((attribute) => add(attribute, frame.getAttribute(attribute)));
+
+                /*
+                 * Entscheidend für mehrere identische Kacheln auf derselben
+                 * Visualisierungsseite: zusätzlich die konkrete Position des
+                 * iframe im Eltern-DOM erfassen. Zwei Frames mit identischer
+                 * src/Instanz erhalten dadurch trotzdem verschiedene Schlüssel.
+                 */
+                try {
+                    const ownerDocument = frame.ownerDocument;
+                    if (ownerDocument) {
+                        const allFrames = Array.from(ownerDocument.querySelectorAll('iframe'));
+                        const frameIndex = allFrames.indexOf(frame);
+                        if (frameIndex >= 0) {
+                            add('iframe-index', frameIndex);
+                        }
+                    }
+                } catch (error) {
+                    // DOM-Index ist optional.
+                }
+
+                // Stabiler DOM-Pfad über die Geschwisterpositionen des Frames.
+                // IDs/Data-Attribute werden zusätzlich berücksichtigt, falls
+                // Symcon sie für die betreffende Kachel bereitstellt.
+                let node = frame;
+                let depth = 0;
+                while (node && depth < 8) {
+                    add('node' + depth + '-id', node.id);
+                    ['data-id', 'data-tile-id', 'data-object-id', 'data-instance-id', 'data-configuration-id']
+                        .forEach((attribute) =>
+                            add('node' + depth + '-' + attribute, node.getAttribute && node.getAttribute(attribute))
+                        );
+
+                    const parent = node.parentElement;
+                    if (parent) {
+                        const siblings = Array.from(parent.children);
+                        const siblingIndex = siblings.indexOf(node);
+                        if (siblingIndex >= 0) {
+                            add('node' + depth + '-sibling', siblingIndex);
+                        }
+                    }
+
+                    node = parent;
+                    depth++;
+                }
+            }
+        } catch (error) {
+            // Parent-/Frame-Daten sind optional.
+        }
+
+        if (parts.length === 0) {
+            try {
+                parts.push('location=' + window.location.href);
+            } catch (error) {
+                // optional
+            }
+        }
+
+        if (parts.length === 0) {
+            // Letzter Fallback: pro Browsing-Context eine eigene Kennung.
+            // window.name bleibt bei einem Reload desselben Frames erhalten.
+            try {
+                if (!window.name) {
+                    window.name = 'energiefluss-' +
+                        Date.now().toString(36) + '-' +
+                        Math.random().toString(36).slice(2);
+                }
+                parts.push('window-name=' + window.name);
+            } catch (error) {
+                parts.push('default');
+            }
+        }
+
+        // Kurzen, stabilen Hash erzeugen, damit die localStorage-Schlüssel
+        // unabhängig von langen Symcon-DOM-IDs handlich bleiben.
+        const source = parts.join('|');
+        let hash = 2166136261;
+        for (let i = 0; i < source.length; i++) {
+            hash ^= source.charCodeAt(i);
+            hash = Math.imul(hash, 16777619);
+        }
+        return (hash >>> 0).toString(36);
+    }
+
+    const VISUAL_STORAGE_SCOPE = getVisualizationStorageScope();
+    const VIEW_STORAGE_KEY =
+        'symcon-energiefluss-view-' + VISUAL_STORAGE_SCOPE;
     let currentDisplayMode = 'flow';
 
     try {
@@ -6714,7 +6823,8 @@ class Energiefluss extends IPSModuleStrict
      * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
      * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
      */
-    const TECHNICAL_LAYOUT_STORAGE_KEY = 'symcon-energiefluss-technical-layout';
+    const TECHNICAL_LAYOUT_STORAGE_KEY =
+        'symcon-energiefluss-technical-layout-' + VISUAL_STORAGE_SCOPE;
     let currentTechnicalLayout = 'lite';
 
     try {
