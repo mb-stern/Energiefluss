@@ -7074,11 +7074,6 @@ class Energiefluss extends IPSModuleStrict
 
             if (best && best.assignments[currentIndex]) {
                 const widgetId = best.assignments[currentIndex].widgetId;
-                // Match-Güte für den schnellen Initialisierungsweg merken.
-                // Sehr kleine Werte bedeuten, dass Raster und echte iframe-
-                // Geometrie bereits eindeutig übereinstimmen.
-                window.__EF_LAST_WIDGET_MATCH_COST = Number(best.cost);
-
                 // Nur hinreichend plausible Matches akzeptieren. Bei einem guten
                 // Grid-Match liegt der Wert typischerweise deutlich unter 1.
                 if (best.cost < 3.5) {
@@ -7166,23 +7161,9 @@ class Energiefluss extends IPSModuleStrict
 
         const probe = () => {
             attempts++;
-            window.__EF_LAST_WIDGET_MATCH_COST = Number.POSITIVE_INFINITY;
             const scope = getVisualizationStorageScope();
-            const matchCost = Number(window.__EF_LAST_WIDGET_MATCH_COST);
 
             if (/^widget-\d+$/.test(scope)) {
-                // Fast-Path: Ist die Zuordnung bereits geometrisch eindeutig,
-                // wird sie sofort übernommen. Dadurch gibt es keine künstliche
-                // Mindestwartezeit und die gespeicherte Ansicht kann direkt
-                // beim ersten Rendern verwendet werden.
-                if (Number.isFinite(matchCost) && matchCost < 0.5) {
-                    activateVisualizationStorageScope(scope);
-                    return;
-                }
-
-                // Sicherheitsweg für den seltenen Fall, dass Flutter seine
-                // Geometrie noch aufbaut: Nur dann zwei identische Treffer
-                // hintereinander verlangen.
                 if (scope === previous) {
                     stableCount++;
                 } else {
@@ -7199,8 +7180,10 @@ class Energiefluss extends IPSModuleStrict
                 stableCount = 0;
             }
 
+            // Flutter braucht nach F5 je nach Seite einige Frames, bis alle
+            // Plattform-Views ihre endgültige Geometrie besitzen.
             if (attempts < 40) {
-                window.setTimeout(probe, 100);
+                window.setTimeout(probe, 150);
             } else {
                 // Sollte Symcon ausnahmsweise keine stabile Widget-ID liefern,
                 // bleibt die Kachel benutzbar. Es wird dann nur nichts unter
@@ -7216,9 +7199,7 @@ class Energiefluss extends IPSModuleStrict
             }
         };
 
-        // Sofort versuchen. Nur wenn das Parent-Grid noch nicht eindeutig ist,
-        // übernimmt der obige Sicherheitsweg die kurzen Wiederholungen.
-        probe();
+        requestAnimationFrame(() => window.setTimeout(probe, 50));
     }
 
     function storeTechnicalLayout() {
