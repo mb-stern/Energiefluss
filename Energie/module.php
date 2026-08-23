@@ -6694,52 +6694,7 @@ class Energiefluss extends IPSModuleStrict
      *
      * Die Auswahl wird lokal im Browser/Handy gespeichert.
      */
-    /*
-     * Mehrere Energiefluss-Kacheln derselben Instanz können auf derselben
-     * Visualisierungsseite unterschiedliche Ansichten verwenden.
-     *
-     * Der Slot ergibt sich aus der Reihenfolge der eingebetteten Frames mit
-     * derselben Energiefluss-Quelle im übergeordneten Symcon-Dokument.
-     * Solange die Kachelreihenfolge gleich bleibt, bleibt damit auch die
-     * Zuordnung Slot 1 / Slot 2 / ... stabil.
-     */
-    function determineVisualizationSlot() {
-        try {
-            const frame = window.frameElement;
-            const parentDocument = window.parent && window.parent.document;
-
-            if (frame && parentDocument) {
-                const allFrames = Array.from(parentDocument.querySelectorAll('iframe'));
-                const ownSrc = String(frame.getAttribute('src') || '');
-
-                // Wenn mehrere Kacheln dieselbe Modul-/HTML-Quelle verwenden,
-                // innerhalb genau dieser Gruppe durchnummerieren.
-                const sameSourceFrames = allFrames.filter(candidate =>
-                    String(candidate.getAttribute('src') || '') === ownSrc
-                );
-
-                const sameSourceIndex = sameSourceFrames.indexOf(frame);
-                if (sameSourceIndex >= 0) {
-                    return sameSourceIndex + 1;
-                }
-
-                // Fallback: Position unter allen iframes der Seite.
-                const frameIndex = allFrames.indexOf(frame);
-                if (frameIndex >= 0) {
-                    return frameIndex + 1;
-                }
-            }
-        } catch (error) {
-            // Zugriff auf das Parent-Dokument kann je nach Symcon-Kontext
-            // eingeschränkt sein. Dann fällt die Kachel auf Slot 1 zurück.
-        }
-
-        return 1;
-    }
-
-    const VISUALIZATION_SLOT = determineVisualizationSlot();
-    const STORAGE_PREFIX = `symcon-energiefluss-slot-${VISUALIZATION_SLOT}`;
-    const VIEW_STORAGE_KEY = `${STORAGE_PREFIX}-view`;
+    const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
     let currentDisplayMode = 'flow';
 
     try {
@@ -6759,8 +6714,7 @@ class Energiefluss extends IPSModuleStrict
      * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
      * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
      */
-    const TECHNICAL_LAYOUT_STORAGE_KEY = `${STORAGE_PREFIX}-technical-layout`;
-    document.documentElement.dataset.energieflussSlot = String(VISUALIZATION_SLOT);
+    const TECHNICAL_LAYOUT_STORAGE_KEY = 'symcon-energiefluss-technical-layout';
     let currentTechnicalLayout = 'lite';
 
     try {
