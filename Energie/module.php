@@ -180,19 +180,6 @@ class Energiefluss extends IPSModuleStrict
         $form = [
             'elements' => [
                 [
-                    'type'    => 'Select',
-                    'name'    => 'TechnicalLayout',
-                    'caption' => 'Technische Ansicht',
-                    'options' => [
-                        ['caption' => 'Compact', 'value' => 'compact'],
-                        ['caption' => 'Compact Wide (16:9)', 'value' => 'compact-wide'],
-                        ['caption' => 'Lite', 'value' => 'lite'],
-                        ['caption' => 'Lite Wide (16:9)', 'value' => 'lite-wide'],
-                        ['caption' => 'Full', 'value' => 'full'],
-                        ['caption' => 'Full Wide (16:9)', 'value' => 'full-wide'],
-                    ],
-                ],
-                [
                     'type'    => 'ExpansionPanel',
                     'caption' => 'Solaranlagen',
                     'items'   => [
@@ -829,11 +816,6 @@ class Energiefluss extends IPSModuleStrict
             ],
             'actions' => [
                 [
-                    'type'    => 'Button',
-                    'caption' => 'HTML neu laden',
-                    'onClick' => 'ENERGIE_ReloadHtml($id);',
-                ],
-                [
                     'type'  => 'RowLayout',
                     'items' => [
                         [
@@ -870,21 +852,6 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        if ($Ident === 'ToggleTechnicalLayout') {
-            $requestedLayout = (string) $Value;
-            $newLayout = in_array($requestedLayout, ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'], true) ? $requestedLayout : 'lite';
-
-            if ($newLayout !== $this->ReadPropertyString('TechnicalLayout')) {
-                IPS_SetProperty($this->InstanceID, 'TechnicalLayout', $newLayout);
-                IPS_ApplyChanges($this->InstanceID);
-                $this->ReloadForm();
-            } else {
-                $this->PushState();
-            }
-
-            return;
-        }
-
     }
 
     public function ExportHouseColors(): string
@@ -6681,7 +6648,6 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
-        currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
         updateTechnicalLayoutButtons();
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
@@ -6744,7 +6710,53 @@ class Energiefluss extends IPSModuleStrict
     } catch (error) {
         // LocalStorage ist optional.
     }
+    /*
+     * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
+     * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
+     */
+    const TECHNICAL_LAYOUT_STORAGE_KEY = 'symcon-energiefluss-technical-layout';
     let currentTechnicalLayout = 'lite';
+
+    try {
+        const storedTechnicalLayout =
+            window.localStorage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
+
+        if (
+            [
+                'compact',
+                'compact-wide',
+                'lite',
+                'lite-wide',
+                'full',
+                'full-wide'
+            ].includes(storedTechnicalLayout)
+        ) {
+            currentTechnicalLayout = storedTechnicalLayout;
+        }
+    } catch (error) {
+        // LocalStorage ist optional.
+    }
+
+    function storeTechnicalLayout() {
+        try {
+            window.localStorage.setItem(
+                TECHNICAL_LAYOUT_STORAGE_KEY,
+                currentTechnicalLayout
+            );
+        } catch (error) {
+            // LocalStorage ist optional.
+        }
+    }
+
+    function applyTechnicalLayoutFromBrowser() {
+        updateTechnicalLayoutButtons();
+
+        if (lastStateData) {
+            setState(lastStateData);
+        } else {
+            fit();
+        }
+    }
 
     function updateTechnicalLayoutButtons() {
         const layoutButton =
@@ -6889,10 +6901,10 @@ class Energiefluss extends IPSModuleStrict
             );
             const nextBase =
                 order[(currentIndex + 1) % order.length];
-            const newLayout =
+            currentTechnicalLayout =
                 nextBase + (isWide ? '-wide' : '');
-
-            requestAction('ToggleTechnicalLayout', newLayout);
+            storeTechnicalLayout();
+            applyTechnicalLayoutFromBrowser();
         });
     }
 
@@ -6905,11 +6917,11 @@ class Energiefluss extends IPSModuleStrict
                 currentTechnicalLayout.endsWith('-wide');
             const baseLayout =
                 currentTechnicalLayout.replace('-wide', '');
-            const newLayout = isWide
+            currentTechnicalLayout = isWide
                 ? baseLayout
                 : `${baseLayout}-wide`;
-
-            requestAction('ToggleTechnicalLayout', newLayout);
+            storeTechnicalLayout();
+            applyTechnicalLayoutFromBrowser();
         });
     }
 
@@ -7054,7 +7066,6 @@ class Energiefluss extends IPSModuleStrict
         }
 
         // Neue technische Ansicht.
-        currentTechnicalLayout = ['compact', 'compact-wide', 'lite', 'lite-wide', 'full', 'full-wide'].includes(d.technicalLayout) ? d.technicalLayout : 'lite';
         renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups);
 
         // Alte SVG-Struktur bleibt intern nur für Abwärtskompatibilität erhalten.
@@ -8861,7 +8872,6 @@ HTML;
         $gridConnectedStatus = ((float) $gridConnectedRaw) != 0.0 ? 'on-grid' : 'off-grid';
 
         return [
-            'technicalLayout'  => $this->ReadPropertyString('TechnicalLayout'),
             'pvs'              => $pvs,
             'housePvs'         => $housePvs,
             'batteries'        => $batteries,
