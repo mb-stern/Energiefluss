@@ -1279,23 +1279,6 @@ class Energiefluss extends IPSModuleStrict
             var(--w-text2)
         );
     }
-    #ef-storage-debug {
-        position: absolute;
-        left: 4px;
-        bottom: 2px;
-        z-index: 99999;
-        max-width: calc(100% - 8px);
-        font-size: 9px;
-        line-height: 1.15;
-        color: var(--w-text2);
-        background: rgba(0,0,0,.18);
-        border-radius: 4px;
-        padding: 2px 4px;
-        pointer-events: none;
-        white-space: normal;
-        overflow-wrap: anywhere;
-    }
-
     #scale-root {
         width: 540px;
         height: 640px;
@@ -1891,7 +1874,6 @@ class Energiefluss extends IPSModuleStrict
         </div>
     </div>
 
-    <div id="ef-storage-debug">storage: wartet …</div>
     <div id="display-mode-bar">
         <div id="display-mode-left" class="display-mode-slot">
             <button id="technical-wide-button" type="button" title="Wide-Ansicht umschalten" aria-label="Wide-Ansicht umschalten">⬌</button>
@@ -7114,27 +7096,37 @@ class Energiefluss extends IPSModuleStrict
     let currentDisplayMode = 'flow';
     let currentTechnicalLayout = 'lite';
 
-    function updateStorageDebug(note = '') {
+    function getEnergyFlowStorage() {
         try {
-            const el = document.getElementById('ef-storage-debug');
-            if (!el) return;
-
-            let stored = '-';
-            if (TECHNICAL_LAYOUT_STORAGE_KEY) {
-                stored =
-                    window.localStorage.getItem(
-                        TECHNICAL_LAYOUT_STORAGE_KEY
-                    ) || '-';
+            if (window.parent && window.parent !== window) {
+                return window.parent.localStorage;
             }
-
-            el.textContent = [
-                `scope=${VISUALIZATION_STORAGE_SCOPE || '-'}`,
-                `current=${currentTechnicalLayout || '-'}`,
-                `stored=${stored}`,
-                `key=${TECHNICAL_LAYOUT_STORAGE_KEY || '-'}`,
-                note ? `note=${note}` : ''
-            ].filter(Boolean).join(' | ');
         } catch (_) {}
+        return window.localStorage;
+    }
+
+    function getCurrentWidgetScope() {
+        if (/^widget-\d+$/.test(String(VISUALIZATION_STORAGE_SCOPE || ''))) {
+            return VISUALIZATION_STORAGE_SCOPE;
+        }
+
+        // Falls die stabile Initialisierung noch nicht abgeschlossen ist,
+        // die aktuell bereits erkennbare Widgetnummer direkt verwenden.
+        try {
+            const scope = getVisualizationStorageScope();
+            if (/^widget-\d+$/.test(String(scope || ''))) {
+                return scope;
+            }
+        } catch (_) {}
+
+        return null;
+    }
+
+    function getWidgetStorageKey(scope, suffix) {
+        if (!/^widget-\d+$/.test(String(scope || ''))) {
+            return null;
+        }
+        return `symcon-energiefluss-${scope}-${suffix}`;
     }
 
     function activateVisualizationStorageScope(scope) {
@@ -7143,18 +7135,19 @@ class Energiefluss extends IPSModuleStrict
         }
 
         VISUALIZATION_STORAGE_SCOPE = scope;
-        VIEW_STORAGE_KEY = `symcon-energiefluss-${scope}-view`;
+        VIEW_STORAGE_KEY = getWidgetStorageKey(scope, 'view');
         TECHNICAL_LAYOUT_STORAGE_KEY =
-            `symcon-energiefluss-${scope}-technical-layout`;
+            getWidgetStorageKey(scope, 'technical-layout');
 
         try {
-            const storedView = window.localStorage.getItem(VIEW_STORAGE_KEY);
+            const storage = getEnergyFlowStorage();
+            const storedView = storage.getItem(VIEW_STORAGE_KEY);
             if (storedView === 'flow' || storedView === 'house') {
                 currentDisplayMode = storedView;
             }
 
             const storedTechnicalLayout =
-                window.localStorage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
+                storage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
             if ([
                 'compact',
                 'compact-wide',
@@ -7176,7 +7169,6 @@ class Energiefluss extends IPSModuleStrict
         } else {
             fit();
         }
-        updateStorageDebug('activated');
         return true;
     }
 
@@ -7217,15 +7209,24 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function storeTechnicalLayout() {
-        if (!TECHNICAL_LAYOUT_STORAGE_KEY) {
+        const scope = getCurrentWidgetScope();
+        const key = getWidgetStorageKey(scope, 'technical-layout');
+
+        if (!key) {
             return;
         }
+
+        // Sobald die Widgetnummer bekannt ist, wird unmittelbar genau unter
+        // dieser Nummer gespeichert – unabhängig davon, ob die langsame
+        // Initialisierung bereits vollständig abgeschlossen ist.
+        VISUALIZATION_STORAGE_SCOPE = scope;
+        TECHNICAL_LAYOUT_STORAGE_KEY = key;
+
         try {
-            window.localStorage.setItem(
-                TECHNICAL_LAYOUT_STORAGE_KEY,
+            getEnergyFlowStorage().setItem(
+                key,
                 currentTechnicalLayout
             );
-            updateStorageDebug('stored');
         } catch (_) {
             // LocalStorage ist optional.
         }
@@ -7339,10 +7340,16 @@ class Energiefluss extends IPSModuleStrict
             const newMode = currentDisplayMode === 'house' ? 'flow' : 'house';
             currentDisplayMode = newMode;
 
-            if (VIEW_STORAGE_KEY) {
+            const scope = getCurrentWidgetScope();
+            const viewKey = getWidgetStorageKey(scope, 'view');
+
+            if (viewKey) {
+                VISUALIZATION_STORAGE_SCOPE = scope;
+                VIEW_STORAGE_KEY = viewKey;
+
                 try {
-                    window.localStorage.setItem(
-                        VIEW_STORAGE_KEY,
+                    getEnergyFlowStorage().setItem(
+                        viewKey,
                         currentDisplayMode
                     );
                 } catch (_) {
@@ -7413,7 +7420,6 @@ class Energiefluss extends IPSModuleStrict
     updateTechnicalLayoutButtons();
     updateDisplayModeButton();
     initializeVisualizationStorageScope();
-    updateStorageDebug('init');
 
     // ---------- Layout ----------
     let layoutWidth = 540;
