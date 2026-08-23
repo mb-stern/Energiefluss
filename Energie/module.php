@@ -6710,51 +6710,16 @@ class Energiefluss extends IPSModuleStrict
     function getVisualizationStorageScope() {
         let visuId = 'unknown';
         let slot = 1;
-        let pageIdentity = 'page';
+        let pageSignature = 'page';
 
         const extractVisuId = value => {
             try {
-                const url = new URL(String(value || ''), window.location.href);
+                const raw = String(value || '');
+                const url = new URL(raw, window.location.href);
                 const match = url.pathname.match(/\/visu\/(\d+)(?:\/|$)/i);
                 return match ? match[1] : null;
             } catch (_) {
                 return null;
-            }
-        };
-
-        const normalisePageIdentity = value => {
-            try {
-                const url = new URL(String(value || ''), window.location.href);
-
-                // Nur stabile Seitenteile verwenden. Flüchtige Auth-/Tokenwerte
-                // dürfen den gespeicherten Zustand nach einem Reload nicht ändern.
-                const ignored = new Set([
-                    'token',
-                    'visuPassword',
-                    'password',
-                    'auth',
-                    'session',
-                    'sid'
-                ]);
-                const params = [];
-                url.searchParams.forEach((paramValue, paramName) => {
-                    if (!ignored.has(paramName)) {
-                        params.push([paramName, paramValue]);
-                    }
-                });
-                params.sort((a, b) =>
-                    a[0].localeCompare(b[0]) || a[1].localeCompare(b[1])
-                );
-
-                const query = params.length
-                    ? '?' + params.map(([name, val]) =>
-                        `${encodeURIComponent(name)}=${encodeURIComponent(val)}`
-                    ).join('&')
-                    : '';
-
-                return `${url.pathname}${query}${url.hash || ''}`;
-            } catch (_) {
-                return String(value || 'page');
             }
         };
 
@@ -6768,6 +6733,57 @@ class Energiefluss extends IPSModuleStrict
             return (hash >>> 0).toString(36);
         };
 
+        /*
+         * Stabile Signatur der aktuell sichtbaren IPSView-Seite.
+         *
+         * Wichtig:
+         * - /visu/12345/ wird als "visu-12345" erfasst.
+         * - data:text/html-Kacheln werden nur als "data" erfasst.
+         *   Der eigentliche HTML-Inhalt enthält Tokens und Livewerte und darf
+         *   deshalb NICHT Teil des Schlüssels sein.
+         * - Die Reihenfolge bleibt erhalten, damit Seiten mit derselben Menge
+         *   an Kacheln, aber anderer Anordnung unterschieden werden können.
+         */
+        const buildPageSignature = parentDocument => {
+            try {
+                const frames = Array.from(
+                    parentDocument.querySelectorAll('iframe')
+                );
+
+                if (!frames.length) {
+                    return 'page-empty';
+                }
+
+                const parts = frames.map(frame => {
+                    const rawSrc = String(
+                        frame.getAttribute('src') || frame.src || ''
+                    );
+                    const frameVisuId = extractVisuId(rawSrc);
+
+                    if (frameVisuId) {
+                        return `visu-${frameVisuId}`;
+                    }
+
+                    if (/^data:/i.test(rawSrc)) {
+                        return 'data';
+                    }
+
+                    // Für sonstige iframes nur den stabilen Pfad verwenden,
+                    // niemals Query-Parameter oder Tokens.
+                    try {
+                        const url = new URL(rawSrc, window.location.href);
+                        return `path-${url.pathname || '/'}`;
+                    } catch (_) {
+                        return 'iframe';
+                    }
+                });
+
+                return parts.join('|');
+            } catch (_) {
+                return 'page';
+            }
+        };
+
         try {
             visuId = extractVisuId(window.location.href) || visuId;
 
@@ -6779,12 +6795,7 @@ class Energiefluss extends IPSModuleStrict
                 const parentDocument = window.parent.document;
                 const currentFrame = window.frameElement;
 
-                // Die übergeordnete Symcon-Seite gehört ausdrücklich zum Key.
-                // Dadurch sind z. B. Slot 1 auf Seite A und Slot 1 auf Seite B
-                // zwei verschiedene Speicherplätze.
-                pageIdentity = normalisePageIdentity(
-                    window.parent.location.href || document.referrer
-                );
+                pageSignature = buildPageSignature(parentDocument);
 
                 const currentVisuId =
                     extractVisuId(currentFrame.getAttribute('src'))
@@ -6809,19 +6820,15 @@ class Energiefluss extends IPSModuleStrict
                     }
                 }
             } else {
-                pageIdentity = normalisePageIdentity(
-                    document.referrer || window.location.href
-                );
+                // Falls die Ansicht nicht eingebettet ist, bleibt wenigstens
+                // die Visu-ID Bestandteil des Schlüssels.
+                pageSignature = `standalone-${visuId}`;
             }
         } catch (_) {
-            // Parent eventuell nicht lesbar: Referrer liefert zumindest die
-            // aufrufende Seite, sofern der Browser ihn bereitstellt.
-            pageIdentity = normalisePageIdentity(
-                document.referrer || window.location.href
-            );
+            pageSignature = `fallback-${visuId}`;
         }
 
-        return `page-${shortHash(pageIdentity)}-visu-${visuId}-slot-${slot}`;
+        return `page-${shortHash(pageSignature)}-visu-${visuId}-slot-${slot}`;
     }
 
     const VISUALIZATION_STORAGE_SCOPE = getVisualizationStorageScope();
