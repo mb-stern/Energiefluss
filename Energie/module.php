@@ -7163,9 +7163,6 @@ class Energiefluss extends IPSModuleStrict
             attempts++;
             const scope = getVisualizationStorageScope();
 
-            // Nach einem vollständigen Flutter-Reload kann der erste Treffer
-            // noch zu früh bzw. vorläufig sein. Deshalb ausschließlich eine
-            // Widget-ID übernehmen, die zweimal hintereinander identisch ist.
             if (/^widget-\d+$/.test(scope)) {
                 if (scope === previous) {
                     stableCount++;
@@ -7183,8 +7180,10 @@ class Energiefluss extends IPSModuleStrict
                 stableCount = 0;
             }
 
+            // Flutter braucht nach F5 je nach Seite einige Frames, bis alle
+            // Plattform-Views ihre endgültige Geometrie besitzen.
             if (attempts < 40) {
-                window.setTimeout(probe, 100);
+                window.setTimeout(probe, 150);
             } else {
                 // Sollte Symcon ausnahmsweise keine stabile Widget-ID liefern,
                 // bleibt die Kachel benutzbar. Es wird dann nur nichts unter
@@ -7200,7 +7199,7 @@ class Energiefluss extends IPSModuleStrict
             }
         };
 
-        probe();
+        requestAnimationFrame(() => window.setTimeout(probe, 50));
     }
 
     function storeTechnicalLayout() {
