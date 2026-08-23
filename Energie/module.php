@@ -1183,7 +1183,6 @@ class Energiefluss extends IPSModuleStrict
 
     #eflow {
         width: 100%;
-        visibility: hidden;
         height: 100vh;
         box-sizing: border-box;
         border-radius: 12px;
@@ -6859,23 +6858,119 @@ class Energiefluss extends IPSModuleStrict
         };
 
         const getGridConfiguration = () => {
+            /*
+             * IP-Symcon besitzt getrennte Grid-Profile:
+             *   ~Desktop -> landscape
+             *   ~Phone   -> portrait / landscape
+             *
+             * Bisher wurde immer hart ~Desktop + landscape gelesen. Dadurch
+             * konnte die Widget-ID auf einem Handy nicht zuverlässig ermittelt
+             * und folglich auch nicht wieder aus localStorage geladen werden.
+             *
+             * Für den restlichen Matcher geben wir das gewählte Layout bewusst
+             * weiterhin als {landscape: ...} zurück. So bleibt die bewährte
+             * Matching-Logik darunter vollständig unverändert.
+             */
+            const isPhoneProfile = (() => {
+                try {
+                    const ua = String(navigator.userAgent || '');
+                    const mobileUA = /Android|iPhone|iPod|Mobile/i.test(ua);
+                    const shortScreen = Math.min(
+                        Number(window.screen?.width || window.innerWidth || 9999),
+                        Number(window.screen?.height || window.innerHeight || 9999)
+                    ) <= 700;
+                    return mobileUA || shortScreen;
+                } catch (_) {
+                    return false;
+                }
+            })();
+
+            const orientation = (() => {
+                try {
+                    return window.matchMedia &&
+                        window.matchMedia('(orientation: portrait)').matches
+                        ? 'portrait'
+                        : 'landscape';
+                } catch (_) {
+                    return window.innerHeight > window.innerWidth
+                        ? 'portrait'
+                        : 'landscape';
+                }
+            })();
+
+            const selectLayout = raw => {
+                const cfg = parseMaybeJson(raw);
+                if (!cfg || typeof cfg !== 'object') {
+                    return null;
+                }
+
+                // Lokale Profil-Dateien enthalten portrait/landscape direkt.
+                if (cfg[orientation] && typeof cfg[orientation] === 'object') {
+                    return {landscape: cfg[orientation]};
+                }
+
+                // Server-Snapshot enthält die Profile unter ~Phone/~Desktop.
+                const preferredProfile = isPhoneProfile ? '~Phone' : '~Desktop';
+                const fallbackProfile = isPhoneProfile ? '~Desktop' : '~Phone';
+                const profile =
+                    cfg[preferredProfile] ||
+                    cfg[fallbackProfile] ||
+                    null;
+
+                if (profile && typeof profile === 'object') {
+                    const layout =
+                        profile[orientation] ||
+                        profile.landscape ||
+                        profile.portrait ||
+                        null;
+                    if (layout && typeof layout === 'object') {
+                        return {landscape: layout};
+                    }
+                }
+
+                // Abwärtskompatibel zu einer bereits ausgewählten Struktur.
+                if (cfg.landscape && typeof cfg.landscape === 'object') {
+                    return {landscape: cfg.landscape};
+                }
+                if (cfg.portrait && typeof cfg.portrait === 'object') {
+                    return {landscape: cfg.portrait};
+                }
+
+                return null;
+            };
+
             // Lokale Grid-Konfiguration bevorzugen: Sie entspricht exakt dem
             // Layout dieses Browsers/Geräts.
             try {
                 const visuID = new URL(window.location.href).searchParams.get('visuID');
-                const keys = Object.keys(window.parent.localStorage || window.localStorage);
+                const storage = window.parent.localStorage || window.localStorage;
+                const keys = Object.keys(storage);
+
+                const preferredSuffix =
+                    isPhoneProfile ? '~Phone-gridConfig' : '~Desktop-gridConfig';
+                const fallbackSuffix =
+                    isPhoneProfile ? '~Desktop-gridConfig' : '~Phone-gridConfig';
+
                 let key = null;
+
                 if (visuID) {
-                    key = keys.find(k => k === `flutter.${visuID}-~Desktop-gridConfig`) || null;
+                    key =
+                        keys.find(k => k === `flutter.${visuID}-${preferredSuffix}`) ||
+                        keys.find(k => k === `flutter.${visuID}-${fallbackSuffix}`) ||
+                        null;
                 }
+
                 if (!key) {
-                    key = keys.find(k => /flutter\.\d+-~Desktop-gridConfig$/.test(k)) || null;
+                    key =
+                        keys.find(k => k.endsWith(`-${preferredSuffix}`)) ||
+                        keys.find(k => k.endsWith(`-${fallbackSuffix}`)) ||
+                        null;
                 }
+
                 if (key) {
-                    const storage = window.parent.localStorage || window.localStorage;
-                    const cfg = parseMaybeJson(storage.getItem(key));
-                    if (cfg && typeof cfg === 'object') {
-                        return cfg;
+                    const selected = selectLayout(storage.getItem(key));
+                    if (selected) {
+                        return selected;
                     }
                 }
             } catch (_) {
@@ -6885,11 +6980,15 @@ class Energiefluss extends IPSModuleStrict
             try {
                 const server = window.__EF_SERVER_GRID__;
                 if (server && server.grid) {
-                    return parseMaybeJson(server.grid);
+                    const selected = selectLayout(server.grid);
+                    if (selected) {
+                        return selected;
+                    }
                 }
             } catch (_) {
                 // Kein Grid verfügbar.
             }
+
             return null;
         };
 
@@ -7096,17 +7195,6 @@ class Energiefluss extends IPSModuleStrict
     let TECHNICAL_LAYOUT_STORAGE_KEY = null;
     let currentDisplayMode = 'flow';
     let currentTechnicalLayout = 'lite';
-    let visualizationStorageReady = false;
-
-    function revealVisualization() {
-        const eflow = document.getElementById('eflow');
-        if (!eflow) return;
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                eflow.style.visibility = 'visible';
-            });
-        });
-    }
 
     function activateVisualizationStorageScope(scope) {
         if (!/^widget-\d+$/.test(String(scope || ''))) {
@@ -7114,7 +7202,6 @@ class Energiefluss extends IPSModuleStrict
         }
 
         VISUALIZATION_STORAGE_SCOPE = scope;
-        visualizationStorageReady = true;
         VIEW_STORAGE_KEY = `symcon-energiefluss-${scope}-view`;
         TECHNICAL_LAYOUT_STORAGE_KEY =
             `symcon-energiefluss-${scope}-technical-layout`;
@@ -7146,11 +7233,8 @@ class Energiefluss extends IPSModuleStrict
         if (lastStateData) {
             setState(lastStateData);
         } else {
-            applyDisplayMode(currentDisplayMode);
-            updateTechnicalLayoutButtons();
             fit();
         }
-        revealVisualization();
         return true;
     }
 
@@ -7180,26 +7264,15 @@ class Energiefluss extends IPSModuleStrict
                 stableCount = 0;
             }
 
-            // Flutter braucht nach F5 je nach Seite einige Frames, bis alle
-            // Plattform-Views ihre endgültige Geometrie besitzen.
-            if (attempts < 40) {
-                window.setTimeout(probe, 150);
-            } else {
-                // Sollte Symcon ausnahmsweise keine stabile Widget-ID liefern,
-                // bleibt die Kachel benutzbar. Es wird dann nur nichts unter
-                // einem unsicheren Fallback-Key gespeichert.
-                visualizationStorageReady = true;
-                if (lastStateData) {
-                    setState(lastStateData);
-                } else {
-                    applyDisplayMode(currentDisplayMode);
-                    fit();
-                }
-                revealVisualization();
+            // Die bewährte Zwei-Treffer-Prüfung bleibt erhalten. Wir verkürzen
+            // nur das Intervall moderat; anders als reines requestAnimationFrame
+            // liegen die beiden Messungen weiterhin zeitlich auseinander.
+            if (attempts < 60) {
+                window.setTimeout(probe, 75);
             }
         };
 
-        requestAnimationFrame(() => window.setTimeout(probe, 50));
+        requestAnimationFrame(() => window.setTimeout(probe, 20));
     }
 
     function storeTechnicalLayout() {
@@ -7672,13 +7745,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         lastStateData = d;
-        // Vor der stabilen Widget-Erkennung noch nichts mit dem Default-Layout
-        // rendern. So gibt es beim Reload kein sichtbares Lite/Compact -> Large/
-        // Full-Umspringen. activateVisualizationStorageScope() baut anschließend
-        // direkt die gespeicherte Ansicht auf.
-        if (visualizationStorageReady) {
-            setState(d);
-        }
+        setState(d);
     }
 
     function refreshResponsiveState() {
