@@ -7235,7 +7235,9 @@ class Energiefluss extends IPSModuleStrict
             }
         };
 
-        requestAnimationFrame(() => window.setTimeout(probe, 50));
+        // Flutter erst die endgültige Kachel-Geometrie aufbauen lassen.
+        // Die browserweite Wärmepumpen-Ansicht ist bis dahin bereits sichtbar.
+        window.setTimeout(probe, 500);
     }
 
     function storeTechnicalLayout() {
