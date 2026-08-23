@@ -1071,13 +1071,82 @@ class Energiefluss extends IPSModuleStrict
                 return null;
             }
 
+            // Die Grid-Widget-IDs sind echte Symcon-Objekt-/Link-IDs. Für
+            // Links lösen wir das Zielobjekt auf. Damit kann JavaScript später
+            // /visu/36446/ direkt gegen die zugehörigen Link-Widgets filtern.
+            $widgetTargets = [];
+            foreach ($this->CollectVisualizationWidgetIDs($grid) as $widgetID) {
+                $targetID = $this->ResolveVisualizationWidgetTarget($widgetID);
+                if ($targetID > 0) {
+                    $widgetTargets[(string) $widgetID] = $targetID;
+                }
+            }
+
             return [
-                'visuID' => $visuID,
-                'grid'   => $grid
+                'visuID'  => $visuID,
+                'grid'    => $grid,
+                'targets' => $widgetTargets
             ];
         } catch (Throwable $e) {
             return null;
         }
+    }
+
+    /**
+     * Sammelt alle Widget-IDs aus sämtlichen individualPositions-Blöcken der
+     * GridConfiguration, unabhängig von Profil (~Desktop/~Phone) und Ausrichtung.
+     */
+    private function CollectVisualizationWidgetIDs(array $node): array
+    {
+        $ids = [];
+        $walk = function ($value) use (&$walk, &$ids): void {
+            if (!is_array($value)) {
+                return;
+            }
+            foreach ($value as $key => $child) {
+                if ($key === 'individualPositions' && is_array($child)) {
+                    foreach ($child as $containerWidgets) {
+                        if (!is_array($containerWidgets)) {
+                            continue;
+                        }
+                        foreach (array_keys($containerWidgets) as $widgetID) {
+                            if (is_numeric($widgetID)) {
+                                $ids[(int) $widgetID] = true;
+                            }
+                        }
+                    }
+                }
+                if (is_array($child)) {
+                    $walk($child);
+                }
+            }
+        };
+        $walk($node);
+        return array_keys($ids);
+    }
+
+    /**
+     * Liefert für eine Kachel-ID das eigentliche Zielobjekt. Ist die Kachel ein
+     * Link, wird dessen TargetID verwendet; ansonsten ist die Widget-ID selbst
+     * das Zielobjekt.
+     */
+    private function ResolveVisualizationWidgetTarget(int $widgetID): int
+    {
+        if ($widgetID <= 0 || !IPS_ObjectExists($widgetID)) {
+            return 0;
+        }
+        try {
+            $object = IPS_GetObject($widgetID);
+            // ObjectType 6 = Link
+            if ((int) ($object['ObjectType'] ?? -1) === 6 && function_exists('IPS_GetLink')) {
+                $link = IPS_GetLink($widgetID);
+                $targetID = (int) ($link['TargetID'] ?? 0);
+                return $targetID > 0 ? $targetID : $widgetID;
+            }
+        } catch (Throwable $e) {
+            return $widgetID;
+        }
+        return $widgetID;
     }
 
     private function GetVisualizationHtml(string $displayMode): string
@@ -6848,14 +6917,26 @@ class Energiefluss extends IPSModuleStrict
 
             const frameRects = frames.map(frame => {
                 const r = frame.getBoundingClientRect();
+                const src = frame.getAttribute('src') || '';
+                const visuMatch = src.match(/\/visu\/(\d+)\//);
                 return {
                     frame,
                     left: r.left,
                     top: r.top,
                     width: r.width,
-                    height: r.height
+                    height: r.height,
+                    targetID: visuMatch ? Number(visuMatch[1]) : 0
                 };
             });
+
+            const serverTargets = (() => {
+                try {
+                    const t = window.__EF_SERVER_GRID__ && window.__EF_SERVER_GRID__.targets;
+                    return t && typeof t === 'object' ? t : {};
+                } catch (_) {
+                    return {};
+                }
+            })();
 
             const landscape = grid.landscape || {};
             const positions = landscape.individualPositions || {};
@@ -6875,12 +6956,19 @@ class Energiefluss extends IPSModuleStrict
 
                 // Fehler in Rastereinheiten; so bleibt die Bewertung unabhängig
                 // von Auflösung und Browser-Zoom.
-                return (
+                let cost = (
                     Math.abs(fr.left - predicted.left) / Math.max(1, sx) +
                     Math.abs(fr.top - predicted.top) / Math.max(1, sy) +
                     Math.abs(fr.width - predicted.width) / Math.max(1, sx) +
                     Math.abs(fr.height - predicted.height) / Math.max(1, sy)
                 );
+
+                // Wenn sowohl iframe als auch Grid-Widget ihr Symcon-Ziel kennen,
+                // darf ein anderes Ziel nicht geometrisch "gewinnen".
+                if (fr.targetID > 0 && widget.targetID > 0 && fr.targetID !== widget.targetID) {
+                    cost += 10000;
+                }
+                return cost;
             };
 
             Object.entries(positions).forEach(([containerId, widgetPositions]) => {
@@ -6895,17 +6983,29 @@ class Energiefluss extends IPSModuleStrict
                         const left = Number(pos.left);
                         const top = Number(pos.top);
                         if (![width, height, left, top].every(Number.isFinite)) return null;
-                        return {widgetId, width, height, left, top};
+                        const targetID = Number(serverTargets[String(widgetId)] || 0);
+                        return {widgetId, width, height, left, top, targetID};
                     })
                     .filter(Boolean);
 
                 if (!widgets.length || widgets.length < frameRects.length) return;
+
+                const currentTargetID = frameRects[currentIndex]?.targetID || 0;
+                if (currentTargetID > 0) {
+                    const hasCurrentTarget = widgets.some(w => w.targetID === currentTargetID);
+                    // Nur anwenden, wenn die serverseitige Zielauflösung für diesen
+                    // Container tatsächlich Informationen geliefert hat.
+                    const hasKnownTargets = widgets.some(w => w.targetID > 0);
+                    if (hasKnownTargets && !hasCurrentTarget) return;
+                }
 
                 // Jede Frame/Widget-Kombination einmal als Transformationsanker
                 // testen. Der richtige Container erzeugt über alle sichtbaren
                 // iframes hinweg einen nahezu identischen Rastermaßstab.
                 frameRects.forEach((anchorFrame, anchorFrameIndex) => {
                     widgets.forEach(anchorWidget => {
+                        if (anchorFrame.targetID > 0 && anchorWidget.targetID > 0 &&
+                            anchorFrame.targetID !== anchorWidget.targetID) return;
                         const sx = anchorFrame.width / Math.max(1, anchorWidget.width);
                         const sy = anchorFrame.height / Math.max(1, anchorWidget.height);
                         if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx < 10 || sy < 10) return;
@@ -6954,7 +7054,10 @@ class Energiefluss extends IPSModuleStrict
                         // Viele zusätzliche Widgets sind erlaubt, aber ein kleiner
                         // Malus bevorzugt den Container, der die sichtbare Seite
                         // tatsächlich am präzisesten beschreibt.
-                        totalCost += Math.max(0, widgets.length - frameRects.length) * 0.08;
+                        // Ein ähnlich aussehender großer Container einer anderen Seite
+                        // darf nicht nur wegen eines Teilmusters gewinnen. Deshalb deutlich
+                        // stärker bestrafen, wenn sehr viele zusätzliche Widgets vorhanden sind.
+                        totalCost += Math.max(0, widgets.length - frameRects.length) * 0.75;
                         const averageCost = totalCost / frameRects.length;
 
                         if (!best || averageCost < best.cost) {
