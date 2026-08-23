@@ -6859,137 +6859,115 @@ class Energiefluss extends IPSModuleStrict
 
         const getGridConfiguration = () => {
             /*
-             * IP-Symcon besitzt getrennte Grid-Profile:
-             *   ~Desktop -> landscape
-             *   ~Phone   -> portrait / landscape
+             * Keine Annahme mehr darüber, ob dieser Browser ~Desktop oder
+             * ~Phone verwendet. Stattdessen werden ALLE verfügbaren Grid-
+             * Profile und beide Ausrichtungen gesammelt. Der bestehende
+             * Geometrie-Matcher entscheidet danach automatisch, welcher
+             * Container tatsächlich zu den aktuell sichtbaren iframes passt.
              *
-             * Bisher wurde immer hart ~Desktop + landscape gelesen. Dadurch
-             * konnte die Widget-ID auf einem Handy nicht zuverlässig ermittelt
-             * und folglich auch nicht wieder aus localStorage geladen werden.
-             *
-             * Für den restlichen Matcher geben wir das gewählte Layout bewusst
-             * weiterhin als {landscape: ...} zurück. So bleibt die bewährte
-             * Matching-Logik darunter vollständig unverändert.
+             * So funktioniert dieselbe Logik auf Desktop, Tablet und Handy.
              */
-            const isPhoneProfile = (() => {
-                try {
-                    const ua = String(navigator.userAgent || '');
-                    const mobileUA = /Android|iPhone|iPod|Mobile/i.test(ua);
-                    const shortScreen = Math.min(
-                        Number(window.screen?.width || window.innerWidth || 9999),
-                        Number(window.screen?.height || window.innerHeight || 9999)
-                    ) <= 700;
-                    return mobileUA || shortScreen;
-                } catch (_) {
-                    return false;
+            const merged = {
+                landscape: {
+                    individualPositions: {},
+                    individualDimensions: {}
                 }
-            })();
-
-            const orientation = (() => {
-                try {
-                    return window.matchMedia &&
-                        window.matchMedia('(orientation: portrait)').matches
-                        ? 'portrait'
-                        : 'landscape';
-                } catch (_) {
-                    return window.innerHeight > window.innerWidth
-                        ? 'portrait'
-                        : 'landscape';
-                }
-            })();
-
-            const selectLayout = raw => {
-                const cfg = parseMaybeJson(raw);
-                if (!cfg || typeof cfg !== 'object') {
-                    return null;
-                }
-
-                // Lokale Profil-Dateien enthalten portrait/landscape direkt.
-                if (cfg[orientation] && typeof cfg[orientation] === 'object') {
-                    return {landscape: cfg[orientation]};
-                }
-
-                // Server-Snapshot enthält die Profile unter ~Phone/~Desktop.
-                const preferredProfile = isPhoneProfile ? '~Phone' : '~Desktop';
-                const fallbackProfile = isPhoneProfile ? '~Desktop' : '~Phone';
-                const profile =
-                    cfg[preferredProfile] ||
-                    cfg[fallbackProfile] ||
-                    null;
-
-                if (profile && typeof profile === 'object') {
-                    const layout =
-                        profile[orientation] ||
-                        profile.landscape ||
-                        profile.portrait ||
-                        null;
-                    if (layout && typeof layout === 'object') {
-                        return {landscape: layout};
-                    }
-                }
-
-                // Abwärtskompatibel zu einer bereits ausgewählten Struktur.
-                if (cfg.landscape && typeof cfg.landscape === 'object') {
-                    return {landscape: cfg.landscape};
-                }
-                if (cfg.portrait && typeof cfg.portrait === 'object') {
-                    return {landscape: cfg.portrait};
-                }
-
-                return null;
             };
 
-            // Lokale Grid-Konfiguration bevorzugen: Sie entspricht exakt dem
-            // Layout dieses Browsers/Geräts.
+            let sourceIndex = 0;
+
+            const addLayout = layout => {
+                if (!layout || typeof layout !== 'object') {
+                    return;
+                }
+
+                const positions = layout.individualPositions || {};
+                const dimensions = layout.individualDimensions || {};
+
+                Object.entries(dimensions).forEach(([widgetId, dim]) => {
+                    if (dim && typeof dim === 'object') {
+                        merged.landscape.individualDimensions[widgetId] = dim;
+                    }
+                });
+
+                Object.entries(positions).forEach(([containerId, widgets]) => {
+                    if (!widgets || typeof widgets !== 'object') {
+                        return;
+                    }
+
+                    // Derselbe Container kann in Desktop/Phone oder Hoch-/Quer-
+                    // format mit anderen Positionen vorkommen. Deshalb bekommt
+                    // jede Variante intern einen eigenen Namen.
+                    const mergedId = `${sourceIndex}:${containerId}`;
+                    merged.landscape.individualPositions[mergedId] = widgets;
+                });
+
+                sourceIndex++;
+            };
+
+            const collectLayouts = raw => {
+                const cfg = parseMaybeJson(raw);
+                if (!cfg || typeof cfg !== 'object') {
+                    return;
+                }
+
+                // Lokale gridConfig-Dateien.
+                addLayout(cfg.landscape);
+                addLayout(cfg.portrait);
+
+                // Snapshot-Strukturen mit benannten Profilen.
+                ['~Desktop', '~Phone', '~Tablet'].forEach(profileName => {
+                    const profile = cfg[profileName];
+                    if (!profile || typeof profile !== 'object') {
+                        return;
+                    }
+                    addLayout(profile.landscape);
+                    addLayout(profile.portrait);
+                });
+            };
+
+            // Zuerst alle lokalen Grid-Konfigurationen dieses visuID sammeln.
             try {
-                const visuID = new URL(window.location.href).searchParams.get('visuID');
-                const storage = window.parent.localStorage || window.localStorage;
+                const visuID =
+                    new URL(window.location.href).searchParams.get('visuID');
+                const storage =
+                    window.parent.localStorage || window.localStorage;
                 const keys = Object.keys(storage);
 
-                const preferredSuffix =
-                    isPhoneProfile ? '~Phone-gridConfig' : '~Desktop-gridConfig';
-                const fallbackSuffix =
-                    isPhoneProfile ? '~Desktop-gridConfig' : '~Phone-gridConfig';
-
-                let key = null;
-
-                if (visuID) {
-                    key =
-                        keys.find(k => k === `flutter.${visuID}-${preferredSuffix}`) ||
-                        keys.find(k => k === `flutter.${visuID}-${fallbackSuffix}`) ||
-                        null;
-                }
-
-                if (!key) {
-                    key =
-                        keys.find(k => k.endsWith(`-${preferredSuffix}`)) ||
-                        keys.find(k => k.endsWith(`-${fallbackSuffix}`)) ||
-                        null;
-                }
-
-                if (key) {
-                    const selected = selectLayout(storage.getItem(key));
-                    if (selected) {
-                        return selected;
-                    }
-                }
+                keys
+                    .filter(key => {
+                        if (!/-gridConfig$/.test(key)) {
+                            return false;
+                        }
+                        if (!/^flutter\./.test(key)) {
+                            return false;
+                        }
+                        return !visuID ||
+                            key.startsWith(`flutter.${visuID}-`);
+                    })
+                    .forEach(key => collectLayouts(storage.getItem(key)));
             } catch (_) {
-                // Snapshot-Fallback folgt.
+                // Server-Snapshot folgt.
             }
 
+            // Zusätzlich alle serverseitig bekannten Profile einsammeln.
             try {
                 const server = window.__EF_SERVER_GRID__;
                 if (server && server.grid) {
-                    const selected = selectLayout(server.grid);
-                    if (selected) {
-                        return selected;
-                    }
+                    collectLayouts(server.grid);
                 }
             } catch (_) {
-                // Kein Grid verfügbar.
+                // Kein Snapshot verfügbar.
             }
 
-            return null;
+            if (
+                Object.keys(merged.landscape.individualPositions).length === 0 ||
+                Object.keys(merged.landscape.individualDimensions).length === 0
+            ) {
+                return null;
+            }
+
+            return merged;
         };
 
         const grid = getGridConfiguration();
