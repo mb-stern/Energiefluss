@@ -6710,6 +6710,7 @@ class Energiefluss extends IPSModuleStrict
     function getVisualizationStorageScope() {
         let visuId = 'unknown';
         let slot = 1;
+        let pageIdentity = 'page';
 
         const extractVisuId = value => {
             try {
@@ -6719,6 +6720,52 @@ class Energiefluss extends IPSModuleStrict
             } catch (_) {
                 return null;
             }
+        };
+
+        const normalisePageIdentity = value => {
+            try {
+                const url = new URL(String(value || ''), window.location.href);
+
+                // Nur stabile Seitenteile verwenden. Flüchtige Auth-/Tokenwerte
+                // dürfen den gespeicherten Zustand nach einem Reload nicht ändern.
+                const ignored = new Set([
+                    'token',
+                    'visuPassword',
+                    'password',
+                    'auth',
+                    'session',
+                    'sid'
+                ]);
+                const params = [];
+                url.searchParams.forEach((paramValue, paramName) => {
+                    if (!ignored.has(paramName)) {
+                        params.push([paramName, paramValue]);
+                    }
+                });
+                params.sort((a, b) =>
+                    a[0].localeCompare(b[0]) || a[1].localeCompare(b[1])
+                );
+
+                const query = params.length
+                    ? '?' + params.map(([name, val]) =>
+                        `${encodeURIComponent(name)}=${encodeURIComponent(val)}`
+                    ).join('&')
+                    : '';
+
+                return `${url.pathname}${query}${url.hash || ''}`;
+            } catch (_) {
+                return String(value || 'page');
+            }
+        };
+
+        const shortHash = value => {
+            const text = String(value || 'page');
+            let hash = 2166136261;
+            for (let i = 0; i < text.length; i++) {
+                hash ^= text.charCodeAt(i);
+                hash = Math.imul(hash, 16777619);
+            }
+            return (hash >>> 0).toString(36);
         };
 
         try {
@@ -6731,6 +6778,14 @@ class Energiefluss extends IPSModuleStrict
             ) {
                 const parentDocument = window.parent.document;
                 const currentFrame = window.frameElement;
+
+                // Die übergeordnete Symcon-Seite gehört ausdrücklich zum Key.
+                // Dadurch sind z. B. Slot 1 auf Seite A und Slot 1 auf Seite B
+                // zwei verschiedene Speicherplätze.
+                pageIdentity = normalisePageIdentity(
+                    window.parent.location.href || document.referrer
+                );
+
                 const currentVisuId =
                     extractVisuId(currentFrame.getAttribute('src'))
                     || extractVisuId(currentFrame.src)
@@ -6753,13 +6808,20 @@ class Energiefluss extends IPSModuleStrict
                         slot = index + 1;
                     }
                 }
+            } else {
+                pageIdentity = normalisePageIdentity(
+                    document.referrer || window.location.href
+                );
             }
         } catch (_) {
-            // Falls der Parent-Kontext wider Erwarten nicht lesbar ist,
-            // bleibt der sichere Fallback visu-<ID>-slot-1 aktiv.
+            // Parent eventuell nicht lesbar: Referrer liefert zumindest die
+            // aufrufende Seite, sofern der Browser ihn bereitstellt.
+            pageIdentity = normalisePageIdentity(
+                document.referrer || window.location.href
+            );
         }
 
-        return `visu-${visuId}-slot-${slot}`;
+        return `page-${shortHash(pageIdentity)}-visu-${visuId}-slot-${slot}`;
     }
 
     const VISUALIZATION_STORAGE_SCOPE = getVisualizationStorageScope();
