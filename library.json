@@ -2,8 +2,11 @@
     "id": "{0FA30BD5-13FC-51A3-2063-18BBF7B1BD64}",
     "author": "Stefan Künzli",
     "name": "Energiefluss",
-    "url": "",
-    "version": "1.0",
+    "url": "https://github.com/mb-stern/Energiefluss",
+    "compatibility": {
+        "version": "8.2"
+    },
+    "version": "1.6",
     "build": 0,
     "date": 0
 }
