@@ -6694,61 +6694,7 @@ class Energiefluss extends IPSModuleStrict
      *
      * Die Auswahl wird lokal im Browser/Handy gespeichert.
      */
-    /*
-     * Browser-Speicher pro konkreter Visualisierungs-Kachel.
-     * Dadurch können mehrere Kacheln derselben Modulinstanz im selben
-     * Browser unterschiedliche Ansichten behalten.
-     */
-    function getVisualizationStorageScope() {
-        /*
-         * Jede eingebettete Energiefluss-Kachel erhält eine eigene Kennung
-         * direkt im Browsing-Context. Anders als die frühere DOM-/iframe-
-         * Erkennung wird diese Kennung immer bevorzugt und nicht nur als
-         * letzter Fallback verwendet.
-         *
-         * window.name bleibt bei normalen Reloads desselben iframe erhalten.
-         */
-        try {
-            const prefix = 'symcon-energiefluss-tile-';
-
-            if (typeof window.name === 'string'
-                && window.name.startsWith(prefix)
-                && window.name.length > prefix.length) {
-                return window.name.slice(prefix.length);
-            }
-
-            let randomPart = '';
-            try {
-                if (window.crypto && typeof window.crypto.getRandomValues === 'function') {
-                    const values = new Uint32Array(4);
-                    window.crypto.getRandomValues(values);
-                    randomPart = Array.from(values)
-                        .map((value) => value.toString(36))
-                        .join('-');
-                }
-            } catch (error) {
-                // Crypto ist optional.
-            }
-
-            if (!randomPart) {
-                randomPart = Date.now().toString(36)
-                    + '-' + Math.random().toString(36).slice(2)
-                    + '-' + Math.random().toString(36).slice(2);
-            }
-
-            window.name = prefix + randomPart;
-            return randomPart;
-        } catch (error) {
-            // Falls window.name nicht verfügbar ist, bleibt wenigstens
-            // innerhalb dieses geladenen Dokuments eine eindeutige Kennung.
-            return Date.now().toString(36)
-                + '-' + Math.random().toString(36).slice(2);
-        }
-    }
-
-    const VISUAL_STORAGE_SCOPE = getVisualizationStorageScope();
-    const VIEW_STORAGE_KEY =
-        'symcon-energiefluss-view-' + VISUAL_STORAGE_SCOPE;
+    const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
     let currentDisplayMode = 'flow';
 
     try {
@@ -6768,8 +6714,7 @@ class Energiefluss extends IPSModuleStrict
      * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
      * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
      */
-    const TECHNICAL_LAYOUT_STORAGE_KEY =
-        'symcon-energiefluss-technical-layout-' + VISUAL_STORAGE_SCOPE;
+    const TECHNICAL_LAYOUT_STORAGE_KEY = 'symcon-energiefluss-technical-layout';
     let currentTechnicalLayout = 'lite';
 
     try {
