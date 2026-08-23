@@ -6688,53 +6688,67 @@ class Energiefluss extends IPSModuleStrict
     }
 
     /*
-     * Umschaltansicht wie beim Wärmepumpenmodul.
-     * flow  = Sunsynk
-     * house = Hausansicht
+     * Browserzustand nach demselben Prinzip wie beim Wärmepumpenmodul:
      *
-     * Die Auswahl wird lokal im Browser/Handy gespeichert.
+     * Nicht schon beim Parsen des HTML auf localStorage zugreifen, sondern
+     * genau einmal beim Eintreffen des ersten echten Payloads. Erst danach
+     * wird die Karte mit setState() aufgebaut.
+     *
+     * Dadurch ist der Ablauf:
+     *   Payload -> Browserzustand laden -> Karte aufbauen
+     *
+     * Datenupdates ändern die lokal gewählte Ansicht anschließend nicht mehr.
      */
     const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
+    const TECHNICAL_LAYOUT_STORAGE_KEY =
+        'symcon-energiefluss-technical-layout';
+
     let currentDisplayMode = 'flow';
-
-    try {
-        const storedView =
-            window.localStorage.getItem(VIEW_STORAGE_KEY);
-
-        if (
-            storedView === 'flow'
-            || storedView === 'house'
-        ) {
-            currentDisplayMode = storedView;
-        }
-    } catch (error) {
-        // LocalStorage ist optional.
-    }
-    /*
-     * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
-     * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
-     */
-    const TECHNICAL_LAYOUT_STORAGE_KEY = 'symcon-energiefluss-technical-layout';
     let currentTechnicalLayout = 'lite';
+    let browserViewStateInitialized = false;
 
-    try {
-        const storedTechnicalLayout =
-            window.localStorage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
-
-        if (
-            [
-                'compact',
-                'compact-wide',
-                'lite',
-                'lite-wide',
-                'full',
-                'full-wide'
-            ].includes(storedTechnicalLayout)
-        ) {
-            currentTechnicalLayout = storedTechnicalLayout;
+    function initializeBrowserViewState() {
+        if (browserViewStateInitialized) {
+            return;
         }
-    } catch (error) {
-        // LocalStorage ist optional.
+
+        browserViewStateInitialized = true;
+
+        try {
+            const storedView =
+                window.localStorage.getItem(VIEW_STORAGE_KEY);
+
+            if (
+                storedView === 'flow'
+                || storedView === 'house'
+            ) {
+                currentDisplayMode = storedView;
+            }
+
+            const storedTechnicalLayout =
+                window.localStorage.getItem(
+                    TECHNICAL_LAYOUT_STORAGE_KEY
+                );
+
+            if (
+                [
+                    'compact',
+                    'compact-wide',
+                    'lite',
+                    'lite-wide',
+                    'full',
+                    'full-wide'
+                ].includes(storedTechnicalLayout)
+            ) {
+                currentTechnicalLayout =
+                    storedTechnicalLayout;
+            }
+        } catch (error) {
+            // LocalStorage ist optional.
+        }
+
+        updateTechnicalLayoutButtons();
+        updateDisplayModeButton();
     }
 
     function storeTechnicalLayout() {
@@ -7199,6 +7213,10 @@ class Energiefluss extends IPSModuleStrict
             window.location.reload();
             return;
         }
+
+        // Wie bei der Wärmepumpe: den gespeicherten Browserzustand genau
+        // einmal unmittelbar vor dem ersten Aufbau der Karte laden.
+        initializeBrowserViewState();
 
         lastStateData = d;
         setState(d);
