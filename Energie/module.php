@@ -1022,17 +1022,14 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            // Browserzustand wird wie bei der Wärmepumpe sofort geladen.
-            // Die Widget-Erkennung läuft anschließend zusätzlich und kann
-            // pro Kachel einen eigenen Zustand verwenden.
+            // Sofortiger Browserzustand wie bei der Wärmepumpe; die stabile
+            // Widget-Erkennung verfeinert den Speicher anschließend pro Kachel.
             return $this->GetVisualizationHtml('flow')
-                . '<script>window.__EF_SERVER_GRID__=' . $gridPayload
-                . ';handleMessage(' . $payload . ');</script>';
+                . '<script>window.__EF_SERVER_GRID__=' . $gridPayload . ';handleMessage(' . $payload . ');</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
     }
-
 
     private function GetVisualizationGridPayload(): ?array
     {
@@ -1142,7 +1139,6 @@ class Energiefluss extends IPSModuleStrict
         }
         return $widgetID;
     }
-
 
     private function GetVisualizationHtml(string $displayMode): string
     {
@@ -6818,69 +6814,6 @@ class Energiefluss extends IPSModuleStrict
      *
      * Datenupdates ändern die lokal gewählte Ansicht anschließend nicht mehr.
      */
-    const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
-    const TECHNICAL_LAYOUT_STORAGE_KEY =
-        'symcon-energiefluss-technical-layout';
-
-    let currentDisplayMode = 'flow';
-    let currentTechnicalLayout = 'lite';
-    let browserViewStateInitialized = false;
-
-    function initializeBrowserViewState() {
-        if (browserViewStateInitialized) {
-            return;
-        }
-
-        browserViewStateInitialized = true;
-
-        try {
-            const storedView =
-                window.localStorage.getItem(VIEW_STORAGE_KEY);
-
-            if (
-                storedView === 'flow'
-                || storedView === 'house'
-            ) {
-                currentDisplayMode = storedView;
-            }
-
-            const storedTechnicalLayout =
-                window.localStorage.getItem(
-                    TECHNICAL_LAYOUT_STORAGE_KEY
-                );
-
-            if (
-                [
-                    'compact',
-                    'compact-wide',
-                    'lite',
-                    'lite-wide',
-                    'full',
-                    'full-wide'
-                ].includes(storedTechnicalLayout)
-            ) {
-                currentTechnicalLayout =
-                    storedTechnicalLayout;
-            }
-        } catch (error) {
-            // LocalStorage ist optional.
-        }
-
-        updateTechnicalLayoutButtons();
-        updateDisplayModeButton();
-    }
-
-
-    /*
-     * Zusätzliche stabile Widget-Erkennung aus der funktionierenden
-     * Widget-Version. Der Wärmepumpen-ähnliche Browserzustand bleibt der
-     * sofortige Startwert.
-     */
-    let VISUALIZATION_STORAGE_SCOPE = null;
-    let WIDGET_VIEW_STORAGE_KEY = null;
-    let WIDGET_TECHNICAL_LAYOUT_STORAGE_KEY = null;
-    let widgetStorageInitialized = false;
-
     function getVisualizationStorageScope() {
         const parseMaybeJson = value => {
             if (value == null) return null;
@@ -7129,64 +7062,33 @@ class Energiefluss extends IPSModuleStrict
     // zu früh ermittelt werden. Das Parent-Grid wird asynchron aufgebaut.
     // Deshalb werden Storage-Keys erst gesetzt, sobald zweimal hintereinander
     // dieselbe echte widget-XXXXX-ID erkannt wurde.
+    const GLOBAL_VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
+    const GLOBAL_TECHNICAL_LAYOUT_STORAGE_KEY =
+        'symcon-energiefluss-technical-layout';
+
     let VISUALIZATION_STORAGE_SCOPE = null;
-    let VIEW_STORAGE_KEY = null;
-    let TECHNICAL_LAYOUT_STORAGE_KEY = null;
+    let VIEW_STORAGE_KEY = GLOBAL_VIEW_STORAGE_KEY;
+    let TECHNICAL_LAYOUT_STORAGE_KEY =
+        GLOBAL_TECHNICAL_LAYOUT_STORAGE_KEY;
+
     let currentDisplayMode = 'flow';
     let currentTechnicalLayout = 'lite';
+    let browserViewStateInitialized = false;
+    let widgetDetectionStarted = false;
 
-    function getEnergyFlowStorage() {
-        try {
-            if (window.parent && window.parent !== window) {
-                return window.parent.localStorage;
-            }
-        } catch (_) {}
-        return window.localStorage;
-    }
-
-    function getCurrentWidgetScope() {
-        if (/^widget-\d+$/.test(String(VISUALIZATION_STORAGE_SCOPE || ''))) {
-            return VISUALIZATION_STORAGE_SCOPE;
-        }
-
-        // Falls die stabile Initialisierung noch nicht abgeschlossen ist,
-        // die aktuell bereits erkennbare Widgetnummer direkt verwenden.
-        try {
-            const scope = getVisualizationStorageScope();
-            if (/^widget-\d+$/.test(String(scope || ''))) {
-                return scope;
-            }
-        } catch (_) {}
-
-        return null;
-    }
-
-    function getWidgetStorageKey(scope, suffix) {
-        if (!/^widget-\d+$/.test(String(scope || ''))) {
-            return null;
-        }
-        return `symcon-energiefluss-${scope}-${suffix}`;
-    }
-
-    function activateVisualizationStorageScope(scope) {
-        if (!/^widget-\d+$/.test(String(scope || ''))) {
-            return false;
-        }
-
-        VISUALIZATION_STORAGE_SCOPE = scope;
-        VIEW_STORAGE_KEY = getWidgetStorageKey(scope, 'view');
-        TECHNICAL_LAYOUT_STORAGE_KEY =
-            getWidgetStorageKey(scope, 'technical-layout');
+    function readStoredViewState(viewKey, layoutKey) {
+        let foundView = false;
+        let foundLayout = false;
 
         try {
-            const storage = getEnergyFlowStorage();
-            const storedView = storage.getItem(VIEW_STORAGE_KEY);
+            const storedView = window.localStorage.getItem(viewKey);
             if (storedView === 'flow' || storedView === 'house') {
                 currentDisplayMode = storedView;
+                foundView = true;
             }
 
             const storedTechnicalLayout =
-                storage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
+                window.localStorage.getItem(layoutKey);
             if ([
                 'compact',
                 'compact-wide',
@@ -7196,22 +7098,92 @@ class Energiefluss extends IPSModuleStrict
                 'full-wide'
             ].includes(storedTechnicalLayout)) {
                 currentTechnicalLayout = storedTechnicalLayout;
+                foundLayout = true;
             }
         } catch (_) {
             // LocalStorage ist optional.
         }
 
-        applyDisplayMode(currentDisplayMode);
+        return {foundView, foundLayout};
+    }
+
+    function initializeBrowserViewState() {
+        if (browserViewStateInitialized) {
+            return;
+        }
+
+        browserViewStateInitialized = true;
+
+        // Genau wie bei der Wärmepumpe: sofort die browserweit letzte Auswahl
+        // laden. Dadurch gibt es auf Mobil keinen Wartezustand.
+        readStoredViewState(
+            GLOBAL_VIEW_STORAGE_KEY,
+            GLOBAL_TECHNICAL_LAYOUT_STORAGE_KEY
+        );
+
         updateTechnicalLayoutButtons();
+        updateDisplayModeButton();
+    }
+
+    function activateVisualizationStorageScope(scope) {
+        if (!/^widget-\d+$/.test(String(scope || ''))) {
+            return false;
+        }
+
+        VISUALIZATION_STORAGE_SCOPE = scope;
+        VIEW_STORAGE_KEY = `symcon-energiefluss-${scope}-view`;
+        TECHNICAL_LAYOUT_STORAGE_KEY =
+            `symcon-energiefluss-${scope}-technical-layout`;
+
+        const previousView = currentDisplayMode;
+        const previousLayout = currentTechnicalLayout;
+        const found = readStoredViewState(
+            VIEW_STORAGE_KEY,
+            TECHNICAL_LAYOUT_STORAGE_KEY
+        );
+
+        // Beim ersten Einsatz der Widget-Speicherung den sofort geladenen
+        // Wärmepumpen-Zustand als Startwert für diese konkrete Kachel übernehmen.
+        try {
+            if (!found.foundView) {
+                currentDisplayMode = previousView;
+                window.localStorage.setItem(
+                    VIEW_STORAGE_KEY,
+                    currentDisplayMode
+                );
+            }
+            if (!found.foundLayout) {
+                currentTechnicalLayout = previousLayout;
+                window.localStorage.setItem(
+                    TECHNICAL_LAYOUT_STORAGE_KEY,
+                    currentTechnicalLayout
+                );
+            }
+        } catch (_) {
+            // LocalStorage ist optional.
+        }
+
+        updateTechnicalLayoutButtons();
+        updateDisplayModeButton();
+
+        // Die Kachel war bereits sofort sichtbar. Nur wenn der Widgetzustand
+        // vom globalen Fallback abweicht, die Darstellung jetzt korrigieren.
         if (lastStateData) {
             setState(lastStateData);
         } else {
+            applyDisplayMode(currentDisplayMode);
             fit();
         }
+
         return true;
     }
 
     function initializeVisualizationStorageScope() {
+        if (widgetDetectionStarted) {
+            return;
+        }
+        widgetDetectionStarted = true;
+
         let attempts = 0;
         let previous = '';
         let stableCount = 0;
@@ -7220,6 +7192,7 @@ class Energiefluss extends IPSModuleStrict
             attempts++;
             const scope = getVisualizationStorageScope();
 
+            // Bewährte Reload-Sicherheit: erst zwei identische Treffer.
             if (/^widget-\d+$/.test(scope)) {
                 if (scope === previous) {
                     stableCount++;
@@ -7237,115 +7210,28 @@ class Energiefluss extends IPSModuleStrict
                 stableCount = 0;
             }
 
-            // Flutter braucht nach F5 je nach Seite einige Frames, bis alle
-            // Plattform-Views ihre endgültige Geometrie besitzen.
             if (attempts < 40) {
-                window.setTimeout(probe, 150);
+                window.setTimeout(probe, 100);
             }
         };
 
-        requestAnimationFrame(() => window.setTimeout(probe, 50));
-    }
-
-
-    function activateWidgetStorageScope(scope) {
-        if (!/^widget-\d+$/.test(String(scope || ''))) {
-            return false;
-        }
-
-        VISUALIZATION_STORAGE_SCOPE = scope;
-        WIDGET_VIEW_STORAGE_KEY =
-            `symcon-energiefluss-${scope}-view`;
-        WIDGET_TECHNICAL_LAYOUT_STORAGE_KEY =
-            `symcon-energiefluss-${scope}-technical-layout`;
-
-        try {
-            const storedView =
-                window.localStorage.getItem(WIDGET_VIEW_STORAGE_KEY);
-
-            if (storedView === 'flow' || storedView === 'house') {
-                currentDisplayMode = storedView;
-            }
-
-            const storedTechnicalLayout =
-                window.localStorage.getItem(
-                    WIDGET_TECHNICAL_LAYOUT_STORAGE_KEY
-                );
-
-            if ([
-                'compact',
-                'compact-wide',
-                'lite',
-                'lite-wide',
-                'full',
-                'full-wide'
-            ].includes(storedTechnicalLayout)) {
-                currentTechnicalLayout = storedTechnicalLayout;
-            }
-        } catch (_) {
-            // Browser-Fallback bleibt aktiv.
-        }
-
-        widgetStorageInitialized = true;
-        updateTechnicalLayoutButtons();
-        updateDisplayModeButton();
-
-        if (lastStateData) {
-            setState(lastStateData);
-        }
-
-        return true;
-    }
-
-    function initializeWidgetStorageScope() {
-        let attempts = 0;
-        let previous = '';
-        let stableCount = 0;
-
-        const probe = () => {
-            attempts++;
-            const scope = getVisualizationStorageScope();
-
-            if (/^widget-\d+$/.test(scope)) {
-                if (scope === previous) {
-                    stableCount++;
-                } else {
-                    previous = scope;
-                    stableCount = 1;
-                }
-
-                if (stableCount >= 2) {
-                    activateWidgetStorageScope(scope);
-                    return;
-                }
-            } else {
-                previous = '';
-                stableCount = 0;
-            }
-
-            if (attempts < 40) {
-                window.setTimeout(probe, 150);
-            }
-        };
-
-        requestAnimationFrame(() => window.setTimeout(probe, 50));
+        probe();
     }
 
     function storeTechnicalLayout() {
         try {
-            // Wärmepumpen-Prinzip bleibt immer bestehen.
+            // Aktiver Speicher: Widget-Key sobald erkannt, sonst Wärmepumpen-Fallback.
             window.localStorage.setItem(
                 TECHNICAL_LAYOUT_STORAGE_KEY,
                 currentTechnicalLayout
             );
 
-            // Sobald die Widget-ID bekannt ist, zusätzlich kachelspezifisch speichern.
-            if (WIDGET_TECHNICAL_LAYOUT_STORAGE_KEY) {
-                window.localStorage.setItem(
-                    WIDGET_TECHNICAL_LAYOUT_STORAGE_KEY,
-                    currentTechnicalLayout
-                );
-            }
+            // Browserweiten Fallback zusätzlich aktuell halten. Er wird nur für
+            // den sofortigen Start benutzt, bis die Widget-ID bestätigt ist.
+            window.localStorage.setItem(
+                GLOBAL_TECHNICAL_LAYOUT_STORAGE_KEY,
+                currentTechnicalLayout
+            );
         } catch (error) {
             // LocalStorage ist optional.
         }
@@ -7460,19 +7346,14 @@ class Energiefluss extends IPSModuleStrict
             currentDisplayMode = newMode;
 
             try {
-                // Wärmepumpen-Prinzip: browserweit sofort speichern.
                 window.localStorage.setItem(
                     VIEW_STORAGE_KEY,
                     currentDisplayMode
                 );
-
-                // Falls bereits erkannt, zusätzlich pro Widget speichern.
-                if (WIDGET_VIEW_STORAGE_KEY) {
-                    window.localStorage.setItem(
-                        WIDGET_VIEW_STORAGE_KEY,
-                        currentDisplayMode
-                    );
-                }
+                window.localStorage.setItem(
+                    GLOBAL_VIEW_STORAGE_KEY,
+                    currentDisplayMode
+                );
             } catch (error) {
                 // LocalStorage ist optional.
             }
@@ -7812,18 +7693,15 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        // Wie bei der Wärmepumpe: den gespeicherten Browserzustand genau
-        // einmal unmittelbar vor dem ersten Aufbau der Karte laden.
+        // Wie bei der Wärmepumpe: sofort den browserweiten Zustand laden.
         initializeBrowserViewState();
-
-        // Die stabile Widget-Erkennung kommt nur zusätzlich dazu.
-        // Sie verändert den sofortigen Browser-Start nicht.
-        if (!widgetStorageInitialized) {
-            initializeWidgetStorageScope();
-        }
 
         lastStateData = d;
         setState(d);
+
+        // Danach im Hintergrund die konkrete Kachel stabil erkennen und auf
+        // deren eigenen Speicher umschalten. Das blockiert den ersten Aufbau nicht.
+        initializeVisualizationStorageScope();
     }
 
     function refreshResponsiveState() {
