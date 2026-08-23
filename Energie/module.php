@@ -6694,7 +6694,77 @@ class Energiefluss extends IPSModuleStrict
      *
      * Die Auswahl wird lokal im Browser/Handy gespeichert.
      */
-    const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
+    /*
+     * Jede konkrete IP-Symcon-Visukachel erhält einen eigenen Browser-Slot.
+     *
+     * Symcon bettet zwei Kacheln derselben Energiefluss-Instanz z. B. als
+     * /visu/36446/ ein. Der Token in der URL ist absichtlich NICHT Teil des
+     * Schlüssels, weil er sich ändern kann. Stattdessen verwenden wir:
+     *
+     *   Visu-ID + Reihenfolge unter den iframes mit derselben Visu-ID
+     *
+     * Beispiel bei zwei Kacheln derselben Instanz:
+     *   visu-36446-slot-1
+     *   visu-36446-slot-2
+     */
+    function getVisualizationStorageScope() {
+        let visuId = 'unknown';
+        let slot = 1;
+
+        const extractVisuId = value => {
+            try {
+                const url = new URL(String(value || ''), window.location.href);
+                const match = url.pathname.match(/\/visu\/(\d+)(?:\/|$)/i);
+                return match ? match[1] : null;
+            } catch (_) {
+                return null;
+            }
+        };
+
+        try {
+            visuId = extractVisuId(window.location.href) || visuId;
+
+            if (
+                window.parent
+                && window.parent !== window
+                && window.frameElement
+            ) {
+                const parentDocument = window.parent.document;
+                const currentFrame = window.frameElement;
+                const currentVisuId =
+                    extractVisuId(currentFrame.getAttribute('src'))
+                    || extractVisuId(currentFrame.src)
+                    || visuId;
+
+                if (currentVisuId) {
+                    visuId = currentVisuId;
+
+                    const matchingFrames = Array.from(
+                        parentDocument.querySelectorAll('iframe')
+                    ).filter(frame => {
+                        return (
+                            extractVisuId(frame.getAttribute('src'))
+                            || extractVisuId(frame.src)
+                        ) === currentVisuId;
+                    });
+
+                    const index = matchingFrames.indexOf(currentFrame);
+                    if (index >= 0) {
+                        slot = index + 1;
+                    }
+                }
+            }
+        } catch (_) {
+            // Falls der Parent-Kontext wider Erwarten nicht lesbar ist,
+            // bleibt der sichere Fallback visu-<ID>-slot-1 aktiv.
+        }
+
+        return `visu-${visuId}-slot-${slot}`;
+    }
+
+    const VISUALIZATION_STORAGE_SCOPE = getVisualizationStorageScope();
+    const VIEW_STORAGE_KEY =
+        `symcon-energiefluss-${VISUALIZATION_STORAGE_SCOPE}-view`;
     let currentDisplayMode = 'flow';
 
     try {
@@ -6714,7 +6784,8 @@ class Energiefluss extends IPSModuleStrict
      * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
      * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
      */
-    const TECHNICAL_LAYOUT_STORAGE_KEY = 'symcon-energiefluss-technical-layout';
+    const TECHNICAL_LAYOUT_STORAGE_KEY =
+        `symcon-energiefluss-${VISUALIZATION_STORAGE_SCOPE}-technical-layout`;
     let currentTechnicalLayout = 'lite';
 
     try {
