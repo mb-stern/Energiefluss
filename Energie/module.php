@@ -1183,6 +1183,7 @@ class Energiefluss extends IPSModuleStrict
 
     #eflow {
         width: 100%;
+        visibility: hidden;
         height: 100vh;
         box-sizing: border-box;
         border-radius: 12px;
@@ -6858,116 +6859,38 @@ class Energiefluss extends IPSModuleStrict
         };
 
         const getGridConfiguration = () => {
-            /*
-             * Keine Annahme mehr darüber, ob dieser Browser ~Desktop oder
-             * ~Phone verwendet. Stattdessen werden ALLE verfügbaren Grid-
-             * Profile und beide Ausrichtungen gesammelt. Der bestehende
-             * Geometrie-Matcher entscheidet danach automatisch, welcher
-             * Container tatsächlich zu den aktuell sichtbaren iframes passt.
-             *
-             * So funktioniert dieselbe Logik auf Desktop, Tablet und Handy.
-             */
-            const merged = {
-                landscape: {
-                    individualPositions: {},
-                    individualDimensions: {}
-                }
-            };
-
-            let sourceIndex = 0;
-
-            const addLayout = layout => {
-                if (!layout || typeof layout !== 'object') {
-                    return;
-                }
-
-                const positions = layout.individualPositions || {};
-                const dimensions = layout.individualDimensions || {};
-
-                Object.entries(dimensions).forEach(([widgetId, dim]) => {
-                    if (dim && typeof dim === 'object') {
-                        merged.landscape.individualDimensions[widgetId] = dim;
-                    }
-                });
-
-                Object.entries(positions).forEach(([containerId, widgets]) => {
-                    if (!widgets || typeof widgets !== 'object') {
-                        return;
-                    }
-
-                    // Derselbe Container kann in Desktop/Phone oder Hoch-/Quer-
-                    // format mit anderen Positionen vorkommen. Deshalb bekommt
-                    // jede Variante intern einen eigenen Namen.
-                    const mergedId = `${sourceIndex}:${containerId}`;
-                    merged.landscape.individualPositions[mergedId] = widgets;
-                });
-
-                sourceIndex++;
-            };
-
-            const collectLayouts = raw => {
-                const cfg = parseMaybeJson(raw);
-                if (!cfg || typeof cfg !== 'object') {
-                    return;
-                }
-
-                // Lokale gridConfig-Dateien.
-                addLayout(cfg.landscape);
-                addLayout(cfg.portrait);
-
-                // Snapshot-Strukturen mit benannten Profilen.
-                ['~Desktop', '~Phone', '~Tablet'].forEach(profileName => {
-                    const profile = cfg[profileName];
-                    if (!profile || typeof profile !== 'object') {
-                        return;
-                    }
-                    addLayout(profile.landscape);
-                    addLayout(profile.portrait);
-                });
-            };
-
-            // Zuerst alle lokalen Grid-Konfigurationen dieses visuID sammeln.
+            // Lokale Grid-Konfiguration bevorzugen: Sie entspricht exakt dem
+            // Layout dieses Browsers/Geräts.
             try {
-                const visuID =
-                    new URL(window.location.href).searchParams.get('visuID');
-                const storage =
-                    window.parent.localStorage || window.localStorage;
-                const keys = Object.keys(storage);
-
-                keys
-                    .filter(key => {
-                        if (!/-gridConfig$/.test(key)) {
-                            return false;
-                        }
-                        if (!/^flutter\./.test(key)) {
-                            return false;
-                        }
-                        return !visuID ||
-                            key.startsWith(`flutter.${visuID}-`);
-                    })
-                    .forEach(key => collectLayouts(storage.getItem(key)));
+                const visuID = new URL(window.location.href).searchParams.get('visuID');
+                const keys = Object.keys(window.parent.localStorage || window.localStorage);
+                let key = null;
+                if (visuID) {
+                    key = keys.find(k => k === `flutter.${visuID}-~Desktop-gridConfig`) || null;
+                }
+                if (!key) {
+                    key = keys.find(k => /flutter\.\d+-~Desktop-gridConfig$/.test(k)) || null;
+                }
+                if (key) {
+                    const storage = window.parent.localStorage || window.localStorage;
+                    const cfg = parseMaybeJson(storage.getItem(key));
+                    if (cfg && typeof cfg === 'object') {
+                        return cfg;
+                    }
+                }
             } catch (_) {
-                // Server-Snapshot folgt.
+                // Snapshot-Fallback folgt.
             }
 
-            // Zusätzlich alle serverseitig bekannten Profile einsammeln.
             try {
                 const server = window.__EF_SERVER_GRID__;
                 if (server && server.grid) {
-                    collectLayouts(server.grid);
+                    return parseMaybeJson(server.grid);
                 }
             } catch (_) {
-                // Kein Snapshot verfügbar.
+                // Kein Grid verfügbar.
             }
-
-            if (
-                Object.keys(merged.landscape.individualPositions).length === 0 ||
-                Object.keys(merged.landscape.individualDimensions).length === 0
-            ) {
-                return null;
-            }
-
-            return merged;
+            return null;
         };
 
         const grid = getGridConfiguration();
@@ -7173,6 +7096,17 @@ class Energiefluss extends IPSModuleStrict
     let TECHNICAL_LAYOUT_STORAGE_KEY = null;
     let currentDisplayMode = 'flow';
     let currentTechnicalLayout = 'lite';
+    let visualizationStorageReady = false;
+
+    function revealVisualization() {
+        const eflow = document.getElementById('eflow');
+        if (!eflow) return;
+        requestAnimationFrame(() => {
+            requestAnimationFrame(() => {
+                eflow.style.visibility = 'visible';
+            });
+        });
+    }
 
     function activateVisualizationStorageScope(scope) {
         if (!/^widget-\d+$/.test(String(scope || ''))) {
@@ -7180,6 +7114,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         VISUALIZATION_STORAGE_SCOPE = scope;
+        visualizationStorageReady = true;
         VIEW_STORAGE_KEY = `symcon-energiefluss-${scope}-view`;
         TECHNICAL_LAYOUT_STORAGE_KEY =
             `symcon-energiefluss-${scope}-technical-layout`;
@@ -7211,8 +7146,11 @@ class Energiefluss extends IPSModuleStrict
         if (lastStateData) {
             setState(lastStateData);
         } else {
+            applyDisplayMode(currentDisplayMode);
+            updateTechnicalLayoutButtons();
             fit();
         }
+        revealVisualization();
         return true;
     }
 
@@ -7242,15 +7180,26 @@ class Energiefluss extends IPSModuleStrict
                 stableCount = 0;
             }
 
-            // Die bewährte Zwei-Treffer-Prüfung bleibt erhalten. Wir verkürzen
-            // nur das Intervall moderat; anders als reines requestAnimationFrame
-            // liegen die beiden Messungen weiterhin zeitlich auseinander.
-            if (attempts < 60) {
-                window.setTimeout(probe, 75);
+            // Flutter braucht nach F5 je nach Seite einige Frames, bis alle
+            // Plattform-Views ihre endgültige Geometrie besitzen.
+            if (attempts < 40) {
+                window.setTimeout(probe, 150);
+            } else {
+                // Sollte Symcon ausnahmsweise keine stabile Widget-ID liefern,
+                // bleibt die Kachel benutzbar. Es wird dann nur nichts unter
+                // einem unsicheren Fallback-Key gespeichert.
+                visualizationStorageReady = true;
+                if (lastStateData) {
+                    setState(lastStateData);
+                } else {
+                    applyDisplayMode(currentDisplayMode);
+                    fit();
+                }
+                revealVisualization();
             }
         };
 
-        requestAnimationFrame(() => window.setTimeout(probe, 20));
+        requestAnimationFrame(() => window.setTimeout(probe, 50));
     }
 
     function storeTechnicalLayout() {
@@ -7723,7 +7672,13 @@ class Energiefluss extends IPSModuleStrict
         }
 
         lastStateData = d;
-        setState(d);
+        // Vor der stabilen Widget-Erkennung noch nichts mit dem Default-Layout
+        // rendern. So gibt es beim Reload kein sichtbares Lite/Compact -> Large/
+        // Full-Umspringen. activateVisualizationStorageScope() baut anschließend
+        // direkt die gespeicherte Ansicht auf.
+        if (visualizationStorageReady) {
+            setState(d);
+        }
     }
 
     function refreshResponsiveState() {
