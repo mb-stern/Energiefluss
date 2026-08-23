@@ -6721,8 +6721,29 @@ class Energiefluss extends IPSModuleStrict
         );
     }
 
-    // Die View ist reine UI-Zustand: bei jedem Laden zuerst Sunsynk.
+    /*
+     * Umschaltansicht wie beim Wärmepumpenmodul.
+     * flow  = Sunsynk
+     * house = Hausansicht
+     *
+     * Die Auswahl wird lokal im Browser/Handy gespeichert.
+     */
+    const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
     let currentDisplayMode = 'flow';
+
+    try {
+        const storedView =
+            window.localStorage.getItem(VIEW_STORAGE_KEY);
+
+        if (
+            storedView === 'flow'
+            || storedView === 'house'
+        ) {
+            currentDisplayMode = storedView;
+        }
+    } catch (error) {
+        // LocalStorage ist optional.
+    }
     let currentTechnicalLayout = 'lite';
 
     function updateTechnicalLayoutButtons() {
@@ -6821,7 +6842,18 @@ class Energiefluss extends IPSModuleStrict
     if (displayModeButton) {
         displayModeButton.addEventListener('click', function () {
             const newMode = currentDisplayMode === 'house' ? 'flow' : 'house';
-            applyDisplayMode(newMode);
+            currentDisplayMode = newMode;
+
+            try {
+                window.localStorage.setItem(
+                    VIEW_STORAGE_KEY,
+                    currentDisplayMode
+                );
+            } catch (error) {
+                // LocalStorage ist optional.
+            }
+
+            applyDisplayMode(currentDisplayMode);
 
             // Die beiden Views haben unterschiedliche Zeichenflächen. Nach dem
             // lokalen Umschalten deshalb nur neu skalieren – ohne ApplyChanges
