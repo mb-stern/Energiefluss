@@ -1017,136 +1017,12 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            $gridPayload = json_encode(
-                $this->GetVisualizationGridPayload(),
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-            );
-
-            // Standard bleibt Sunsynk. Der tatsächlich zuletzt gewählte Zustand
-            // wird im Browser pro stabiler IPSView-Widget-ID wiederhergestellt.
+            // Jede neu geladene Visualisierung startet in der Sunsynk-Ansicht.
             return $this->GetVisualizationHtml('flow')
-                . '<script>window.__EF_SERVER_GRID__=' . $gridPayload . ';handleMessage(' . $payload . ');</script>';
+                . '<script>handleMessage(' . $payload . ');</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
-    }
-
-    /**
-     * Liefert – sofern der aktuelle Tile-Aufruf die visuID enthält – die
-     * serverseitige GridConfiguration der Tile-Visualisierung.
-     *
-     * Im Browser wird bevorzugt die lokale Desktop-gridConfig verwendet, weil
-     * sie lokale Geräteanpassungen enthalten kann. Dieser Snapshot ist der
-     * stabile serverseitige Fallback und vermeidet eine Abhängigkeit von
-     * flüchtigen Flutter-DOM-IDs.
-     */
-    private function GetVisualizationGridPayload(): ?array
-    {
-        try {
-            $visuID = isset($_GET['visuID']) ? (int) $_GET['visuID'] : 0;
-            if ($visuID <= 0 || !function_exists('VISU_GetSnapshot')) {
-                return null;
-            }
-
-            $snapshotRaw = VISU_GetSnapshot($visuID);
-            $snapshot = is_string($snapshotRaw)
-                ? json_decode($snapshotRaw, true, 512, JSON_THROW_ON_ERROR)
-                : $snapshotRaw;
-
-            if (!is_array($snapshot)) {
-                return null;
-            }
-
-            $objectKey = 'ID' . $visuID;
-            $gridRaw = $snapshot['objects'][$objectKey]['data']['attributes']['GridConfiguration'] ?? null;
-            if ($gridRaw === null) {
-                return null;
-            }
-
-            $grid = is_string($gridRaw)
-                ? json_decode($gridRaw, true, 512, JSON_THROW_ON_ERROR)
-                : $gridRaw;
-
-            if (!is_array($grid)) {
-                return null;
-            }
-
-            // Die Grid-Widget-IDs sind echte Symcon-Objekt-/Link-IDs. Für
-            // Links lösen wir das Zielobjekt auf. Damit kann JavaScript später
-            // /visu/36446/ direkt gegen die zugehörigen Link-Widgets filtern.
-            $widgetTargets = [];
-            foreach ($this->CollectVisualizationWidgetIDs($grid) as $widgetID) {
-                $targetID = $this->ResolveVisualizationWidgetTarget($widgetID);
-                if ($targetID > 0) {
-                    $widgetTargets[(string) $widgetID] = $targetID;
-                }
-            }
-
-            return [
-                'visuID'  => $visuID,
-                'grid'    => $grid,
-                'targets' => $widgetTargets
-            ];
-        } catch (Throwable $e) {
-            return null;
-        }
-    }
-
-    /**
-     * Sammelt alle Widget-IDs aus sämtlichen individualPositions-Blöcken der
-     * GridConfiguration, unabhängig von Profil (~Desktop/~Phone) und Ausrichtung.
-     */
-    private function CollectVisualizationWidgetIDs(array $node): array
-    {
-        $ids = [];
-        $walk = function ($value) use (&$walk, &$ids): void {
-            if (!is_array($value)) {
-                return;
-            }
-            foreach ($value as $key => $child) {
-                if ($key === 'individualPositions' && is_array($child)) {
-                    foreach ($child as $containerWidgets) {
-                        if (!is_array($containerWidgets)) {
-                            continue;
-                        }
-                        foreach (array_keys($containerWidgets) as $widgetID) {
-                            if (is_numeric($widgetID)) {
-                                $ids[(int) $widgetID] = true;
-                            }
-                        }
-                    }
-                }
-                if (is_array($child)) {
-                    $walk($child);
-                }
-            }
-        };
-        $walk($node);
-        return array_keys($ids);
-    }
-
-    /**
-     * Liefert für eine Kachel-ID das eigentliche Zielobjekt. Ist die Kachel ein
-     * Link, wird dessen TargetID verwendet; ansonsten ist die Widget-ID selbst
-     * das Zielobjekt.
-     */
-    private function ResolveVisualizationWidgetTarget(int $widgetID): int
-    {
-        if ($widgetID <= 0 || !IPS_ObjectExists($widgetID)) {
-            return 0;
-        }
-        try {
-            $object = IPS_GetObject($widgetID);
-            // ObjectType 6 = Link
-            if ((int) ($object['ObjectType'] ?? -1) === 6 && function_exists('IPS_GetLink')) {
-                $link = IPS_GetLink($widgetID);
-                $targetID = (int) ($link['TargetID'] ?? 0);
-                return $targetID > 0 ? $targetID : $widgetID;
-            }
-        } catch (Throwable $e) {
-            return $widgetID;
-        }
-        return $widgetID;
     }
 
     private function GetVisualizationHtml(string $displayMode): string
@@ -6818,416 +6694,56 @@ class Energiefluss extends IPSModuleStrict
      *
      * Die Auswahl wird lokal im Browser/Handy gespeichert.
      */
-    /*
-     * Jede konkrete IP-Symcon-Visukachel erhält einen eigenen Browser-Slot.
-     *
-     * Symcon bettet zwei Kacheln derselben Energiefluss-Instanz z. B. als
-     * /visu/36446/ ein. Der Token in der URL ist absichtlich NICHT Teil des
-     * Schlüssels, weil er sich ändern kann. Stattdessen verwenden wir:
-     *
-     *   Visu-ID + Reihenfolge unter den iframes mit derselben Visu-ID
-     *
-     * Beispiel bei zwei Kacheln derselben Instanz:
-     *   visu-36446-slot-1
-     *   visu-36446-slot-2
-     */
-    /**
-     * Ermittelt die feste IPSView-Widget-ID der konkreten Kachel automatisch.
-     *
-     * Datenquellen:
-     *   1. lokale flutter.*Desktop-gridConfig (passt zur lokalen Geräteansicht)
-     *   2. serverseitiger VISU_GetSnapshot()-Fallback aus PHP
-     *
-     * Die Zuordnung erfolgt geometrisch: Die aktuell sichtbaren iframes werden
-     * gegen individualPositions + individualDimensions aller Container gematcht.
-     * Dadurch sind weder Seiten-ID noch Widget-ID noch Slot hart codiert.
-     */
-    function getVisualizationStorageScope() {
-        const parseMaybeJson = value => {
-            if (value == null) return null;
-            if (typeof value === 'object') return value;
-            try {
-                let parsed = JSON.parse(String(value));
-                if (typeof parsed === 'string') {
-                    parsed = JSON.parse(parsed);
-                }
-                return parsed;
-            } catch (_) {
-                return null;
-            }
-        };
-
-        const getGridConfiguration = () => {
-            // Lokale Grid-Konfiguration bevorzugen: Sie entspricht exakt dem
-            // Layout dieses Browsers/Geräts.
-            try {
-                const visuID = new URL(window.location.href).searchParams.get('visuID');
-                const keys = Object.keys(window.parent.localStorage || window.localStorage);
-                let key = null;
-                if (visuID) {
-                    key = keys.find(k => k === `flutter.${visuID}-~Desktop-gridConfig`) || null;
-                }
-                if (!key) {
-                    key = keys.find(k => /flutter\.\d+-~Desktop-gridConfig$/.test(k)) || null;
-                }
-                if (key) {
-                    const storage = window.parent.localStorage || window.localStorage;
-                    const cfg = parseMaybeJson(storage.getItem(key));
-                    if (cfg && typeof cfg === 'object') {
-                        return cfg;
-                    }
-                }
-            } catch (_) {
-                // Snapshot-Fallback folgt.
-            }
-
-            try {
-                const server = window.__EF_SERVER_GRID__;
-                if (server && server.grid) {
-                    return parseMaybeJson(server.grid);
-                }
-            } catch (_) {
-                // Kein Grid verfügbar.
-            }
-            return null;
-        };
-
-        const grid = getGridConfiguration();
-        if (!grid || !grid.landscape) {
-            return 'widget-fallback';
-        }
-
-        try {
-            if (!window.parent || window.parent === window || !window.frameElement) {
-                return 'widget-standalone';
-            }
-
-            const parentDocument = window.parent.document;
-            const currentFrame = window.frameElement;
-            const frames = Array.from(parentDocument.querySelectorAll('iframe'))
-                .filter(frame => {
-                    const r = frame.getBoundingClientRect();
-                    return r.width > 40 && r.height > 40;
-                });
-
-            const currentIndex = frames.indexOf(currentFrame);
-            if (currentIndex < 0 || !frames.length) {
-                return 'widget-fallback';
-            }
-
-            const frameRects = frames.map(frame => {
-                const r = frame.getBoundingClientRect();
-                const src = frame.getAttribute('src') || '';
-                const visuMatch = src.match(/\/visu\/(\d+)\//);
-                return {
-                    frame,
-                    left: r.left,
-                    top: r.top,
-                    width: r.width,
-                    height: r.height,
-                    targetID: visuMatch ? Number(visuMatch[1]) : 0
-                };
-            });
-
-            const serverTargets = (() => {
-                try {
-                    const t = window.__EF_SERVER_GRID__ && window.__EF_SERVER_GRID__.targets;
-                    return t && typeof t === 'object' ? t : {};
-                } catch (_) {
-                    return {};
-                }
-            })();
-
-            const landscape = grid.landscape || {};
-            const positions = landscape.individualPositions || {};
-            const dimensions = landscape.individualDimensions || {};
-
-            let best = null;
-
-            const geometryCost = (fr, widget, transform) => {
-                const sx = transform.sx;
-                const sy = transform.sy;
-                const predicted = {
-                    left: transform.ox + widget.left * sx,
-                    top: transform.oy + widget.top * sy,
-                    width: widget.width * sx,
-                    height: widget.height * sy
-                };
-
-                // Fehler in Rastereinheiten; so bleibt die Bewertung unabhängig
-                // von Auflösung und Browser-Zoom.
-                let cost = (
-                    Math.abs(fr.left - predicted.left) / Math.max(1, sx) +
-                    Math.abs(fr.top - predicted.top) / Math.max(1, sy) +
-                    Math.abs(fr.width - predicted.width) / Math.max(1, sx) +
-                    Math.abs(fr.height - predicted.height) / Math.max(1, sy)
-                );
-
-                // Wenn sowohl iframe als auch Grid-Widget ihr Symcon-Ziel kennen,
-                // darf ein anderes Ziel nicht geometrisch "gewinnen".
-                if (fr.targetID > 0 && widget.targetID > 0 && fr.targetID !== widget.targetID) {
-                    cost += 10000;
-                }
-                return cost;
-            };
-
-            Object.entries(positions).forEach(([containerId, widgetPositions]) => {
-                if (!widgetPositions || typeof widgetPositions !== 'object') return;
-
-                const widgets = Object.entries(widgetPositions)
-                    .map(([widgetId, pos]) => {
-                        const dim = dimensions[widgetId];
-                        if (!dim || !pos) return null;
-                        const width = Number(dim.width);
-                        const height = Number(dim.height);
-                        const left = Number(pos.left);
-                        const top = Number(pos.top);
-                        if (![width, height, left, top].every(Number.isFinite)) return null;
-                        const targetID = Number(serverTargets[String(widgetId)] || 0);
-                        return {widgetId, width, height, left, top, targetID};
-                    })
-                    .filter(Boolean);
-
-                if (!widgets.length || widgets.length < frameRects.length) return;
-
-                const currentTargetID = frameRects[currentIndex]?.targetID || 0;
-                if (currentTargetID > 0) {
-                    const hasCurrentTarget = widgets.some(w => w.targetID === currentTargetID);
-                    // Nur anwenden, wenn die serverseitige Zielauflösung für diesen
-                    // Container tatsächlich Informationen geliefert hat.
-                    const hasKnownTargets = widgets.some(w => w.targetID > 0);
-                    if (hasKnownTargets && !hasCurrentTarget) return;
-                }
-
-                // Jede Frame/Widget-Kombination einmal als Transformationsanker
-                // testen. Der richtige Container erzeugt über alle sichtbaren
-                // iframes hinweg einen nahezu identischen Rastermaßstab.
-                frameRects.forEach((anchorFrame, anchorFrameIndex) => {
-                    widgets.forEach(anchorWidget => {
-                        if (anchorFrame.targetID > 0 && anchorWidget.targetID > 0 &&
-                            anchorFrame.targetID !== anchorWidget.targetID) return;
-                        const sx = anchorFrame.width / Math.max(1, anchorWidget.width);
-                        const sy = anchorFrame.height / Math.max(1, anchorWidget.height);
-                        if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx < 10 || sy < 10) return;
-
-                        const transform = {
-                            sx,
-                            sy,
-                            ox: anchorFrame.left - anchorWidget.left * sx,
-                            oy: anchorFrame.top - anchorWidget.top * sy
-                        };
-
-                        const available = new Set(widgets.map((_, i) => i));
-                        const assignments = new Array(frameRects.length).fill(null);
-                        let totalCost = 0;
-
-                        // Den Anker fest zuordnen, anschließend die übrigen
-                        // Frames jeweils dem geometrisch besten freien Widget.
-                        const anchorWidgetIndex = widgets.indexOf(anchorWidget);
-                        assignments[anchorFrameIndex] = anchorWidget;
-                        available.delete(anchorWidgetIndex);
-                        totalCost += geometryCost(anchorFrame, anchorWidget, transform);
-
-                        const otherFrameIndexes = frameRects
-                            .map((_, i) => i)
-                            .filter(i => i !== anchorFrameIndex);
-
-                        for (const fi of otherFrameIndexes) {
-                            let bestWidgetIndex = -1;
-                            let bestCost = Infinity;
-                            for (const wi of available) {
-                                const cost = geometryCost(frameRects[fi], widgets[wi], transform);
-                                if (cost < bestCost) {
-                                    bestCost = cost;
-                                    bestWidgetIndex = wi;
-                                }
-                            }
-                            if (bestWidgetIndex < 0) {
-                                totalCost += 1000;
-                                continue;
-                            }
-                            assignments[fi] = widgets[bestWidgetIndex];
-                            available.delete(bestWidgetIndex);
-                            totalCost += bestCost;
-                        }
-
-                        // Viele zusätzliche Widgets sind erlaubt, aber ein kleiner
-                        // Malus bevorzugt den Container, der die sichtbare Seite
-                        // tatsächlich am präzisesten beschreibt.
-                        // Ein ähnlich aussehender großer Container einer anderen Seite
-                        // darf nicht nur wegen eines Teilmusters gewinnen. Deshalb deutlich
-                        // stärker bestrafen, wenn sehr viele zusätzliche Widgets vorhanden sind.
-                        totalCost += Math.max(0, widgets.length - frameRects.length) * 0.75;
-                        const averageCost = totalCost / frameRects.length;
-
-                        if (!best || averageCost < best.cost) {
-                            best = {
-                                cost: averageCost,
-                                containerId,
-                                assignments
-                            };
-                        }
-                    });
-                });
-            });
-
-            if (best && best.assignments[currentIndex]) {
-                const widgetId = best.assignments[currentIndex].widgetId;
-                // Nur hinreichend plausible Matches akzeptieren. Bei einem guten
-                // Grid-Match liegt der Wert typischerweise deutlich unter 1.
-                if (best.cost < 3.5) {
-                    return `widget-${widgetId}`;
-                }
-            }
-        } catch (_) {
-            // Sicherer Fallback weiter unten.
-        }
-
-        return 'widget-fallback';
-    }
-
-    // Die stabile Widget-ID darf nach einem vollständigen Flutter-Reload nicht
-    // zu früh ermittelt werden. Das Parent-Grid wird asynchron aufgebaut.
-    // Deshalb werden Storage-Keys erst gesetzt, sobald zweimal hintereinander
-    // dieselbe echte widget-XXXXX-ID erkannt wurde.
-    let VISUALIZATION_STORAGE_SCOPE = null;
-    let VIEW_STORAGE_KEY = null;
-    let TECHNICAL_LAYOUT_STORAGE_KEY = null;
+    const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
     let currentDisplayMode = 'flow';
+
+    try {
+        const storedView =
+            window.localStorage.getItem(VIEW_STORAGE_KEY);
+
+        if (
+            storedView === 'flow'
+            || storedView === 'house'
+        ) {
+            currentDisplayMode = storedView;
+        }
+    } catch (error) {
+        // LocalStorage ist optional.
+    }
+    /*
+     * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
+     * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
+     */
+    const TECHNICAL_LAYOUT_STORAGE_KEY = 'symcon-energiefluss-technical-layout';
     let currentTechnicalLayout = 'lite';
 
-    function getEnergyFlowStorage() {
-        try {
-            if (window.parent && window.parent !== window) {
-                return window.parent.localStorage;
-            }
-        } catch (_) {}
-        return window.localStorage;
-    }
+    try {
+        const storedTechnicalLayout =
+            window.localStorage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
 
-    function getCurrentWidgetScope() {
-        if (/^widget-\d+$/.test(String(VISUALIZATION_STORAGE_SCOPE || ''))) {
-            return VISUALIZATION_STORAGE_SCOPE;
-        }
-
-        // Falls die stabile Initialisierung noch nicht abgeschlossen ist,
-        // die aktuell bereits erkennbare Widgetnummer direkt verwenden.
-        try {
-            const scope = getVisualizationStorageScope();
-            if (/^widget-\d+$/.test(String(scope || ''))) {
-                return scope;
-            }
-        } catch (_) {}
-
-        return null;
-    }
-
-    function getWidgetStorageKey(scope, suffix) {
-        if (!/^widget-\d+$/.test(String(scope || ''))) {
-            return null;
-        }
-        return `symcon-energiefluss-${scope}-${suffix}`;
-    }
-
-    function activateVisualizationStorageScope(scope) {
-        if (!/^widget-\d+$/.test(String(scope || ''))) {
-            return false;
-        }
-
-        VISUALIZATION_STORAGE_SCOPE = scope;
-        VIEW_STORAGE_KEY = getWidgetStorageKey(scope, 'view');
-        TECHNICAL_LAYOUT_STORAGE_KEY =
-            getWidgetStorageKey(scope, 'technical-layout');
-
-        try {
-            const storage = getEnergyFlowStorage();
-            const storedView = storage.getItem(VIEW_STORAGE_KEY);
-            if (storedView === 'flow' || storedView === 'house') {
-                currentDisplayMode = storedView;
-            }
-
-            const storedTechnicalLayout =
-                storage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
-            if ([
+        if (
+            [
                 'compact',
                 'compact-wide',
                 'lite',
                 'lite-wide',
                 'full',
                 'full-wide'
-            ].includes(storedTechnicalLayout)) {
-                currentTechnicalLayout = storedTechnicalLayout;
-            }
-        } catch (_) {
-            // LocalStorage ist optional.
+            ].includes(storedTechnicalLayout)
+        ) {
+            currentTechnicalLayout = storedTechnicalLayout;
         }
-
-        applyDisplayMode(currentDisplayMode);
-        updateTechnicalLayoutButtons();
-        if (lastStateData) {
-            setState(lastStateData);
-        } else {
-            fit();
-        }
-        return true;
-    }
-
-    function initializeVisualizationStorageScope() {
-        let attempts = 0;
-        let previous = '';
-        let stableCount = 0;
-
-        const probe = () => {
-            attempts++;
-            const scope = getVisualizationStorageScope();
-
-            if (/^widget-\d+$/.test(scope)) {
-                if (scope === previous) {
-                    stableCount++;
-                } else {
-                    previous = scope;
-                    stableCount = 1;
-                }
-
-                if (stableCount >= 2) {
-                    activateVisualizationStorageScope(scope);
-                    return;
-                }
-            } else {
-                previous = '';
-                stableCount = 0;
-            }
-
-            // Flutter braucht nach F5 je nach Seite einige Frames, bis alle
-            // Plattform-Views ihre endgültige Geometrie besitzen.
-            if (attempts < 40) {
-                window.setTimeout(probe, 150);
-            }
-        };
-
-        requestAnimationFrame(() => window.setTimeout(probe, 50));
+    } catch (error) {
+        // LocalStorage ist optional.
     }
 
     function storeTechnicalLayout() {
-        const scope = getCurrentWidgetScope();
-        const key = getWidgetStorageKey(scope, 'technical-layout');
-
-        if (!key) {
-            return;
-        }
-
-        // Sobald die Widgetnummer bekannt ist, wird unmittelbar genau unter
-        // dieser Nummer gespeichert – unabhängig davon, ob die langsame
-        // Initialisierung bereits vollständig abgeschlossen ist.
-        VISUALIZATION_STORAGE_SCOPE = scope;
-        TECHNICAL_LAYOUT_STORAGE_KEY = key;
-
         try {
-            getEnergyFlowStorage().setItem(
-                key,
+            window.localStorage.setItem(
+                TECHNICAL_LAYOUT_STORAGE_KEY,
                 currentTechnicalLayout
             );
-        } catch (_) {
+        } catch (error) {
             // LocalStorage ist optional.
         }
     }
@@ -7340,21 +6856,13 @@ class Energiefluss extends IPSModuleStrict
             const newMode = currentDisplayMode === 'house' ? 'flow' : 'house';
             currentDisplayMode = newMode;
 
-            const scope = getCurrentWidgetScope();
-            const viewKey = getWidgetStorageKey(scope, 'view');
-
-            if (viewKey) {
-                VISUALIZATION_STORAGE_SCOPE = scope;
-                VIEW_STORAGE_KEY = viewKey;
-
-                try {
-                    getEnergyFlowStorage().setItem(
-                        viewKey,
-                        currentDisplayMode
-                    );
-                } catch (_) {
-                    // LocalStorage ist optional.
-                }
+            try {
+                window.localStorage.setItem(
+                    VIEW_STORAGE_KEY,
+                    currentDisplayMode
+                );
+            } catch (error) {
+                // LocalStorage ist optional.
             }
 
             applyDisplayMode(currentDisplayMode);
@@ -7419,7 +6927,6 @@ class Energiefluss extends IPSModuleStrict
 
     updateTechnicalLayoutButtons();
     updateDisplayModeButton();
-    initializeVisualizationStorageScope();
 
     // ---------- Layout ----------
     let layoutWidth = 540;
