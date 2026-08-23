@@ -1017,12 +1017,128 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            // Jede neu geladene Visualisierung startet in der Sunsynk-Ansicht.
+            $gridPayload = json_encode(
+                $this->GetVisualizationGridPayload(),
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+
+            // Sofortiger Browserzustand wie bei der Wärmepumpe.
+            // Die Widget-ID wird anschließend nur ergänzend ermittelt.
             return $this->GetVisualizationHtml('flow')
-                . '<script>handleMessage(' . $payload . ');</script>';
+                . '<script>window.__EF_SERVER_GRID__=' . $gridPayload
+                . ';handleMessage(' . $payload . ');</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
+    }
+
+    private function GetVisualizationGridPayload(): ?array
+    {
+        try {
+            $visuID = isset($_GET['visuID']) ? (int) $_GET['visuID'] : 0;
+            if ($visuID <= 0 || !function_exists('VISU_GetSnapshot')) {
+                return null;
+            }
+
+            $snapshotRaw = VISU_GetSnapshot($visuID);
+            $snapshot = is_string($snapshotRaw)
+                ? json_decode($snapshotRaw, true, 512, JSON_THROW_ON_ERROR)
+                : $snapshotRaw;
+
+            if (!is_array($snapshot)) {
+                return null;
+            }
+
+            $objectKey = 'ID' . $visuID;
+            $gridRaw = $snapshot['objects'][$objectKey]['data']['attributes']['GridConfiguration'] ?? null;
+            if ($gridRaw === null) {
+                return null;
+            }
+
+            $grid = is_string($gridRaw)
+                ? json_decode($gridRaw, true, 512, JSON_THROW_ON_ERROR)
+                : $gridRaw;
+
+            if (!is_array($grid)) {
+                return null;
+            }
+
+            // Die Grid-Widget-IDs sind echte Symcon-Objekt-/Link-IDs. Für
+            // Links lösen wir das Zielobjekt auf. Damit kann JavaScript später
+            // /visu/36446/ direkt gegen die zugehörigen Link-Widgets filtern.
+            $widgetTargets = [];
+            foreach ($this->CollectVisualizationWidgetIDs($grid) as $widgetID) {
+                $targetID = $this->ResolveVisualizationWidgetTarget($widgetID);
+                if ($targetID > 0) {
+                    $widgetTargets[(string) $widgetID] = $targetID;
+                }
+            }
+
+            return [
+                'visuID'  => $visuID,
+                'grid'    => $grid,
+                'targets' => $widgetTargets
+            ];
+        } catch (Throwable $e) {
+            return null;
+        }
+    }
+
+    /**
+     * Sammelt alle Widget-IDs aus sämtlichen individualPositions-Blöcken der
+     * GridConfiguration, unabhängig von Profil (~Desktop/~Phone) und Ausrichtung.
+     */
+    private function CollectVisualizationWidgetIDs(array $node): array
+    {
+        $ids = [];
+        $walk = function ($value) use (&$walk, &$ids): void {
+            if (!is_array($value)) {
+                return;
+            }
+            foreach ($value as $key => $child) {
+                if ($key === 'individualPositions' && is_array($child)) {
+                    foreach ($child as $containerWidgets) {
+                        if (!is_array($containerWidgets)) {
+                            continue;
+                        }
+                        foreach (array_keys($containerWidgets) as $widgetID) {
+                            if (is_numeric($widgetID)) {
+                                $ids[(int) $widgetID] = true;
+                            }
+                        }
+                    }
+                }
+                if (is_array($child)) {
+                    $walk($child);
+                }
+            }
+        };
+        $walk($node);
+        return array_keys($ids);
+    }
+
+    /**
+     * Liefert für eine Kachel-ID das eigentliche Zielobjekt. Ist die Kachel ein
+     * Link, wird dessen TargetID verwendet; ansonsten ist die Widget-ID selbst
+     * das Zielobjekt.
+     */
+    private function ResolveVisualizationWidgetTarget(int $widgetID): int
+    {
+        if ($widgetID <= 0 || !IPS_ObjectExists($widgetID)) {
+            return 0;
+        }
+        try {
+            $object = IPS_GetObject($widgetID);
+            // ObjectType 6 = Link
+            if ((int) ($object['ObjectType'] ?? -1) === 6 && function_exists('IPS_GetLink')) {
+                $link = IPS_GetLink($widgetID);
+                $targetID = (int) ($link['TargetID'] ?? 0);
+                return $targetID > 0 ? $targetID : $widgetID;
+            }
+        } catch (Throwable $e) {
+            return $widgetID;
+        }
+        return $widgetID;
     }
 
     private function GetVisualizationHtml(string $displayMode): string
@@ -6688,61 +6804,455 @@ class Energiefluss extends IPSModuleStrict
     }
 
     /*
-     * Umschaltansicht wie beim Wärmepumpenmodul.
-     * flow  = Sunsynk
-     * house = Hausansicht
+     * Browserzustand nach demselben Prinzip wie beim Wärmepumpenmodul:
      *
-     * Die Auswahl wird lokal im Browser/Handy gespeichert.
+     * Nicht schon beim Parsen des HTML auf localStorage zugreifen, sondern
+     * genau einmal beim Eintreffen des ersten echten Payloads. Erst danach
+     * wird die Karte mit setState() aufgebaut.
+     *
+     * Dadurch ist der Ablauf:
+     *   Payload -> Browserzustand laden -> Karte aufbauen
+     *
+     * Datenupdates ändern die lokal gewählte Ansicht anschließend nicht mehr.
      */
     const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
+    const TECHNICAL_LAYOUT_STORAGE_KEY =
+        'symcon-energiefluss-technical-layout';
+
     let currentDisplayMode = 'flow';
-
-    try {
-        const storedView =
-            window.localStorage.getItem(VIEW_STORAGE_KEY);
-
-        if (
-            storedView === 'flow'
-            || storedView === 'house'
-        ) {
-            currentDisplayMode = storedView;
-        }
-    } catch (error) {
-        // LocalStorage ist optional.
-    }
-    /*
-     * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
-     * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
-     */
-    const TECHNICAL_LAYOUT_STORAGE_KEY = 'symcon-energiefluss-technical-layout';
     let currentTechnicalLayout = 'lite';
+    let browserViewStateInitialized = false;
 
-    try {
-        const storedTechnicalLayout =
-            window.localStorage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
+    function initializeBrowserViewState() {
+        if (browserViewStateInitialized) {
+            return;
+        }
 
-        if (
-            [
+        browserViewStateInitialized = true;
+
+        try {
+            const storedView =
+                window.localStorage.getItem(VIEW_STORAGE_KEY);
+
+            if (
+                storedView === 'flow'
+                || storedView === 'house'
+            ) {
+                currentDisplayMode = storedView;
+            }
+
+            const storedTechnicalLayout =
+                window.localStorage.getItem(
+                    TECHNICAL_LAYOUT_STORAGE_KEY
+                );
+
+            if (
+                [
+                    'compact',
+                    'compact-wide',
+                    'lite',
+                    'lite-wide',
+                    'full',
+                    'full-wide'
+                ].includes(storedTechnicalLayout)
+            ) {
+                currentTechnicalLayout =
+                    storedTechnicalLayout;
+            }
+        } catch (error) {
+            // LocalStorage ist optional.
+        }
+
+        updateTechnicalLayoutButtons();
+        updateDisplayModeButton();
+    }
+
+
+    /*
+     * Kachelspezifische Ergänzung.
+     * Die festen Browser-Keys oben bleiben unverändert und werden sofort
+     * wie beim Wärmepumpenmodul geladen.
+     */
+    let widgetStorageScope = null;
+    let widgetViewStorageKey = null;
+    let widgetTechnicalLayoutStorageKey = null;
+    let widgetDetectionStarted = false;
+    let widgetDetectionReady = false;
+
+    function getVisualizationStorageScope() {
+        const parseMaybeJson = value => {
+            if (value == null) return null;
+            if (typeof value === 'object') return value;
+            try {
+                let parsed = JSON.parse(String(value));
+                if (typeof parsed === 'string') {
+                    parsed = JSON.parse(parsed);
+                }
+                return parsed;
+            } catch (_) {
+                return null;
+            }
+        };
+
+        const getGridConfiguration = () => {
+            // Lokale Grid-Konfiguration bevorzugen: Sie entspricht exakt dem
+            // Layout dieses Browsers/Geräts.
+            try {
+                const visuID = new URL(window.location.href).searchParams.get('visuID');
+                const keys = Object.keys(window.parent.localStorage || window.localStorage);
+                let key = null;
+                if (visuID) {
+                    key = keys.find(k => k === `flutter.${visuID}-~Desktop-gridConfig`) || null;
+                }
+                if (!key) {
+                    key = keys.find(k => /flutter\.\d+-~Desktop-gridConfig$/.test(k)) || null;
+                }
+                if (key) {
+                    const storage = window.parent.localStorage || window.localStorage;
+                    const cfg = parseMaybeJson(storage.getItem(key));
+                    if (cfg && typeof cfg === 'object') {
+                        return cfg;
+                    }
+                }
+            } catch (_) {
+                // Snapshot-Fallback folgt.
+            }
+
+            try {
+                const server = window.__EF_SERVER_GRID__;
+                if (server && server.grid) {
+                    return parseMaybeJson(server.grid);
+                }
+            } catch (_) {
+                // Kein Grid verfügbar.
+            }
+            return null;
+        };
+
+        const grid = getGridConfiguration();
+        if (!grid || !grid.landscape) {
+            return 'widget-fallback';
+        }
+
+        try {
+            if (!window.parent || window.parent === window || !window.frameElement) {
+                return 'widget-standalone';
+            }
+
+            const parentDocument = window.parent.document;
+            const currentFrame = window.frameElement;
+            const frames = Array.from(parentDocument.querySelectorAll('iframe'))
+                .filter(frame => {
+                    const r = frame.getBoundingClientRect();
+                    return r.width > 40 && r.height > 40;
+                });
+
+            const currentIndex = frames.indexOf(currentFrame);
+            if (currentIndex < 0 || !frames.length) {
+                return 'widget-fallback';
+            }
+
+            const frameRects = frames.map(frame => {
+                const r = frame.getBoundingClientRect();
+                const src = frame.getAttribute('src') || '';
+                const visuMatch = src.match(/\/visu\/(\d+)\//);
+                return {
+                    frame,
+                    left: r.left,
+                    top: r.top,
+                    width: r.width,
+                    height: r.height,
+                    targetID: visuMatch ? Number(visuMatch[1]) : 0
+                };
+            });
+
+            const serverTargets = (() => {
+                try {
+                    const t = window.__EF_SERVER_GRID__ && window.__EF_SERVER_GRID__.targets;
+                    return t && typeof t === 'object' ? t : {};
+                } catch (_) {
+                    return {};
+                }
+            })();
+
+            const landscape = grid.landscape || {};
+            const positions = landscape.individualPositions || {};
+            const dimensions = landscape.individualDimensions || {};
+
+            let best = null;
+
+            const geometryCost = (fr, widget, transform) => {
+                const sx = transform.sx;
+                const sy = transform.sy;
+                const predicted = {
+                    left: transform.ox + widget.left * sx,
+                    top: transform.oy + widget.top * sy,
+                    width: widget.width * sx,
+                    height: widget.height * sy
+                };
+
+                // Fehler in Rastereinheiten; so bleibt die Bewertung unabhängig
+                // von Auflösung und Browser-Zoom.
+                let cost = (
+                    Math.abs(fr.left - predicted.left) / Math.max(1, sx) +
+                    Math.abs(fr.top - predicted.top) / Math.max(1, sy) +
+                    Math.abs(fr.width - predicted.width) / Math.max(1, sx) +
+                    Math.abs(fr.height - predicted.height) / Math.max(1, sy)
+                );
+
+                // Wenn sowohl iframe als auch Grid-Widget ihr Symcon-Ziel kennen,
+                // darf ein anderes Ziel nicht geometrisch "gewinnen".
+                if (fr.targetID > 0 && widget.targetID > 0 && fr.targetID !== widget.targetID) {
+                    cost += 10000;
+                }
+                return cost;
+            };
+
+            Object.entries(positions).forEach(([containerId, widgetPositions]) => {
+                if (!widgetPositions || typeof widgetPositions !== 'object') return;
+
+                const widgets = Object.entries(widgetPositions)
+                    .map(([widgetId, pos]) => {
+                        const dim = dimensions[widgetId];
+                        if (!dim || !pos) return null;
+                        const width = Number(dim.width);
+                        const height = Number(dim.height);
+                        const left = Number(pos.left);
+                        const top = Number(pos.top);
+                        if (![width, height, left, top].every(Number.isFinite)) return null;
+                        const targetID = Number(serverTargets[String(widgetId)] || 0);
+                        return {widgetId, width, height, left, top, targetID};
+                    })
+                    .filter(Boolean);
+
+                if (!widgets.length || widgets.length < frameRects.length) return;
+
+                const currentTargetID = frameRects[currentIndex]?.targetID || 0;
+                if (currentTargetID > 0) {
+                    const hasCurrentTarget = widgets.some(w => w.targetID === currentTargetID);
+                    // Nur anwenden, wenn die serverseitige Zielauflösung für diesen
+                    // Container tatsächlich Informationen geliefert hat.
+                    const hasKnownTargets = widgets.some(w => w.targetID > 0);
+                    if (hasKnownTargets && !hasCurrentTarget) return;
+                }
+
+                // Jede Frame/Widget-Kombination einmal als Transformationsanker
+                // testen. Der richtige Container erzeugt über alle sichtbaren
+                // iframes hinweg einen nahezu identischen Rastermaßstab.
+                frameRects.forEach((anchorFrame, anchorFrameIndex) => {
+                    widgets.forEach(anchorWidget => {
+                        if (anchorFrame.targetID > 0 && anchorWidget.targetID > 0 &&
+                            anchorFrame.targetID !== anchorWidget.targetID) return;
+                        const sx = anchorFrame.width / Math.max(1, anchorWidget.width);
+                        const sy = anchorFrame.height / Math.max(1, anchorWidget.height);
+                        if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx < 10 || sy < 10) return;
+
+                        const transform = {
+                            sx,
+                            sy,
+                            ox: anchorFrame.left - anchorWidget.left * sx,
+                            oy: anchorFrame.top - anchorWidget.top * sy
+                        };
+
+                        const available = new Set(widgets.map((_, i) => i));
+                        const assignments = new Array(frameRects.length).fill(null);
+                        let totalCost = 0;
+
+                        // Den Anker fest zuordnen, anschließend die übrigen
+                        // Frames jeweils dem geometrisch besten freien Widget.
+                        const anchorWidgetIndex = widgets.indexOf(anchorWidget);
+                        assignments[anchorFrameIndex] = anchorWidget;
+                        available.delete(anchorWidgetIndex);
+                        totalCost += geometryCost(anchorFrame, anchorWidget, transform);
+
+                        const otherFrameIndexes = frameRects
+                            .map((_, i) => i)
+                            .filter(i => i !== anchorFrameIndex);
+
+                        for (const fi of otherFrameIndexes) {
+                            let bestWidgetIndex = -1;
+                            let bestCost = Infinity;
+                            for (const wi of available) {
+                                const cost = geometryCost(frameRects[fi], widgets[wi], transform);
+                                if (cost < bestCost) {
+                                    bestCost = cost;
+                                    bestWidgetIndex = wi;
+                                }
+                            }
+                            if (bestWidgetIndex < 0) {
+                                totalCost += 1000;
+                                continue;
+                            }
+                            assignments[fi] = widgets[bestWidgetIndex];
+                            available.delete(bestWidgetIndex);
+                            totalCost += bestCost;
+                        }
+
+                        // Viele zusätzliche Widgets sind erlaubt, aber ein kleiner
+                        // Malus bevorzugt den Container, der die sichtbare Seite
+                        // tatsächlich am präzisesten beschreibt.
+                        // Ein ähnlich aussehender großer Container einer anderen Seite
+                        // darf nicht nur wegen eines Teilmusters gewinnen. Deshalb deutlich
+                        // stärker bestrafen, wenn sehr viele zusätzliche Widgets vorhanden sind.
+                        totalCost += Math.max(0, widgets.length - frameRects.length) * 0.75;
+                        const averageCost = totalCost / frameRects.length;
+
+                        if (!best || averageCost < best.cost) {
+                            best = {
+                                cost: averageCost,
+                                containerId,
+                                assignments
+                            };
+                        }
+                    });
+                });
+            });
+
+            if (best && best.assignments[currentIndex]) {
+                const widgetId = best.assignments[currentIndex].widgetId;
+                // Nur hinreichend plausible Matches akzeptieren. Bei einem guten
+                // Grid-Match liegt der Wert typischerweise deutlich unter 1.
+                if (best.cost < 3.5) {
+                    return `widget-${widgetId}`;
+                }
+            }
+        } catch (_) {
+            // Sicherer Fallback weiter unten.
+        }
+
+        return 'widget-fallback';
+    }
+
+    function activateDetectedWidgetScope(scope) {
+        if (!/^widget-\d+$/.test(String(scope || ''))) {
+            return false;
+        }
+
+        widgetStorageScope = scope;
+        widgetViewStorageKey =
+            `symcon-energiefluss-${scope}-view`;
+        widgetTechnicalLayoutStorageKey =
+            `symcon-energiefluss-${scope}-technical-layout`;
+
+        try {
+            const storedView =
+                window.localStorage.getItem(widgetViewStorageKey);
+
+            const storedLayout =
+                window.localStorage.getItem(
+                    widgetTechnicalLayoutStorageKey
+                );
+
+            // Existiert für diese Kachel bereits ein eigener Zustand,
+            // hat er Vorrang vor dem browserweiten Startwert.
+            if (storedView === 'flow' || storedView === 'house') {
+                currentDisplayMode = storedView;
+            }
+
+            if ([
                 'compact',
                 'compact-wide',
                 'lite',
                 'lite-wide',
                 'full',
                 'full-wide'
-            ].includes(storedTechnicalLayout)
-        ) {
-            currentTechnicalLayout = storedTechnicalLayout;
+            ].includes(storedLayout)) {
+                currentTechnicalLayout = storedLayout;
+            }
+
+            // Bei einer bislang unbekannten Kachel den bereits korrekt
+            // geladenen Browserzustand als Ausgangswert übernehmen.
+            if (storedView !== 'flow' && storedView !== 'house') {
+                window.localStorage.setItem(
+                    widgetViewStorageKey,
+                    currentDisplayMode
+                );
+            }
+
+            if (![
+                'compact',
+                'compact-wide',
+                'lite',
+                'lite-wide',
+                'full',
+                'full-wide'
+            ].includes(storedLayout)) {
+                window.localStorage.setItem(
+                    widgetTechnicalLayoutStorageKey,
+                    currentTechnicalLayout
+                );
+            }
+        } catch (_) {
+            // Browserweiter Zustand bleibt funktionsfähig.
         }
-    } catch (error) {
-        // LocalStorage ist optional.
+
+        widgetDetectionReady = true;
+        updateTechnicalLayoutButtons();
+        updateDisplayModeButton();
+
+        if (lastStateData) {
+            setState(lastStateData);
+        }
+
+        return true;
+    }
+
+    function startWidgetDetection() {
+        if (widgetDetectionStarted) {
+            return;
+        }
+        widgetDetectionStarted = true;
+
+        let attempts = 0;
+        let previous = '';
+        let stableCount = 0;
+
+        const probe = () => {
+            attempts++;
+            const scope = getVisualizationStorageScope();
+
+            if (/^widget-\d+$/.test(String(scope || ''))) {
+                if (scope === previous) {
+                    stableCount++;
+                } else {
+                    previous = scope;
+                    stableCount = 1;
+                }
+
+                // Exakt die bewährte Sicherheitsregel der funktionierenden
+                // Widget-Version: zwei identische Treffer hintereinander.
+                if (stableCount >= 2) {
+                    activateDetectedWidgetScope(scope);
+                    return;
+                }
+            } else {
+                previous = '';
+                stableCount = 0;
+            }
+
+            if (attempts < 40) {
+                window.setTimeout(probe, 150);
+            }
+        };
+
+        requestAnimationFrame(() => window.setTimeout(probe, 50));
     }
 
     function storeTechnicalLayout() {
         try {
+            // Wie bei der Wärmepumpe immer sofort browserweit speichern.
             window.localStorage.setItem(
                 TECHNICAL_LAYOUT_STORAGE_KEY,
                 currentTechnicalLayout
             );
+
+            // Nach erkannter Kachel zusätzlich kachelspezifisch speichern.
+            if (widgetTechnicalLayoutStorageKey) {
+                window.localStorage.setItem(
+                    widgetTechnicalLayoutStorageKey,
+                    currentTechnicalLayout
+                );
+            }
         } catch (error) {
             // LocalStorage ist optional.
         }
@@ -6861,6 +7371,13 @@ class Energiefluss extends IPSModuleStrict
                     VIEW_STORAGE_KEY,
                     currentDisplayMode
                 );
+
+                if (widgetViewStorageKey) {
+                    window.localStorage.setItem(
+                        widgetViewStorageKey,
+                        currentDisplayMode
+                    );
+                }
             } catch (error) {
                 // LocalStorage ist optional.
             }
@@ -7199,6 +7716,13 @@ class Energiefluss extends IPSModuleStrict
             window.location.reload();
             return;
         }
+
+        // Wie bei der Wärmepumpe: den gespeicherten Browserzustand genau
+        // einmal unmittelbar vor dem ersten Aufbau der Karte laden.
+        initializeBrowserViewState();
+
+        // Browseransicht sofort; Widget-Erkennung nur zusätzlich im Hintergrund.
+        startWidgetDetection();
 
         lastStateData = d;
         setState(d);
