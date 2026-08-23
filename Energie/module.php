@@ -1017,11 +1017,66 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            // Jede neu geladene Visualisierung startet in der Sunsynk-Ansicht.
+            $gridPayload = json_encode(
+                $this->GetVisualizationGridPayload(),
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+
+            // Standard bleibt Sunsynk. Der tatsächlich zuletzt gewählte Zustand
+            // wird im Browser pro stabiler IPSView-Widget-ID wiederhergestellt.
             return $this->GetVisualizationHtml('flow')
-                . '<script>handleMessage(' . $payload . ');</script>';
+                . '<script>window.__EF_SERVER_GRID__=' . $gridPayload . ';handleMessage(' . $payload . ');</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
+        }
+    }
+
+    /**
+     * Liefert – sofern der aktuelle Tile-Aufruf die visuID enthält – die
+     * serverseitige GridConfiguration der Tile-Visualisierung.
+     *
+     * Im Browser wird bevorzugt die lokale Desktop-gridConfig verwendet, weil
+     * sie lokale Geräteanpassungen enthalten kann. Dieser Snapshot ist der
+     * stabile serverseitige Fallback und vermeidet eine Abhängigkeit von
+     * flüchtigen Flutter-DOM-IDs.
+     */
+    private function GetVisualizationGridPayload(): ?array
+    {
+        try {
+            $visuID = isset($_GET['visuID']) ? (int) $_GET['visuID'] : 0;
+            if ($visuID <= 0 || !function_exists('VISU_GetSnapshot')) {
+                return null;
+            }
+
+            $snapshotRaw = VISU_GetSnapshot($visuID);
+            $snapshot = is_string($snapshotRaw)
+                ? json_decode($snapshotRaw, true, 512, JSON_THROW_ON_ERROR)
+                : $snapshotRaw;
+
+            if (!is_array($snapshot)) {
+                return null;
+            }
+
+            $objectKey = 'ID' . $visuID;
+            $gridRaw = $snapshot['objects'][$objectKey]['data']['attributes']['GridConfiguration'] ?? null;
+            if ($gridRaw === null) {
+                return null;
+            }
+
+            $grid = is_string($gridRaw)
+                ? json_decode($gridRaw, true, 512, JSON_THROW_ON_ERROR)
+                : $gridRaw;
+
+            if (!is_array($grid)) {
+                return null;
+            }
+
+            return [
+                'visuID' => $visuID,
+                'grid'   => $grid
+            ];
+        } catch (Throwable $e) {
+            return null;
         }
     }
 
@@ -6707,128 +6762,225 @@ class Energiefluss extends IPSModuleStrict
      *   visu-36446-slot-1
      *   visu-36446-slot-2
      */
+    /**
+     * Ermittelt die feste IPSView-Widget-ID der konkreten Kachel automatisch.
+     *
+     * Datenquellen:
+     *   1. lokale flutter.*Desktop-gridConfig (passt zur lokalen Geräteansicht)
+     *   2. serverseitiger VISU_GetSnapshot()-Fallback aus PHP
+     *
+     * Die Zuordnung erfolgt geometrisch: Die aktuell sichtbaren iframes werden
+     * gegen individualPositions + individualDimensions aller Container gematcht.
+     * Dadurch sind weder Seiten-ID noch Widget-ID noch Slot hart codiert.
+     */
     function getVisualizationStorageScope() {
-        let visuId = 'unknown';
-        let slot = 1;
-        let pageSignature = 'page';
-
-        const extractVisuId = value => {
+        const parseMaybeJson = value => {
+            if (value == null) return null;
+            if (typeof value === 'object') return value;
             try {
-                const raw = String(value || '');
-                const url = new URL(raw, window.location.href);
-                const match = url.pathname.match(/\/visu\/(\d+)(?:\/|$)/i);
-                return match ? match[1] : null;
+                let parsed = JSON.parse(String(value));
+                if (typeof parsed === 'string') {
+                    parsed = JSON.parse(parsed);
+                }
+                return parsed;
             } catch (_) {
                 return null;
             }
         };
 
-        const shortHash = value => {
-            const text = String(value || 'page');
-            let hash = 2166136261;
-            for (let i = 0; i < text.length; i++) {
-                hash ^= text.charCodeAt(i);
-                hash = Math.imul(hash, 16777619);
-            }
-            return (hash >>> 0).toString(36);
-        };
-
-        /*
-         * Stabile Signatur der aktuell sichtbaren IPSView-Seite.
-         *
-         * Wichtig:
-         * - /visu/12345/ wird als "visu-12345" erfasst.
-         * - data:text/html-Kacheln werden nur als "data" erfasst.
-         *   Der eigentliche HTML-Inhalt enthält Tokens und Livewerte und darf
-         *   deshalb NICHT Teil des Schlüssels sein.
-         * - Die Reihenfolge bleibt erhalten, damit Seiten mit derselben Menge
-         *   an Kacheln, aber anderer Anordnung unterschieden werden können.
-         */
-        const buildPageSignature = parentDocument => {
+        const getGridConfiguration = () => {
+            // Lokale Grid-Konfiguration bevorzugen: Sie entspricht exakt dem
+            // Layout dieses Browsers/Geräts.
             try {
-                const frames = Array.from(
-                    parentDocument.querySelectorAll('iframe')
-                );
-
-                if (!frames.length) {
-                    return 'page-empty';
+                const visuID = new URL(window.location.href).searchParams.get('visuID');
+                const keys = Object.keys(window.parent.localStorage || window.localStorage);
+                let key = null;
+                if (visuID) {
+                    key = keys.find(k => k === `flutter.${visuID}-~Desktop-gridConfig`) || null;
                 }
-
-                const parts = frames.map(frame => {
-                    const rawSrc = String(
-                        frame.getAttribute('src') || frame.src || ''
-                    );
-                    const frameVisuId = extractVisuId(rawSrc);
-
-                    if (frameVisuId) {
-                        return `visu-${frameVisuId}`;
+                if (!key) {
+                    key = keys.find(k => /flutter\.\d+-~Desktop-gridConfig$/.test(k)) || null;
+                }
+                if (key) {
+                    const storage = window.parent.localStorage || window.localStorage;
+                    const cfg = parseMaybeJson(storage.getItem(key));
+                    if (cfg && typeof cfg === 'object') {
+                        return cfg;
                     }
-
-                    if (/^data:/i.test(rawSrc)) {
-                        return 'data';
-                    }
-
-                    // Für sonstige iframes nur den stabilen Pfad verwenden,
-                    // niemals Query-Parameter oder Tokens.
-                    try {
-                        const url = new URL(rawSrc, window.location.href);
-                        return `path-${url.pathname || '/'}`;
-                    } catch (_) {
-                        return 'iframe';
-                    }
-                });
-
-                return parts.join('|');
+                }
             } catch (_) {
-                return 'page';
+                // Snapshot-Fallback folgt.
             }
+
+            try {
+                const server = window.__EF_SERVER_GRID__;
+                if (server && server.grid) {
+                    return parseMaybeJson(server.grid);
+                }
+            } catch (_) {
+                // Kein Grid verfügbar.
+            }
+            return null;
         };
 
-        try {
-            visuId = extractVisuId(window.location.href) || visuId;
-
-            if (
-                window.parent
-                && window.parent !== window
-                && window.frameElement
-            ) {
-                const parentDocument = window.parent.document;
-                const currentFrame = window.frameElement;
-
-                pageSignature = buildPageSignature(parentDocument);
-
-                const currentVisuId =
-                    extractVisuId(currentFrame.getAttribute('src'))
-                    || extractVisuId(currentFrame.src)
-                    || visuId;
-
-                if (currentVisuId) {
-                    visuId = currentVisuId;
-
-                    const matchingFrames = Array.from(
-                        parentDocument.querySelectorAll('iframe')
-                    ).filter(frame => {
-                        return (
-                            extractVisuId(frame.getAttribute('src'))
-                            || extractVisuId(frame.src)
-                        ) === currentVisuId;
-                    });
-
-                    const index = matchingFrames.indexOf(currentFrame);
-                    if (index >= 0) {
-                        slot = index + 1;
-                    }
-                }
-            } else {
-                // Falls die Ansicht nicht eingebettet ist, bleibt wenigstens
-                // die Visu-ID Bestandteil des Schlüssels.
-                pageSignature = `standalone-${visuId}`;
-            }
-        } catch (_) {
-            pageSignature = `fallback-${visuId}`;
+        const grid = getGridConfiguration();
+        if (!grid || !grid.landscape) {
+            return 'widget-fallback';
         }
 
-        return `page-${shortHash(pageSignature)}-visu-${visuId}-slot-${slot}`;
+        try {
+            if (!window.parent || window.parent === window || !window.frameElement) {
+                return 'widget-standalone';
+            }
+
+            const parentDocument = window.parent.document;
+            const currentFrame = window.frameElement;
+            const frames = Array.from(parentDocument.querySelectorAll('iframe'))
+                .filter(frame => {
+                    const r = frame.getBoundingClientRect();
+                    return r.width > 40 && r.height > 40;
+                });
+
+            const currentIndex = frames.indexOf(currentFrame);
+            if (currentIndex < 0 || !frames.length) {
+                return 'widget-fallback';
+            }
+
+            const frameRects = frames.map(frame => {
+                const r = frame.getBoundingClientRect();
+                return {
+                    frame,
+                    left: r.left,
+                    top: r.top,
+                    width: r.width,
+                    height: r.height
+                };
+            });
+
+            const landscape = grid.landscape || {};
+            const positions = landscape.individualPositions || {};
+            const dimensions = landscape.individualDimensions || {};
+
+            let best = null;
+
+            const geometryCost = (fr, widget, transform) => {
+                const sx = transform.sx;
+                const sy = transform.sy;
+                const predicted = {
+                    left: transform.ox + widget.left * sx,
+                    top: transform.oy + widget.top * sy,
+                    width: widget.width * sx,
+                    height: widget.height * sy
+                };
+
+                // Fehler in Rastereinheiten; so bleibt die Bewertung unabhängig
+                // von Auflösung und Browser-Zoom.
+                return (
+                    Math.abs(fr.left - predicted.left) / Math.max(1, sx) +
+                    Math.abs(fr.top - predicted.top) / Math.max(1, sy) +
+                    Math.abs(fr.width - predicted.width) / Math.max(1, sx) +
+                    Math.abs(fr.height - predicted.height) / Math.max(1, sy)
+                );
+            };
+
+            Object.entries(positions).forEach(([containerId, widgetPositions]) => {
+                if (!widgetPositions || typeof widgetPositions !== 'object') return;
+
+                const widgets = Object.entries(widgetPositions)
+                    .map(([widgetId, pos]) => {
+                        const dim = dimensions[widgetId];
+                        if (!dim || !pos) return null;
+                        const width = Number(dim.width);
+                        const height = Number(dim.height);
+                        const left = Number(pos.left);
+                        const top = Number(pos.top);
+                        if (![width, height, left, top].every(Number.isFinite)) return null;
+                        return {widgetId, width, height, left, top};
+                    })
+                    .filter(Boolean);
+
+                if (!widgets.length || widgets.length < frameRects.length) return;
+
+                // Jede Frame/Widget-Kombination einmal als Transformationsanker
+                // testen. Der richtige Container erzeugt über alle sichtbaren
+                // iframes hinweg einen nahezu identischen Rastermaßstab.
+                frameRects.forEach((anchorFrame, anchorFrameIndex) => {
+                    widgets.forEach(anchorWidget => {
+                        const sx = anchorFrame.width / Math.max(1, anchorWidget.width);
+                        const sy = anchorFrame.height / Math.max(1, anchorWidget.height);
+                        if (!Number.isFinite(sx) || !Number.isFinite(sy) || sx < 10 || sy < 10) return;
+
+                        const transform = {
+                            sx,
+                            sy,
+                            ox: anchorFrame.left - anchorWidget.left * sx,
+                            oy: anchorFrame.top - anchorWidget.top * sy
+                        };
+
+                        const available = new Set(widgets.map((_, i) => i));
+                        const assignments = new Array(frameRects.length).fill(null);
+                        let totalCost = 0;
+
+                        // Den Anker fest zuordnen, anschließend die übrigen
+                        // Frames jeweils dem geometrisch besten freien Widget.
+                        const anchorWidgetIndex = widgets.indexOf(anchorWidget);
+                        assignments[anchorFrameIndex] = anchorWidget;
+                        available.delete(anchorWidgetIndex);
+                        totalCost += geometryCost(anchorFrame, anchorWidget, transform);
+
+                        const otherFrameIndexes = frameRects
+                            .map((_, i) => i)
+                            .filter(i => i !== anchorFrameIndex);
+
+                        for (const fi of otherFrameIndexes) {
+                            let bestWidgetIndex = -1;
+                            let bestCost = Infinity;
+                            for (const wi of available) {
+                                const cost = geometryCost(frameRects[fi], widgets[wi], transform);
+                                if (cost < bestCost) {
+                                    bestCost = cost;
+                                    bestWidgetIndex = wi;
+                                }
+                            }
+                            if (bestWidgetIndex < 0) {
+                                totalCost += 1000;
+                                continue;
+                            }
+                            assignments[fi] = widgets[bestWidgetIndex];
+                            available.delete(bestWidgetIndex);
+                            totalCost += bestCost;
+                        }
+
+                        // Viele zusätzliche Widgets sind erlaubt, aber ein kleiner
+                        // Malus bevorzugt den Container, der die sichtbare Seite
+                        // tatsächlich am präzisesten beschreibt.
+                        totalCost += Math.max(0, widgets.length - frameRects.length) * 0.08;
+                        const averageCost = totalCost / frameRects.length;
+
+                        if (!best || averageCost < best.cost) {
+                            best = {
+                                cost: averageCost,
+                                containerId,
+                                assignments
+                            };
+                        }
+                    });
+                });
+            });
+
+            if (best && best.assignments[currentIndex]) {
+                const widgetId = best.assignments[currentIndex].widgetId;
+                // Nur hinreichend plausible Matches akzeptieren. Bei einem guten
+                // Grid-Match liegt der Wert typischerweise deutlich unter 1.
+                if (best.cost < 3.5) {
+                    return `widget-${widgetId}`;
+                }
+            }
+        } catch (_) {
+            // Sicherer Fallback weiter unten.
+        }
+
+        return 'widget-fallback';
     }
 
     const VISUALIZATION_STORAGE_SCOPE = getVisualizationStorageScope();
