@@ -1183,7 +1183,6 @@ class Energiefluss extends IPSModuleStrict
 
     #eflow {
         width: 100%;
-        visibility: hidden;
         height: 100vh;
         box-sizing: border-box;
         border-radius: 12px;
@@ -1280,6 +1279,23 @@ class Energiefluss extends IPSModuleStrict
             var(--w-text2)
         );
     }
+    #ef-storage-debug {
+        position: absolute;
+        left: 4px;
+        bottom: 2px;
+        z-index: 99999;
+        max-width: calc(100% - 8px);
+        font-size: 9px;
+        line-height: 1.15;
+        color: var(--w-text2);
+        background: rgba(0,0,0,.18);
+        border-radius: 4px;
+        padding: 2px 4px;
+        pointer-events: none;
+        white-space: normal;
+        overflow-wrap: anywhere;
+    }
+
     #scale-root {
         width: 540px;
         height: 640px;
@@ -1875,6 +1891,7 @@ class Energiefluss extends IPSModuleStrict
         </div>
     </div>
 
+    <div id="ef-storage-debug">storage: wartet …</div>
     <div id="display-mode-bar">
         <div id="display-mode-left" class="display-mode-slot">
             <button id="technical-wide-button" type="button" title="Wide-Ansicht umschalten" aria-label="Wide-Ansicht umschalten">⬌</button>
@@ -7096,16 +7113,28 @@ class Energiefluss extends IPSModuleStrict
     let TECHNICAL_LAYOUT_STORAGE_KEY = null;
     let currentDisplayMode = 'flow';
     let currentTechnicalLayout = 'lite';
-    let visualizationStorageReady = false;
 
-    function revealVisualization() {
-        const eflow = document.getElementById('eflow');
-        if (!eflow) return;
-        requestAnimationFrame(() => {
-            requestAnimationFrame(() => {
-                eflow.style.visibility = 'visible';
-            });
-        });
+    function updateStorageDebug(note = '') {
+        try {
+            const el = document.getElementById('ef-storage-debug');
+            if (!el) return;
+
+            let stored = '-';
+            if (TECHNICAL_LAYOUT_STORAGE_KEY) {
+                stored =
+                    window.localStorage.getItem(
+                        TECHNICAL_LAYOUT_STORAGE_KEY
+                    ) || '-';
+            }
+
+            el.textContent = [
+                `scope=${VISUALIZATION_STORAGE_SCOPE || '-'}`,
+                `current=${currentTechnicalLayout || '-'}`,
+                `stored=${stored}`,
+                `key=${TECHNICAL_LAYOUT_STORAGE_KEY || '-'}`,
+                note ? `note=${note}` : ''
+            ].filter(Boolean).join(' | ');
+        } catch (_) {}
     }
 
     function activateVisualizationStorageScope(scope) {
@@ -7114,7 +7143,6 @@ class Energiefluss extends IPSModuleStrict
         }
 
         VISUALIZATION_STORAGE_SCOPE = scope;
-        visualizationStorageReady = true;
         VIEW_STORAGE_KEY = `symcon-energiefluss-${scope}-view`;
         TECHNICAL_LAYOUT_STORAGE_KEY =
             `symcon-energiefluss-${scope}-technical-layout`;
@@ -7146,11 +7174,9 @@ class Energiefluss extends IPSModuleStrict
         if (lastStateData) {
             setState(lastStateData);
         } else {
-            applyDisplayMode(currentDisplayMode);
-            updateTechnicalLayoutButtons();
             fit();
         }
-        revealVisualization();
+        updateStorageDebug('activated');
         return true;
     }
 
@@ -7184,18 +7210,6 @@ class Energiefluss extends IPSModuleStrict
             // Plattform-Views ihre endgültige Geometrie besitzen.
             if (attempts < 40) {
                 window.setTimeout(probe, 150);
-            } else {
-                // Sollte Symcon ausnahmsweise keine stabile Widget-ID liefern,
-                // bleibt die Kachel benutzbar. Es wird dann nur nichts unter
-                // einem unsicheren Fallback-Key gespeichert.
-                visualizationStorageReady = true;
-                if (lastStateData) {
-                    setState(lastStateData);
-                } else {
-                    applyDisplayMode(currentDisplayMode);
-                    fit();
-                }
-                revealVisualization();
             }
         };
 
@@ -7211,6 +7225,7 @@ class Energiefluss extends IPSModuleStrict
                 TECHNICAL_LAYOUT_STORAGE_KEY,
                 currentTechnicalLayout
             );
+            updateStorageDebug('stored');
         } catch (_) {
             // LocalStorage ist optional.
         }
@@ -7398,6 +7413,7 @@ class Energiefluss extends IPSModuleStrict
     updateTechnicalLayoutButtons();
     updateDisplayModeButton();
     initializeVisualizationStorageScope();
+    updateStorageDebug('init');
 
     // ---------- Layout ----------
     let layoutWidth = 540;
@@ -7672,13 +7688,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         lastStateData = d;
-        // Vor der stabilen Widget-Erkennung noch nichts mit dem Default-Layout
-        // rendern. So gibt es beim Reload kein sichtbares Lite/Compact -> Large/
-        // Full-Umspringen. activateVisualizationStorageScope() baut anschließend
-        // direkt die gespeicherte Ansicht auf.
-        if (visualizationStorageReady) {
-            setState(d);
-        }
+        setState(d);
     }
 
     function refreshResponsiveState() {
