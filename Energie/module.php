@@ -7154,10 +7154,129 @@ class Energiefluss extends IPSModuleStrict
         return true;
     }
 
+    /*
+     * Schneller Start ohne Änderung an der bewährten Widget-Erkennung.
+     *
+     * Nach einer einmal erfolgreich bestätigten Widget-ID merken wir uns eine
+     * konservative Zuordnung aus:
+     *   - visuID
+     *   - Reihenfolge aller /visu/XXXXX/-iframes der aktuellen Seite
+     *   - Ziel-ID dieser Kachel
+     *   - Position dieser Kachel unter gleichen Ziel-IDs
+     *
+     * Dieser Schlüssel benötigt keine fertige Flutter-Geometrie und steht bei
+     * einem normalen Reload sehr früh zur Verfügung. Falls dieselbe Signatur
+     * jemals auf zwei verschiedene Widgets zeigt, wird sie als mehrdeutig
+     * markiert und nicht mehr für den Schnellstart benutzt.
+     */
+    function getVisualizationBootstrapKey() {
+        try {
+            if (!window.parent || window.parent === window || !window.frameElement) {
+                return null;
+            }
+
+            const parentDocument = window.parent.document;
+            const currentFrame = window.frameElement;
+            const allFrames = Array.from(parentDocument.querySelectorAll('iframe'));
+
+            const visuFrames = allFrames
+                .map(frame => {
+                    const src = frame.getAttribute('src') || '';
+                    const match = src.match(/\/visu\/(\d+)\//);
+                    return match
+                        ? {frame, targetID: match[1]}
+                        : null;
+                })
+                .filter(Boolean);
+
+            const currentEntry = visuFrames.find(entry => entry.frame === currentFrame);
+            if (!currentEntry) {
+                return null;
+            }
+
+            const sameTargetFrames = visuFrames
+                .filter(entry => entry.targetID === currentEntry.targetID);
+            const sameTargetIndex = sameTargetFrames
+                .findIndex(entry => entry.frame === currentFrame);
+
+            if (sameTargetIndex < 0) {
+                return null;
+            }
+
+            const visuID =
+                new URL(window.location.href).searchParams.get('visuID') || '0';
+            const pageSignature =
+                visuFrames.map(entry => entry.targetID).join('-');
+
+            return [
+                'symcon-energiefluss-bootstrap',
+                visuID,
+                pageSignature,
+                currentEntry.targetID,
+                sameTargetIndex + 1
+            ].join('-');
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function rememberVisualizationBootstrapScope(scope) {
+        if (!/^widget-\d+$/.test(String(scope || ''))) {
+            return;
+        }
+
+        const key = getVisualizationBootstrapKey();
+        if (!key) {
+            return;
+        }
+
+        try {
+            const oldValue = window.localStorage.getItem(key);
+
+            if (!oldValue || oldValue === scope) {
+                window.localStorage.setItem(key, scope);
+                return;
+            }
+
+            // Dieselbe frühe Signatur wurde bereits mit einer anderen festen
+            // Widget-ID gesehen. Dann ist sie nicht eindeutig genug und darf
+            // künftig nicht zum Sofortladen verwendet werden.
+            if (/^widget-\d+$/.test(oldValue) && oldValue !== scope) {
+                window.localStorage.setItem(key, 'ambiguous');
+            }
+        } catch (_) {
+            // LocalStorage ist optional.
+        }
+    }
+
+    function getCachedVisualizationBootstrapScope() {
+        const key = getVisualizationBootstrapKey();
+        if (!key) {
+            return null;
+        }
+
+        try {
+            const scope = window.localStorage.getItem(key);
+            return /^widget-\d+$/.test(String(scope || ''))
+                ? scope
+                : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
     function initializeVisualizationStorageScope() {
         let attempts = 0;
         let previous = '';
         let stableCount = 0;
+
+        // Schnellstart: Nur einen bereits früher sicher bestätigten Scope
+        // verwenden. Die eigentliche Erkennung darunter bleibt unverändert
+        // aktiv und bestätigt die Zuordnung erneut.
+        const cachedScope = getCachedVisualizationBootstrapScope();
+        if (cachedScope) {
+            activateVisualizationStorageScope(cachedScope);
+        }
 
         const probe = () => {
             attempts++;
@@ -7171,8 +7290,17 @@ class Energiefluss extends IPSModuleStrict
                     stableCount = 1;
                 }
 
+                // Die bewährte Sicherheitsregel bleibt unverändert:
+                // Erst zwei identische Treffer hintereinander werden akzeptiert.
                 if (stableCount >= 2) {
-                    activateVisualizationStorageScope(scope);
+                    rememberVisualizationBootstrapScope(scope);
+
+                    // Falls der Schnellstart bereits denselben Scope geladen hat,
+                    // nichts erneut rendern. Bei einer Abweichung korrigiert die
+                    // bewährte Erkennung den Zustand.
+                    if (VISUALIZATION_STORAGE_SCOPE !== scope) {
+                        activateVisualizationStorageScope(scope);
+                    }
                     return;
                 }
             } else {
@@ -7180,26 +7308,28 @@ class Energiefluss extends IPSModuleStrict
                 stableCount = 0;
             }
 
-            // Flutter braucht nach F5 je nach Seite einige Frames, bis alle
-            // Plattform-Views ihre endgültige Geometrie besitzen.
-            if (attempts < 40) {
-                window.setTimeout(probe, 150);
+            // Exakt wie in der funktionierenden Ausgangsversion:
+            // Solange Flutter sein Layout aufbaut, bei jedem Browser-Frame prüfen.
+            if (attempts < 240) {
+                requestAnimationFrame(probe);
             } else {
                 // Sollte Symcon ausnahmsweise keine stabile Widget-ID liefern,
-                // bleibt die Kachel benutzbar. Es wird dann nur nichts unter
-                // einem unsicheren Fallback-Key gespeichert.
-                visualizationStorageReady = true;
-                if (lastStateData) {
-                    setState(lastStateData);
-                } else {
-                    applyDisplayMode(currentDisplayMode);
-                    fit();
+                // bleibt die Kachel benutzbar. Bei vorhandenem Schnellstart ist
+                // sie zu diesem Zeitpunkt ohnehin bereits sichtbar.
+                if (!visualizationStorageReady) {
+                    visualizationStorageReady = true;
+                    if (lastStateData) {
+                        setState(lastStateData);
+                    } else {
+                        applyDisplayMode(currentDisplayMode);
+                        fit();
+                    }
+                    revealVisualization();
                 }
-                revealVisualization();
             }
         };
 
-        requestAnimationFrame(() => window.setTimeout(probe, 50));
+        requestAnimationFrame(probe);
     }
 
     function storeTechnicalLayout() {
