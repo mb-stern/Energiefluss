@@ -7086,59 +7086,104 @@ class Energiefluss extends IPSModuleStrict
         return 'widget-fallback';
     }
 
-    const VISUALIZATION_STORAGE_SCOPE = getVisualizationStorageScope();
-    const VIEW_STORAGE_KEY =
-        `symcon-energiefluss-${VISUALIZATION_STORAGE_SCOPE}-view`;
+    // Die stabile Widget-ID darf nach einem vollständigen Flutter-Reload nicht
+    // zu früh ermittelt werden. Das Parent-Grid wird asynchron aufgebaut.
+    // Deshalb werden Storage-Keys erst gesetzt, sobald zweimal hintereinander
+    // dieselbe echte widget-XXXXX-ID erkannt wurde.
+    let VISUALIZATION_STORAGE_SCOPE = null;
+    let VIEW_STORAGE_KEY = null;
+    let TECHNICAL_LAYOUT_STORAGE_KEY = null;
     let currentDisplayMode = 'flow';
-
-    try {
-        const storedView =
-            window.localStorage.getItem(VIEW_STORAGE_KEY);
-
-        if (
-            storedView === 'flow'
-            || storedView === 'house'
-        ) {
-            currentDisplayMode = storedView;
-        }
-    } catch (error) {
-        // LocalStorage ist optional.
-    }
-    /*
-     * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
-     * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
-     */
-    const TECHNICAL_LAYOUT_STORAGE_KEY =
-        `symcon-energiefluss-${VISUALIZATION_STORAGE_SCOPE}-technical-layout`;
     let currentTechnicalLayout = 'lite';
 
-    try {
-        const storedTechnicalLayout =
-            window.localStorage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
+    function activateVisualizationStorageScope(scope) {
+        if (!/^widget-\d+$/.test(String(scope || ''))) {
+            return false;
+        }
 
-        if (
-            [
+        VISUALIZATION_STORAGE_SCOPE = scope;
+        VIEW_STORAGE_KEY = `symcon-energiefluss-${scope}-view`;
+        TECHNICAL_LAYOUT_STORAGE_KEY =
+            `symcon-energiefluss-${scope}-technical-layout`;
+
+        try {
+            const storedView = window.localStorage.getItem(VIEW_STORAGE_KEY);
+            if (storedView === 'flow' || storedView === 'house') {
+                currentDisplayMode = storedView;
+            }
+
+            const storedTechnicalLayout =
+                window.localStorage.getItem(TECHNICAL_LAYOUT_STORAGE_KEY);
+            if ([
                 'compact',
                 'compact-wide',
                 'lite',
                 'lite-wide',
                 'full',
                 'full-wide'
-            ].includes(storedTechnicalLayout)
-        ) {
-            currentTechnicalLayout = storedTechnicalLayout;
+            ].includes(storedTechnicalLayout)) {
+                currentTechnicalLayout = storedTechnicalLayout;
+            }
+        } catch (_) {
+            // LocalStorage ist optional.
         }
-    } catch (error) {
-        // LocalStorage ist optional.
+
+        applyDisplayMode(currentDisplayMode);
+        updateTechnicalLayoutButtons();
+        if (lastStateData) {
+            setState(lastStateData);
+        } else {
+            fit();
+        }
+        return true;
+    }
+
+    function initializeVisualizationStorageScope() {
+        let attempts = 0;
+        let previous = '';
+        let stableCount = 0;
+
+        const probe = () => {
+            attempts++;
+            const scope = getVisualizationStorageScope();
+
+            if (/^widget-\d+$/.test(scope)) {
+                if (scope === previous) {
+                    stableCount++;
+                } else {
+                    previous = scope;
+                    stableCount = 1;
+                }
+
+                if (stableCount >= 2) {
+                    activateVisualizationStorageScope(scope);
+                    return;
+                }
+            } else {
+                previous = '';
+                stableCount = 0;
+            }
+
+            // Flutter braucht nach F5 je nach Seite einige Frames, bis alle
+            // Plattform-Views ihre endgültige Geometrie besitzen.
+            if (attempts < 40) {
+                window.setTimeout(probe, 150);
+            }
+        };
+
+        requestAnimationFrame(() => window.setTimeout(probe, 50));
     }
 
     function storeTechnicalLayout() {
+        if (!TECHNICAL_LAYOUT_STORAGE_KEY) {
+            return;
+        }
         try {
             window.localStorage.setItem(
                 TECHNICAL_LAYOUT_STORAGE_KEY,
                 currentTechnicalLayout
             );
-        } catch (error) {
+        } catch (_) {
             // LocalStorage ist optional.
         }
     }
@@ -7251,13 +7296,15 @@ class Energiefluss extends IPSModuleStrict
             const newMode = currentDisplayMode === 'house' ? 'flow' : 'house';
             currentDisplayMode = newMode;
 
-            try {
-                window.localStorage.setItem(
-                    VIEW_STORAGE_KEY,
-                    currentDisplayMode
-                );
-            } catch (error) {
-                // LocalStorage ist optional.
+            if (VIEW_STORAGE_KEY) {
+                try {
+                    window.localStorage.setItem(
+                        VIEW_STORAGE_KEY,
+                        currentDisplayMode
+                    );
+                } catch (_) {
+                    // LocalStorage ist optional.
+                }
             }
 
             applyDisplayMode(currentDisplayMode);
@@ -7322,6 +7369,7 @@ class Energiefluss extends IPSModuleStrict
 
     updateTechnicalLayoutButtons();
     updateDisplayModeButton();
+    initializeVisualizationStorageScope();
 
     // ---------- Layout ----------
     let layoutWidth = 540;
