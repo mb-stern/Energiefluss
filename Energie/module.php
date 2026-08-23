@@ -6863,6 +6863,16 @@ class Energiefluss extends IPSModuleStrict
             // LocalStorage ist optional.
         }
 
+        /*
+         * Falls diese konkrete Kachel schon einmal sicher erkannt wurde,
+         * sofort vor dem ersten Rendern auf deren eigenen Zustand wechseln.
+         * Gibt es keinen Cache, bleibt der Wärmepumpen-Browserzustand aktiv.
+         */
+        const cachedWidgetScope = loadFastWidgetScope();
+        if (cachedWidgetScope) {
+            activateDetectedWidgetScope(cachedWidgetScope);
+        }
+
         updateTechnicalLayoutButtons();
         updateDisplayModeButton();
     }
@@ -6878,6 +6888,107 @@ class Energiefluss extends IPSModuleStrict
     let widgetTechnicalLayoutStorageKey = null;
     let widgetDetectionStarted = false;
     let widgetDetectionReady = false;
+
+    /*
+     * Sofort-Cache:
+     * Nach einer einmal sicher erkannten Widget-ID wird eine frühe Signatur
+     * der aktuellen iframe-Konstellation gespeichert. Diese Signatur benötigt
+     * keine fertige Flutter-Geometrie und kann beim nächsten Laden schon vor
+     * dem ersten setState() auf die richtige Widget-ID zeigen.
+     */
+    function getFastWidgetSignature() {
+        try {
+            if (!window.parent || window.parent === window || !window.frameElement) {
+                return null;
+            }
+
+            const currentFrame = window.frameElement;
+            const frames = Array.from(
+                window.parent.document.querySelectorAll('iframe')
+            )
+                .map(frame => {
+                    const src = frame.getAttribute('src') || '';
+                    const match = src.match(/\/visu\/(\d+)\//);
+                    return match
+                        ? {frame, targetID: match[1]}
+                        : null;
+                })
+                .filter(Boolean);
+
+            const current = frames.find(entry => entry.frame === currentFrame);
+            if (!current) {
+                return null;
+            }
+
+            const sameTarget = frames.filter(
+                entry => entry.targetID === current.targetID
+            );
+            const sameTargetIndex = sameTarget.findIndex(
+                entry => entry.frame === currentFrame
+            );
+
+            if (sameTargetIndex < 0) {
+                return null;
+            }
+
+            const visuID =
+                new URL(window.location.href).searchParams.get('visuID') || '0';
+
+            const targetSequence =
+                frames.map(entry => entry.targetID).join(',');
+
+            return [
+                'v1',
+                visuID,
+                targetSequence,
+                current.targetID,
+                sameTargetIndex,
+                frames.length
+            ].join('|');
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function getFastWidgetCacheKey() {
+        const signature = getFastWidgetSignature();
+        return signature
+            ? `symcon-energiefluss-fast-widget:${signature}`
+            : null;
+    }
+
+    function loadFastWidgetScope() {
+        const key = getFastWidgetCacheKey();
+        if (!key) {
+            return null;
+        }
+
+        try {
+            const scope = window.localStorage.getItem(key);
+            return /^widget-\d+$/.test(String(scope || ''))
+                ? scope
+                : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function rememberFastWidgetScope(scope) {
+        if (!/^widget-\d+$/.test(String(scope || ''))) {
+            return;
+        }
+
+        const key = getFastWidgetCacheKey();
+        if (!key) {
+            return;
+        }
+
+        try {
+            window.localStorage.setItem(key, scope);
+        } catch (_) {
+            // LocalStorage ist optional.
+        }
+    }
 
     function getVisualizationStorageScope() {
         const parseMaybeJson = value => {
@@ -7186,6 +7297,9 @@ class Energiefluss extends IPSModuleStrict
             // Browserweiter Zustand bleibt funktionsfähig.
         }
 
+        // Jede sicher bestätigte Zuordnung für den nächsten Start merken.
+        rememberFastWidgetScope(scope);
+
         widgetDetectionReady = true;
         updateTechnicalLayoutButtons();
         updateDisplayModeButton();
@@ -7235,6 +7349,8 @@ class Energiefluss extends IPSModuleStrict
             }
         };
 
+        // Nur Kontrolle/Korrektur im Hintergrund. Der Sofort-Cache wurde,
+        // falls vorhanden, bereits vor dem ersten Rendern geladen.
         requestAnimationFrame(() => window.setTimeout(probe, 50));
     }
 
