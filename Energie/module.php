@@ -122,7 +122,9 @@ class Energiefluss extends IPSModuleStrict
         // Animationsgeschwindigkeit: 100 % entspricht dem bisherigen Verhalten.
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
-        // flow = technische Energieflussansicht, house = Hausansicht.
+        // Legacy-Eigenschaft zur Abwärtskompatibilität.
+        // Die sichtbare View wird nicht mehr über die Instanzkonfiguration
+        // gespeichert, sondern lokal im Visualisierungstile umgeschaltet.
         $this->RegisterPropertyString('DisplayMode', 'flow');
 
         // full = alle technischen Details, compact = verdichtete Technikansicht.
@@ -177,15 +179,6 @@ class Energiefluss extends IPSModuleStrict
     {
         $form = [
             'elements' => [
-                [
-                    'type'    => 'Select',
-                    'name'    => 'DisplayMode',
-                    'caption' => 'Darstellung',
-                    'options' => [
-                        ['caption' => 'Technische Energieflussansicht', 'value' => 'flow'],
-                        ['caption' => 'Hausansicht', 'value' => 'house'],
-                    ],
-                ],
                 [
                     'type'    => 'Select',
                     'name'    => 'TechnicalLayout',
@@ -892,19 +885,6 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        if ($Ident === 'ToggleDisplayMode') {
-            $newMode = ((string) $Value === 'house') ? 'house' : 'flow';
-
-            if ($newMode !== $this->ReadPropertyString('DisplayMode')) {
-                IPS_SetProperty($this->InstanceID, 'DisplayMode', $newMode);
-                IPS_ApplyChanges($this->InstanceID);
-                $this->ReloadForm();
-            } else {
-                $this->PushState();
-            }
-
-            return;
-        }
     }
 
     public function ExportHouseColors(): string
@@ -1070,7 +1050,8 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            return $this->GetVisualizationHtml($this->ReadPropertyString('DisplayMode'))
+            // Jede neu geladene Visualisierung startet in der Sunsynk-Ansicht.
+            return $this->GetVisualizationHtml('flow')
                 . '<script>handleMessage(' . $payload . ');</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
@@ -1136,12 +1117,31 @@ class Energiefluss extends IPSModuleStrict
 
     #display-mode-bar {
         flex: 0 0 auto;
-        display: flex;
+        display: grid;
+        grid-template-columns: 1fr auto 1fr;
         align-items: center;
-        justify-content: center;
-        gap: 8px;
+        column-gap: 8px;
         padding: 6px 4px 0;
         min-height: 32px;
+    }
+
+    .display-mode-slot {
+        min-width: 0;
+        display: flex;
+        align-items: center;
+        gap: 8px;
+    }
+
+    #display-mode-left {
+        justify-content: flex-end;
+    }
+
+    #display-mode-right {
+        justify-content: flex-start;
+    }
+
+    #display-mode-button {
+        justify-self: center;
     }
 
     #display-mode-button,
@@ -1654,7 +1654,6 @@ class Energiefluss extends IPSModuleStrict
         }
 
         #display-mode-bar {
-            justify-content: center;
             padding-top: 3px;
             min-height: 28px;
         }
@@ -1785,9 +1784,13 @@ class Energiefluss extends IPSModuleStrict
     </div>
 
     <div id="display-mode-bar">
-        <button id="technical-layout-button" type="button" title="Technikansicht wechseln" aria-label="Technikansicht wechseln">L</button>
-        <button id="technical-wide-button" type="button" title="Wide-Ansicht umschalten" aria-label="Wide-Ansicht umschalten">⬌</button>
+        <div id="display-mode-left" class="display-mode-slot">
+            <button id="technical-wide-button" type="button" title="Wide-Ansicht umschalten" aria-label="Wide-Ansicht umschalten">⬌</button>
+        </div>
         <button id="display-mode-button" type="button" title="Ansicht wechseln" aria-label="Ansicht wechseln">⇄</button>
+        <div id="display-mode-right" class="display-mode-slot">
+            <button id="technical-layout-button" type="button" title="Technikansicht wechseln" aria-label="Technikansicht wechseln">L</button>
+        </div>
     </div>
 </div>
 
@@ -6718,7 +6721,8 @@ class Energiefluss extends IPSModuleStrict
         );
     }
 
-    let currentDisplayMode = '__INITIAL_DISPLAY_MODE__';
+    // Die View ist reine UI-Zustand: bei jedem Laden zuerst Sunsynk.
+    let currentDisplayMode = 'flow';
     let currentTechnicalLayout = 'lite';
 
     function updateTechnicalLayoutButtons() {
@@ -6817,7 +6821,23 @@ class Energiefluss extends IPSModuleStrict
     if (displayModeButton) {
         displayModeButton.addEventListener('click', function () {
             const newMode = currentDisplayMode === 'house' ? 'flow' : 'house';
-            requestAction('ToggleDisplayMode', newMode);
+            applyDisplayMode(newMode);
+
+            // Die beiden Views haben unterschiedliche Zeichenflächen. Nach dem
+            // lokalen Umschalten deshalb nur neu skalieren – ohne ApplyChanges
+            // und ohne Änderung am Konfigurationsformular.
+            if (lastStateData) {
+                updateLayout(
+                    Array.isArray(lastStateData.groups) ? lastStateData.groups.length : 0,
+                    Array.isArray(lastStateData.pvs) ? lastStateData.pvs.length : 0,
+                    Array.isArray(lastStateData.batteries) ? lastStateData.batteries.length : 0,
+                    false,
+                    currentDisplayMode,
+                    !!lastStateData.hasWallbox
+                );
+            } else {
+                fit();
+            }
         });
     }
 
@@ -7113,14 +7133,15 @@ class Energiefluss extends IPSModuleStrict
             batteries,
             wallbox
         );
-        applyDisplayMode(d.displayMode || 'flow');
+        // Zustandsupdates ändern die lokal gewählte View nicht.
+        applyDisplayMode(currentDisplayMode);
 
         updateLayout(
             groups.length,
             pvs.length,
             batteries.length,
             false,
-            (d.displayMode || 'flow') === 'house' ? 'house' : 'flow',
+            currentDisplayMode,
             !!d.hasWallbox
         );
     }
@@ -7299,8 +7320,8 @@ class Energiefluss extends IPSModuleStrict
 HTML;
 
         return str_replace(
-            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__', '__INITIAL_DISPLAY_MODE__'],
-            [$flowDisplay, $houseDisplay, $showHouse ? 'house' : 'flow'],
+            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__'],
+            [$flowDisplay, $houseDisplay],
             $html
         );
     }
@@ -8808,7 +8829,6 @@ HTML;
         $gridConnectedStatus = ((float) $gridConnectedRaw) != 0.0 ? 'on-grid' : 'off-grid';
 
         return [
-            'displayMode'      => $this->ReadPropertyString('DisplayMode'),
             'technicalLayout'  => $this->ReadPropertyString('TechnicalLayout'),
             'pvs'              => $pvs,
             'housePvs'         => $housePvs,
