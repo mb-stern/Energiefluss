@@ -6694,86 +6694,7 @@ class Energiefluss extends IPSModuleStrict
      *
      * Die Auswahl wird lokal im Browser/Handy gespeichert.
      */
-    /*
-     * Browser-Speicher pro konkreter Visualisierungs-Kachel.
-     * Dadurch können mehrere Kacheln derselben Modulinstanz im selben
-     * Browser unterschiedliche Ansichten behalten.
-     */
-    function getVisualizationStorageScope() {
-        const parts = [];
-
-        try {
-            const frame = window.frameElement;
-            if (frame) {
-                const add = (name, value) => {
-                    const text = String(value || '').trim();
-                    if (text !== '') {
-                        parts.push(name + '=' + text);
-                    }
-                };
-
-                add('frame-id', frame.id);
-                add('frame-name', frame.getAttribute('name'));
-                add('frame-src', frame.getAttribute('src'));
-
-                ['data-id', 'data-tile-id', 'data-object-id', 'data-instance-id', 'data-configuration-id']
-                    .forEach((attribute) => add(attribute, frame.getAttribute(attribute)));
-
-                // Symcon versieht häufig nicht das iframe selbst, sondern einen
-                // umgebenden Tile-/Widget-Container mit der eindeutigen Kennung.
-                let node = frame.parentElement;
-                let depth = 0;
-                while (node && depth < 6) {
-                    add('parent' + depth + '-id', node.id);
-                    ['data-id', 'data-tile-id', 'data-object-id', 'data-instance-id', 'data-configuration-id']
-                        .forEach((attribute) =>
-                            add('parent' + depth + '-' + attribute, node.getAttribute(attribute))
-                        );
-                    node = node.parentElement;
-                    depth++;
-                }
-            }
-        } catch (error) {
-            // Parent-/Frame-Daten sind optional.
-        }
-
-        if (parts.length === 0) {
-            try {
-                parts.push('location=' + window.location.href);
-            } catch (error) {
-                // optional
-            }
-        }
-
-        if (parts.length === 0) {
-            // Letzter Fallback: pro Browsing-Context eine eigene Kennung.
-            // window.name bleibt bei einem Reload desselben Frames erhalten.
-            try {
-                if (!window.name) {
-                    window.name = 'energiefluss-' +
-                        Date.now().toString(36) + '-' +
-                        Math.random().toString(36).slice(2);
-                }
-                parts.push('window-name=' + window.name);
-            } catch (error) {
-                parts.push('default');
-            }
-        }
-
-        // Kurzen, stabilen Hash erzeugen, damit die localStorage-Schlüssel
-        // unabhängig von langen Symcon-DOM-IDs handlich bleiben.
-        const source = parts.join('|');
-        let hash = 2166136261;
-        for (let i = 0; i < source.length; i++) {
-            hash ^= source.charCodeAt(i);
-            hash = Math.imul(hash, 16777619);
-        }
-        return (hash >>> 0).toString(36);
-    }
-
-    const VISUAL_STORAGE_SCOPE = getVisualizationStorageScope();
-    const VIEW_STORAGE_KEY =
-        'symcon-energiefluss-view-' + VISUAL_STORAGE_SCOPE;
+    const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
     let currentDisplayMode = 'flow';
 
     try {
@@ -6793,8 +6714,7 @@ class Energiefluss extends IPSModuleStrict
      * Technische Sunsynk-Ansicht ebenfalls rein lokal speichern.
      * Ein Layoutwert enthält sowohl Compact/Lite/Full als auch Wide.
      */
-    const TECHNICAL_LAYOUT_STORAGE_KEY =
-        'symcon-energiefluss-technical-layout-' + VISUAL_STORAGE_SCOPE;
+    const TECHNICAL_LAYOUT_STORAGE_KEY = 'symcon-energiefluss-technical-layout';
     let currentTechnicalLayout = 'lite';
 
     try {
