@@ -6825,20 +6825,22 @@ class Energiefluss extends IPSModuleStrict
 
     function initializeBrowserViewState() {
         /*
-         * In der Symcon-App ist die Instanz-ID sofort verfügbar.
-         * Deshalb dort direkt instanzspezifisch laden – ohne Widget-Erkennung,
-         * Wartezeit oder Geometrie-Matching.
+         * Einheitliche Speicherung in Browser UND Symcon-App:
+         * Eine Energiefluss-Instanz = ein eigener gespeicherter Zustand.
+         *
+         * Beispiel:
+         * /visu/36446/ -> instance-36446
          */
-        const appScope = getAppInstanceStorageScope();
+        const instanceScope = getInstanceStorageScope();
 
-        if (appScope) {
-            const appViewKey =
-                `symcon-energiefluss-${appScope}-view`;
-            const appLayoutKey =
-                `symcon-energiefluss-${appScope}-technical-layout`;
+        if (instanceScope) {
+            const instanceViewKey =
+                `symcon-energiefluss-${instanceScope}-view`;
+            const instanceLayoutKey =
+                `symcon-energiefluss-${instanceScope}-technical-layout`;
 
-            const storedView = window.localStorage.getItem(appViewKey);
-            const storedLayout = window.localStorage.getItem(appLayoutKey);
+            const storedView = window.localStorage.getItem(instanceViewKey);
+            const storedLayout = window.localStorage.getItem(instanceLayoutKey);
 
             if (storedView === 'flow' || storedView === 'house') {
                 currentDisplayMode = storedView;
@@ -6855,9 +6857,9 @@ class Energiefluss extends IPSModuleStrict
                 currentTechnicalLayout = storedLayout;
             }
 
-            widgetStorageScope = appScope;
-            widgetViewStorageKey = appViewKey;
-            widgetTechnicalLayoutStorageKey = appLayoutKey;
+            widgetStorageScope = instanceScope;
+            widgetViewStorageKey = instanceViewKey;
+            widgetTechnicalLayoutStorageKey = instanceLayoutKey;
             widgetDetectionReady = true;
 
             updateTechnicalLayoutButtons();
@@ -6865,11 +6867,8 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        /*
-         * Browser: unverändert das bewährte Wärmepumpen-Prinzip als sofortige
-         * Basis laden; anschließend kann die vorhandene Widget-Erkennung auf
-         * die konkrete Kachel umschalten.
-         */
+        // Sicherheitsfallback, falls die Instanz-ID wider Erwarten nicht
+        // aus /visu/<ID>/ gelesen werden kann.
         const browserView = window.localStorage.getItem(
             'symcon-energiefluss-view'
         );
@@ -6916,10 +6915,6 @@ class Energiefluss extends IPSModuleStrict
      * Dafür ist die Zielinstanz sofort aus /visu/<InstanzID>/ bekannt.
      * Pro Energiefluss-Instanz wird deshalb ein eigener Zustand gespeichert.
      */
-    function isSymconStandaloneTile() {
-        return window.parent === window && !window.frameElement;
-    }
-
     function getEnergyFlowInstanceID() {
         try {
             const match = window.location.pathname.match(/\/visu\/(\d+)\/?/);
@@ -6929,17 +6924,13 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-    function getAppInstanceStorageScope() {
-        if (!isSymconStandaloneTile()) {
-            return null;
-        }
-
+    function getInstanceStorageScope() {
         const instanceID = getEnergyFlowInstanceID();
         if (!instanceID) {
             return null;
         }
 
-        return `app-instance-${instanceID}`;
+        return `instance-${instanceID}`;
     }
 
     function getVisualizationStorageScope() {
@@ -7261,51 +7252,12 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function startWidgetDetection() {
-        // In der Symcon-App ist die Instanz bereits der eindeutige Schlüssel.
-        // Dort gibt es kein Parent-Grid und die Browser-Widget-Erkennung darf
-        // deshalb gar nicht erst anlaufen.
-        if (getAppInstanceStorageScope()) {
-            return;
-        }
-
-        if (widgetDetectionStarted) {
-            return;
-        }
-        widgetDetectionStarted = true;
-
-        let attempts = 0;
-        let previous = '';
-        let stableCount = 0;
-
-        const probe = () => {
-            attempts++;
-            const scope = getVisualizationStorageScope();
-
-            if (/^widget-\d+$/.test(String(scope || ''))) {
-                if (scope === previous) {
-                    stableCount++;
-                } else {
-                    previous = scope;
-                    stableCount = 1;
-                }
-
-                // Exakt die bewährte Sicherheitsregel der funktionierenden
-                // Widget-Version: zwei identische Treffer hintereinander.
-                if (stableCount >= 2) {
-                    activateDetectedWidgetScope(scope);
-                    return;
-                }
-            } else {
-                previous = '';
-                stableCount = 0;
-            }
-
-            if (attempts < 40) {
-                window.setTimeout(probe, 150);
-            }
-        };
-
-        requestAnimationFrame(() => window.setTimeout(probe, 50));
+        /*
+         * Bewusst deaktiviert:
+         * Der Zustand wird überall ausschließlich über die Energiefluss-
+         * Instanz-ID gespeichert. Keine Widget-/Grid-/Geometrie-Erkennung.
+         */
+        return;
     }
 
     function storeTechnicalLayout() {
