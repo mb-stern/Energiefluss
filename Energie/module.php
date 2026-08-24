@@ -6863,6 +6863,23 @@ class Energiefluss extends IPSModuleStrict
             // LocalStorage ist optional.
         }
 
+        /*
+         * WICHTIG: Noch VOR dem ersten setState() versuchen wir die bereits
+         * gelernte Position direkt einer Widget-ID zuzuordnen.
+         *
+         * Treffer:
+         *   Position -> widget-XXXXX -> Widget-Storage lesen
+         *   -> erst danach wird in handleMessage() gerendert.
+         *
+         * Kein Treffer:
+         *   Der oben geladene browserweite Wärmepumpen-Zustand bleibt aktiv
+         *   und die normale Grid-Erkennung übernimmt anschließend.
+         */
+        const cachedWidgetScope = getWidgetScopeFromPositionCache();
+        if (cachedWidgetScope) {
+            activateDetectedWidgetScope(cachedWidgetScope);
+        }
+
         updateTechnicalLayoutButtons();
         updateDisplayModeButton();
     }
