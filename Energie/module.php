@@ -6879,7 +6879,180 @@ class Energiefluss extends IPSModuleStrict
     let widgetDetectionStarted = false;
     let widgetDetectionReady = false;
 
+    /*
+     * Schneller positionsbasierter Widget-Cache.
+     *
+     * Nach einer sicher erkannten Kachel speichern wir pro Browser:
+     *   TargetID + relative Position/Größe + ContainerID -> WidgetID.
+     *
+     * Relative Werte werden verwendet, damit Browser-Chrome/Zoom und kleine
+     * Pixelabweichungen nicht entscheidend sind. Der Cache ist absichtlich
+     * nur lokal im jeweiligen Browser gültig.
+     */
+    const WIDGET_POSITION_CACHE_KEY =
+        'symcon-energiefluss-widget-position-cache-v1';
+
+    function getCurrentFrameDescriptor() {
+        try {
+            if (!window.parent || window.parent === window || !window.frameElement) {
+                return null;
+            }
+
+            const frame = window.frameElement;
+            const rect = frame.getBoundingClientRect();
+            if (!(rect.width > 40 && rect.height > 40)) {
+                return null;
+            }
+
+            const src = frame.getAttribute('src') || '';
+            const targetMatch = src.match(/\/visu\/(\d+)\//);
+            const targetID = targetMatch ? Number(targetMatch[1]) : 0;
+
+            const parentWidth = Math.max(
+                1,
+                Number(window.parent.innerWidth ||
+                    window.parent.document.documentElement?.clientWidth || 1)
+            );
+            const parentHeight = Math.max(
+                1,
+                Number(window.parent.innerHeight ||
+                    window.parent.document.documentElement?.clientHeight || 1)
+            );
+
+            const visibleFrames = Array.from(
+                window.parent.document.querySelectorAll('iframe')
+            ).filter(candidate => {
+                const r = candidate.getBoundingClientRect();
+                return r.width > 40 && r.height > 40;
+            });
+
+            return {
+                targetID,
+                frameCount: visibleFrames.length,
+                left: rect.left / parentWidth,
+                top: rect.top / parentHeight,
+                width: rect.width / parentWidth,
+                height: rect.height / parentHeight
+            };
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function readWidgetPositionCache() {
+        try {
+            const raw = window.localStorage.getItem(WIDGET_POSITION_CACHE_KEY);
+            const parsed = raw ? JSON.parse(raw) : [];
+            return Array.isArray(parsed) ? parsed : [];
+        } catch (_) {
+            return [];
+        }
+    }
+
+    function writeWidgetPositionCache(entries) {
+        try {
+            window.localStorage.setItem(
+                WIDGET_POSITION_CACHE_KEY,
+                JSON.stringify(entries.slice(-80))
+            );
+        } catch (_) {
+            // LocalStorage ist optional.
+        }
+    }
+
+    function rememberWidgetPosition(widgetId, containerId) {
+        const current = getCurrentFrameDescriptor();
+        if (!current || !/^\d+$/.test(String(widgetId || ''))) {
+            return;
+        }
+
+        const entries = readWidgetPositionCache();
+
+        // Einen bestehenden Eintrag derselben Widget-ID/Target-ID aktualisieren,
+        // statt bei jedem Laden einen neuen Datensatz anzulegen.
+        const filtered = entries.filter(entry => !(
+            String(entry.widgetId) === String(widgetId) &&
+            Number(entry.targetID || 0) === Number(current.targetID || 0) &&
+            Number(entry.frameCount || 0) === Number(current.frameCount || 0)
+        ));
+
+        filtered.push({
+            widgetId: String(widgetId),
+            containerId: String(containerId || ''),
+            targetID: current.targetID,
+            frameCount: current.frameCount,
+            left: current.left,
+            top: current.top,
+            width: current.width,
+            height: current.height,
+            savedAt: Date.now()
+        });
+
+        writeWidgetPositionCache(filtered);
+    }
+
+    function getWidgetScopeFromPositionCache() {
+        const current = getCurrentFrameDescriptor();
+        if (!current) {
+            return null;
+        }
+
+        const candidates = readWidgetPositionCache()
+            .filter(entry => {
+                if (!entry || !/^\d+$/.test(String(entry.widgetId || ''))) {
+                    return false;
+                }
+                if (Number(entry.frameCount || 0) !== Number(current.frameCount || 0)) {
+                    return false;
+                }
+                if (
+                    current.targetID > 0 &&
+                    Number(entry.targetID || 0) > 0 &&
+                    Number(entry.targetID) !== Number(current.targetID)
+                ) {
+                    return false;
+                }
+                return true;
+            })
+            .map(entry => {
+                // Alle Abweichungen sind bereits auf die Parent-Größe normiert.
+                const cost =
+                    Math.abs(Number(entry.left) - current.left) +
+                    Math.abs(Number(entry.top) - current.top) +
+                    Math.abs(Number(entry.width) - current.width) +
+                    Math.abs(Number(entry.height) - current.height);
+                return {entry, cost};
+            })
+            .sort((a, b) => a.cost - b.cost);
+
+        if (!candidates.length) {
+            return null;
+        }
+
+        const best = candidates[0];
+        const second = candidates[1] || null;
+
+        // Nur einen sehr guten UND gegenüber Platz 2 klaren Treffer akzeptieren.
+        // Bei Unsicherheit fällt die Funktion auf die bewährte Grid-Erkennung zurück.
+        if (
+            best.cost <= 0.035 &&
+            (!second || second.cost - best.cost >= 0.012)
+        ) {
+            return `widget-${best.entry.widgetId}`;
+        }
+
+        return null;
+    }
+
     function getVisualizationStorageScope() {
+        // Fast-Path: eine bereits sicher gelernte Browserposition kann sofort
+        // auf ihre feste Widget-ID zeigen. Bei jedem Zweifel läuft darunter
+        // unverändert die vollständige Grid-Erkennung.
+        const cachedScope = getWidgetScopeFromPositionCache();
+        if (cachedScope) {
+            return cachedScope;
+        }
+
         const parseMaybeJson = value => {
             if (value == null) return null;
             if (typeof value === 'object') return value;
@@ -7113,6 +7286,9 @@ class Energiefluss extends IPSModuleStrict
                 // Nur hinreichend plausible Matches akzeptieren. Bei einem guten
                 // Grid-Match liegt der Wert typischerweise deutlich unter 1.
                 if (best.cost < 3.5) {
+                    // Diese Zuordnung ist durch die vollständige Grid-Erkennung
+                    // bestätigt. Für den nächsten Reload positionsbasiert merken.
+                    rememberWidgetPosition(widgetId, best.containerId);
                     return `widget-${widgetId}`;
                 }
             }
