@@ -1009,6 +1009,112 @@ class Energiefluss extends IPSModuleStrict
         );
     }
 
+    /**
+     * Temporäre Diagnose für die Tile-/App-Anforderung.
+     * Sensible Werte wie Token, Passwort, Cookie und Authorization werden
+     * nicht vollständig an das HTML weitergegeben.
+     */
+    private function GetVisualizationRequestDiagnostic(): array
+    {
+        $maskValue = static function (string $key, mixed $value): mixed {
+            $lower = strtolower($key);
+
+            if (
+                str_contains($lower, 'token')
+                || str_contains($lower, 'password')
+                || str_contains($lower, 'cookie')
+                || str_contains($lower, 'authorization')
+            ) {
+                $text = is_scalar($value) ? (string) $value : '[complex]';
+                if ($text === '') {
+                    return '';
+                }
+
+                return '[masked:' . strlen($text) . ']';
+            }
+
+            if (is_scalar($value) || $value === null) {
+                return $value;
+            }
+
+            return '[complex]';
+        };
+
+        $get = [];
+        foreach ($_GET as $key => $value) {
+            $get[(string) $key] = $maskValue((string) $key, $value);
+        }
+
+        $server = [];
+        foreach ($_SERVER as $key => $value) {
+            $key = (string) $key;
+
+            $interesting =
+                str_starts_with($key, 'HTTP_')
+                || in_array(
+                    $key,
+                    [
+                        'REQUEST_METHOD',
+                        'REQUEST_URI',
+                        'QUERY_STRING',
+                        'REMOTE_ADDR',
+                        'REMOTE_PORT',
+                        'SERVER_ADDR',
+                        'SERVER_PORT',
+                        'SERVER_PROTOCOL',
+                        'SCRIPT_NAME',
+                        'SCRIPT_FILENAME',
+                        'PHP_SELF'
+                    ],
+                    true
+                )
+                || preg_match(
+                    '/VISU|VIEW|WIDGET|TILE|LINK|OBJECT|INSTANCE|ITEM|PAGE/i',
+                    $key
+                ) === 1;
+
+            if (!$interesting) {
+                continue;
+            }
+
+            $server[$key] = $maskValue($key, $value);
+        }
+
+        // REQUEST_URI und QUERY_STRING können Token/Passwort enthalten.
+        foreach (['REQUEST_URI', 'QUERY_STRING'] as $uriKey) {
+            if (!isset($server[$uriKey]) || !is_string($server[$uriKey])) {
+                continue;
+            }
+
+            $server[$uriKey] = preg_replace(
+                '/([?&](?:token|visuPassword)=)[^&]*/i',
+                '$1[masked]',
+                $server[$uriKey]
+            );
+        }
+
+        $ips = [];
+        if (isset($GLOBALS['_IPS']) && is_array($GLOBALS['_IPS'])) {
+            foreach ($GLOBALS['_IPS'] as $key => $value) {
+                $key = (string) $key;
+                if (
+                    preg_match(
+                        '/SELF|SENDER|INSTANCE|OBJECT|LINK|VISU|VIEW|WIDGET|TILE|PAGE/i',
+                        $key
+                    ) === 1
+                ) {
+                    $ips[$key] = $maskValue($key, $value);
+                }
+            }
+        }
+
+        return [
+            'get'    => $get,
+            'server' => $server,
+            'ips'    => $ips,
+        ];
+    }
+
     public function GetVisualizationTile(): string
     {
         try {
@@ -1022,10 +1128,16 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            // Sofortiger Browserzustand wie bei der Wärmepumpe.
-            // Die Widget-ID wird anschließend nur ergänzend ermittelt.
+            $requestDiagnosticPayload = json_encode(
+                $this->GetVisualizationRequestDiagnostic(),
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+
+            // Zusätzlich zur bisherigen Diagnose wird der PHP-/Server-Kontext
+            // direkt in das HTML geschrieben.
             return $this->GetVisualizationHtml('flow')
                 . '<script>window.__EF_SERVER_GRID__=' . $gridPayload
+                . ';window.__EF_REQUEST_DIAGNOSTIC__=' . $requestDiagnosticPayload
                 . ';handleMessage(' . $payload . ');</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
@@ -7861,6 +7973,8 @@ class Energiefluss extends IPSModuleStrict
                 {available:false}
             ),
             parentAccess: {},
+            serverRequest:
+                window.__EF_REQUEST_DIAGNOSTIC__ || null,
             detected: {
                 browserView: typeof currentDisplayMode !== 'undefined'
                     ? currentDisplayMode : null,
