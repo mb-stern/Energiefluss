@@ -852,6 +852,21 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
+        if ($Ident === 'AppDiagnostic') {
+            $diagnostic = is_string($Value)
+                ? $Value
+                : json_encode(
+                    $Value,
+                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                );
+
+            $this->SetBuffer('AppDiagnostic', (string) $diagnostic);
+            $this->LogMessage(
+                'APP_DIAGNOSTIC: ' . (string) $diagnostic,
+                KL_NOTIFY
+            );
+            return;
+        }
     }
 
     public function ExportHouseColors(): string
@@ -1844,7 +1859,7 @@ class Energiefluss extends IPSModuleStrict
 <div id="ef-app-diagnose">
     <div id="ef-app-diagnose-buttons">
         <button type="button" id="ef-diag-refresh">Aktualisieren</button>
-        <button type="button" id="ef-diag-copy">Kopieren</button>
+        <button type="button" id="ef-diag-send">An Symcon senden</button>
         <button type="button" id="ef-diag-hide">Ausblenden</button>
     </div>
     <pre id="ef-app-diagnose-text">Diagnose wird geladen …</pre>
@@ -7945,34 +7960,49 @@ class Energiefluss extends IPSModuleStrict
 
     function efInitDiagnostic() {
         const refresh = document.getElementById('ef-diag-refresh');
-        const copy = document.getElementById('ef-diag-copy');
+        const send = document.getElementById('ef-diag-send');
         const hide = document.getElementById('ef-diag-hide');
 
         refresh?.addEventListener('click', () => efRenderDiagnostic());
 
-        copy?.addEventListener('click', async () => {
+        send?.addEventListener('click', async () => {
             efRenderDiagnostic();
-            const text = JSON.stringify(
-                window.__EF_LAST_DIAGNOSTIC__ || efBuildDiagnostic(),
-                null,
-                2
+
+            const diagnostic = JSON.stringify(
+                window.__EF_LAST_DIAGNOSTIC__ || efBuildDiagnostic()
             );
 
             try {
-                await navigator.clipboard.writeText(text);
-                copy.textContent = 'Kopiert';
-                setTimeout(() => copy.textContent = 'Kopieren', 1200);
-            } catch (_) {
-                const area = document.createElement('textarea');
-                area.value = text;
-                area.style.position = 'fixed';
-                area.style.opacity = '0';
-                document.body.appendChild(area);
-                area.select();
-                try { document.execCommand('copy'); } catch (_) {}
-                area.remove();
-                copy.textContent = 'Kopiert?';
-                setTimeout(() => copy.textContent = 'Kopieren', 1200);
+                if (typeof requestAction !== 'function') {
+                    throw new Error('requestAction ist nicht verfügbar');
+                }
+
+                await requestAction(
+                    'AppDiagnostic',
+                    diagnostic
+                );
+
+                send.textContent = 'Gesendet';
+                setTimeout(
+                    () => send.textContent = 'An Symcon senden',
+                    1400
+                );
+            } catch (error) {
+                send.textContent = 'Fehler';
+                const el = document.getElementById(
+                    'ef-app-diagnose-text'
+                );
+                if (el) {
+                    el.textContent =
+                        'SEND_FEHLER: ' +
+                        (error?.message || String(error)) +
+                        '\n\n' +
+                        diagnostic;
+                }
+                setTimeout(
+                    () => send.textContent = 'An Symcon senden',
+                    1800
+                );
             }
         });
 
