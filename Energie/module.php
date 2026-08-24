@@ -122,14 +122,6 @@ class Energiefluss extends IPSModuleStrict
         // Animationsgeschwindigkeit: 100 % entspricht dem bisherigen Verhalten.
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
-        // Legacy-Eigenschaft zur Abwärtskompatibilität.
-        // Die sichtbare View wird nicht mehr über die Instanzkonfiguration
-        // gespeichert, sondern lokal im Visualisierungstile umgeschaltet.
-        $this->RegisterPropertyString('DisplayMode', 'flow');
-
-        // full = alle technischen Details, compact = verdichtete Technikansicht.
-        $this->RegisterPropertyString('TechnicalLayout', 'lite');
-
         $this->SetVisualizationType(1);
     }
 
@@ -6824,43 +6816,71 @@ class Energiefluss extends IPSModuleStrict
     let browserViewStateInitialized = false;
 
     function initializeBrowserViewState() {
-        if (browserViewStateInitialized) {
-            return;
-        }
+        /*
+         * Einheitliche Speicherung in Browser UND Symcon-App:
+         * Eine Energiefluss-Instanz = ein eigener gespeicherter Zustand.
+         *
+         * Beispiel:
+         * /visu/36446/ -> instance-36446
+         */
+        const instanceScope = getInstanceStorageScope();
 
-        browserViewStateInitialized = true;
+        if (instanceScope) {
+            const instanceViewKey =
+                `symcon-energiefluss-${instanceScope}-view`;
+            const instanceLayoutKey =
+                `symcon-energiefluss-${instanceScope}-technical-layout`;
 
-        try {
-            const storedView =
-                window.localStorage.getItem(VIEW_STORAGE_KEY);
+            const storedView = window.localStorage.getItem(instanceViewKey);
+            const storedLayout = window.localStorage.getItem(instanceLayoutKey);
 
-            if (
-                storedView === 'flow'
-                || storedView === 'house'
-            ) {
+            if (storedView === 'flow' || storedView === 'house') {
                 currentDisplayMode = storedView;
             }
 
-            const storedTechnicalLayout =
-                window.localStorage.getItem(
-                    TECHNICAL_LAYOUT_STORAGE_KEY
-                );
-
             if (
-                [
-                    'compact',
-                    'compact-wide',
-                    'lite',
-                    'lite-wide',
-                    'full',
-                    'full-wide'
-                ].includes(storedTechnicalLayout)
+                storedLayout === 'compact'
+                || storedLayout === 'compact-wide'
+                || storedLayout === 'lite'
+                || storedLayout === 'lite-wide'
+                || storedLayout === 'full'
+                || storedLayout === 'full-wide'
             ) {
-                currentTechnicalLayout =
-                    storedTechnicalLayout;
+                currentTechnicalLayout = storedLayout;
             }
-        } catch (error) {
-            // LocalStorage ist optional.
+
+            widgetStorageScope = instanceScope;
+            widgetViewStorageKey = instanceViewKey;
+            widgetTechnicalLayoutStorageKey = instanceLayoutKey;
+            widgetDetectionReady = true;
+
+            updateTechnicalLayoutButtons();
+            updateDisplayModeButton();
+            return;
+        }
+
+        // Sicherheitsfallback, falls die Instanz-ID wider Erwarten nicht
+        // aus /visu/<ID>/ gelesen werden kann.
+        const browserView = window.localStorage.getItem(
+            'symcon-energiefluss-view'
+        );
+        const browserLayout = window.localStorage.getItem(
+            'symcon-energiefluss-technical-layout'
+        );
+
+        if (browserView === 'flow' || browserView === 'house') {
+            currentDisplayMode = browserView;
+        }
+
+        if (
+            browserLayout === 'compact'
+            || browserLayout === 'compact-wide'
+            || browserLayout === 'lite'
+            || browserLayout === 'lite-wide'
+            || browserLayout === 'full'
+            || browserLayout === 'full-wide'
+        ) {
+            currentTechnicalLayout = browserLayout;
         }
 
         updateTechnicalLayoutButtons();
@@ -6878,6 +6898,32 @@ class Energiefluss extends IPSModuleStrict
     let widgetTechnicalLayoutStorageKey = null;
     let widgetDetectionStarted = false;
     let widgetDetectionReady = false;
+
+    /*
+     * Symcon-App:
+     * Die HTML-Kachel läuft dort als eigenes Top-Level-Dokument. Es gibt
+     * deshalb weder frameElement noch Parent-Grid und somit keine Widget-ID.
+     *
+     * Dafür ist die Zielinstanz sofort aus /visu/<InstanzID>/ bekannt.
+     * Pro Energiefluss-Instanz wird deshalb ein eigener Zustand gespeichert.
+     */
+    function getEnergyFlowInstanceID() {
+        try {
+            const match = window.location.pathname.match(/\/visu\/(\d+)\/?/);
+            return match ? match[1] : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function getInstanceStorageScope() {
+        const instanceID = getEnergyFlowInstanceID();
+        if (!instanceID) {
+            return null;
+        }
+
+        return `instance-${instanceID}`;
+    }
 
     function getVisualizationStorageScope() {
         const parseMaybeJson = value => {
@@ -7198,44 +7244,12 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function startWidgetDetection() {
-        if (widgetDetectionStarted) {
-            return;
-        }
-        widgetDetectionStarted = true;
-
-        let attempts = 0;
-        let previous = '';
-        let stableCount = 0;
-
-        const probe = () => {
-            attempts++;
-            const scope = getVisualizationStorageScope();
-
-            if (/^widget-\d+$/.test(String(scope || ''))) {
-                if (scope === previous) {
-                    stableCount++;
-                } else {
-                    previous = scope;
-                    stableCount = 1;
-                }
-
-                // Exakt die bewährte Sicherheitsregel der funktionierenden
-                // Widget-Version: zwei identische Treffer hintereinander.
-                if (stableCount >= 2) {
-                    activateDetectedWidgetScope(scope);
-                    return;
-                }
-            } else {
-                previous = '';
-                stableCount = 0;
-            }
-
-            if (attempts < 40) {
-                window.setTimeout(probe, 150);
-            }
-        };
-
-        requestAnimationFrame(() => window.setTimeout(probe, 50));
+        /*
+         * Bewusst deaktiviert:
+         * Der Zustand wird überall ausschließlich über die Energiefluss-
+         * Instanz-ID gespeichert. Keine Widget-/Grid-/Geometrie-Erkennung.
+         */
+        return;
     }
 
     function storeTechnicalLayout() {

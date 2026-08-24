@@ -271,8 +271,8 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
-### Version 1.7 (23.08.2026)
-- Konfiguration der Ansichten aus dem Konfigurationsformular entfernt. So kann auf jedem Gerät eine individuelle Ansicht gewählt werden.
+### Version 1.7 (24.08.2026)
+- Konfiguration der Ansichten aus dem Konfigurationsformular entfernt. So kann auf jedem Gerät eine individuelle Ansicht gewählt werden. Werden pro View mehrere unterschiedliche Ansichten gewünscht, muss die Instanz geklont werden. Die Kachelen in der Visu identifizieren sich nun über die Instanz.
 
 ### Version 1.6 (15.08.2026)
 - In der Hausansicht wird für die Netzleistung nur noch ein Wert dargestellt.
