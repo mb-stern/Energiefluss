@@ -122,14 +122,6 @@ class Energiefluss extends IPSModuleStrict
         // Animationsgeschwindigkeit: 100 % entspricht dem bisherigen Verhalten.
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
-        // Legacy-Eigenschaft zur Abwärtskompatibilität.
-        // Die sichtbare View wird nicht mehr über die Instanzkonfiguration
-        // gespeichert, sondern lokal im Visualisierungstile umgeschaltet.
-        $this->RegisterPropertyString('DisplayMode', 'flow');
-
-        // full = alle technischen Details, compact = verdichtete Technikansicht.
-        $this->RegisterPropertyString('TechnicalLayout', 'lite');
-
         $this->SetVisualizationType(1);
     }
 
