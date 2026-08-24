@@ -852,21 +852,6 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        if ($Ident === 'AppDiagnostic') {
-            $diagnostic = is_string($Value)
-                ? $Value
-                : json_encode(
-                    $Value,
-                    JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                );
-
-            $this->SetBuffer('AppDiagnostic', (string) $diagnostic);
-            $this->LogMessage(
-                'APP_DIAGNOSTIC: ' . (string) $diagnostic,
-                KL_NOTIFY
-            );
-            return;
-        }
     }
 
     public function ExportHouseColors(): string
@@ -1409,7 +1394,7 @@ class Energiefluss extends IPSModuleStrict
             "pv center grid"
             "battery consumers wallbox";
         gap: 10px;
-        padding: 8px;
+        padding: 8px 8px 10px;
         box-sizing: border-box;
         color: var(--w-text);
     }
@@ -1830,10 +1815,11 @@ class Energiefluss extends IPSModuleStrict
         display:flex;
         gap:6px;
         position:sticky;
-        top:0;
-        margin-bottom:6px;
+        bottom:0;
+        margin-top:6px;
         background:rgba(20,20,20,.94);
-        padding-bottom:4px;
+        padding-top:6px;
+        padding-bottom:2px;
     }
     #ef-app-diagnose button {
         font: 12px sans-serif;
@@ -1857,12 +1843,12 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="ef-app-diagnose">
+    <pre id="ef-app-diagnose-text">Diagnose wird geladen …</pre>
     <div id="ef-app-diagnose-buttons">
         <button type="button" id="ef-diag-refresh">Aktualisieren</button>
-        <button type="button" id="ef-diag-send">An Symcon senden</button>
+        <button type="button" id="ef-diag-copy">Kopieren</button>
         <button type="button" id="ef-diag-hide">Ausblenden</button>
     </div>
-    <pre id="ef-app-diagnose-text">Diagnose wird geladen …</pre>
 </div>
 
 <div id="eflow">
@@ -7960,49 +7946,34 @@ class Energiefluss extends IPSModuleStrict
 
     function efInitDiagnostic() {
         const refresh = document.getElementById('ef-diag-refresh');
-        const send = document.getElementById('ef-diag-send');
+        const copy = document.getElementById('ef-diag-copy');
         const hide = document.getElementById('ef-diag-hide');
 
         refresh?.addEventListener('click', () => efRenderDiagnostic());
 
-        send?.addEventListener('click', async () => {
+        copy?.addEventListener('click', async () => {
             efRenderDiagnostic();
-
-            const diagnostic = JSON.stringify(
-                window.__EF_LAST_DIAGNOSTIC__ || efBuildDiagnostic()
+            const text = JSON.stringify(
+                window.__EF_LAST_DIAGNOSTIC__ || efBuildDiagnostic(),
+                null,
+                2
             );
 
             try {
-                if (typeof requestAction !== 'function') {
-                    throw new Error('requestAction ist nicht verfügbar');
-                }
-
-                await requestAction(
-                    'AppDiagnostic',
-                    diagnostic
-                );
-
-                send.textContent = 'Gesendet';
-                setTimeout(
-                    () => send.textContent = 'An Symcon senden',
-                    1400
-                );
-            } catch (error) {
-                send.textContent = 'Fehler';
-                const el = document.getElementById(
-                    'ef-app-diagnose-text'
-                );
-                if (el) {
-                    el.textContent =
-                        'SEND_FEHLER: ' +
-                        (error?.message || String(error)) +
-                        '\n\n' +
-                        diagnostic;
-                }
-                setTimeout(
-                    () => send.textContent = 'An Symcon senden',
-                    1800
-                );
+                await navigator.clipboard.writeText(text);
+                copy.textContent = 'Kopiert';
+                setTimeout(() => copy.textContent = 'Kopieren', 1200);
+            } catch (_) {
+                const area = document.createElement('textarea');
+                area.value = text;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.select();
+                try { document.execCommand('copy'); } catch (_) {}
+                area.remove();
+                copy.textContent = 'Kopiert?';
+                setTimeout(() => copy.textContent = 'Kopieren', 1200);
             }
         });
 
