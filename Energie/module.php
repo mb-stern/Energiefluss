@@ -1009,112 +1009,6 @@ class Energiefluss extends IPSModuleStrict
         );
     }
 
-    /**
-     * Temporäre Diagnose für die Tile-/App-Anforderung.
-     * Sensible Werte wie Token, Passwort, Cookie und Authorization werden
-     * nicht vollständig an das HTML weitergegeben.
-     */
-    private function GetVisualizationRequestDiagnostic(): array
-    {
-        $maskValue = static function (string $key, mixed $value): mixed {
-            $lower = strtolower($key);
-
-            if (
-                str_contains($lower, 'token')
-                || str_contains($lower, 'password')
-                || str_contains($lower, 'cookie')
-                || str_contains($lower, 'authorization')
-            ) {
-                $text = is_scalar($value) ? (string) $value : '[complex]';
-                if ($text === '') {
-                    return '';
-                }
-
-                return '[masked:' . strlen($text) . ']';
-            }
-
-            if (is_scalar($value) || $value === null) {
-                return $value;
-            }
-
-            return '[complex]';
-        };
-
-        $get = [];
-        foreach ($_GET as $key => $value) {
-            $get[(string) $key] = $maskValue((string) $key, $value);
-        }
-
-        $server = [];
-        foreach ($_SERVER as $key => $value) {
-            $key = (string) $key;
-
-            $interesting =
-                str_starts_with($key, 'HTTP_')
-                || in_array(
-                    $key,
-                    [
-                        'REQUEST_METHOD',
-                        'REQUEST_URI',
-                        'QUERY_STRING',
-                        'REMOTE_ADDR',
-                        'REMOTE_PORT',
-                        'SERVER_ADDR',
-                        'SERVER_PORT',
-                        'SERVER_PROTOCOL',
-                        'SCRIPT_NAME',
-                        'SCRIPT_FILENAME',
-                        'PHP_SELF'
-                    ],
-                    true
-                )
-                || preg_match(
-                    '/VISU|VIEW|WIDGET|TILE|LINK|OBJECT|INSTANCE|ITEM|PAGE/i',
-                    $key
-                ) === 1;
-
-            if (!$interesting) {
-                continue;
-            }
-
-            $server[$key] = $maskValue($key, $value);
-        }
-
-        // REQUEST_URI und QUERY_STRING können Token/Passwort enthalten.
-        foreach (['REQUEST_URI', 'QUERY_STRING'] as $uriKey) {
-            if (!isset($server[$uriKey]) || !is_string($server[$uriKey])) {
-                continue;
-            }
-
-            $server[$uriKey] = preg_replace(
-                '/([?&](?:token|visuPassword)=)[^&]*/i',
-                '$1[masked]',
-                $server[$uriKey]
-            );
-        }
-
-        $ips = [];
-        if (isset($GLOBALS['_IPS']) && is_array($GLOBALS['_IPS'])) {
-            foreach ($GLOBALS['_IPS'] as $key => $value) {
-                $key = (string) $key;
-                if (
-                    preg_match(
-                        '/SELF|SENDER|INSTANCE|OBJECT|LINK|VISU|VIEW|WIDGET|TILE|PAGE/i',
-                        $key
-                    ) === 1
-                ) {
-                    $ips[$key] = $maskValue($key, $value);
-                }
-            }
-        }
-
-        return [
-            'get'    => $get,
-            'server' => $server,
-            'ips'    => $ips,
-        ];
-    }
-
     public function GetVisualizationTile(): string
     {
         try {
@@ -1128,16 +1022,10 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            $requestDiagnosticPayload = json_encode(
-                $this->GetVisualizationRequestDiagnostic(),
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-            );
-
-            // Zusätzlich zur bisherigen Diagnose wird der PHP-/Server-Kontext
-            // direkt in das HTML geschrieben.
+            // Sofortiger Browserzustand wie bei der Wärmepumpe.
+            // Die Widget-ID wird anschließend nur ergänzend ermittelt.
             return $this->GetVisualizationHtml('flow')
                 . '<script>window.__EF_SERVER_GRID__=' . $gridPayload
-                . ';window.__EF_REQUEST_DIAGNOSTIC__=' . $requestDiagnosticPayload
                 . ';handleMessage(' . $payload . ');</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
@@ -1506,7 +1394,7 @@ class Energiefluss extends IPSModuleStrict
             "pv center grid"
             "battery consumers wallbox";
         gap: 10px;
-        padding: 8px 8px 10px;
+        padding: 8px;
         box-sizing: border-box;
         color: var(--w-text);
     }
@@ -1902,47 +1790,6 @@ class Energiefluss extends IPSModuleStrict
     }
 
 
-
-    /* ===== TEMPORÄRE APP-/BROWSER-DIAGNOSE ===== */
-    #ef-app-diagnose {
-        position: fixed;
-        z-index: 2147483647;
-        left: 6px;
-        right: 6px;
-        top: 6px;
-        max-height: calc(100vh - 12px);
-        overflow: auto;
-        box-sizing: border-box;
-        padding: 8px;
-        border-radius: 8px;
-        background: rgba(20,20,20,.94);
-        color: #fff;
-        font: 11px/1.3 monospace;
-        white-space: pre-wrap;
-        overflow-wrap: anywhere;
-        box-shadow: 0 2px 10px rgba(0,0,0,.35);
-    }
-    #ef-app-diagnose.hidden { display:none; }
-    #ef-app-diagnose-buttons {
-        display:flex;
-        gap:6px;
-        position:sticky;
-        bottom:0;
-        margin-top:6px;
-        background:rgba(20,20,20,.94);
-        padding-top:6px;
-        padding-bottom:2px;
-    }
-    #ef-app-diagnose button {
-        font: 12px sans-serif;
-        padding: 5px 8px;
-        border: 1px solid #888;
-        border-radius: 6px;
-        background: #333;
-        color: #fff;
-    }
-    #ef-app-diagnose-text { margin:0; }
-
 </style>
 <script src="/icons.js"></script>
 <script>
@@ -1953,15 +1800,6 @@ class Energiefluss extends IPSModuleStrict
 <script type="module"
         src="/user/Energiefluss/vendor/power-flow-card.js">
 </script>
-
-<div id="ef-app-diagnose">
-    <pre id="ef-app-diagnose-text">Diagnose wird geladen …</pre>
-    <div id="ef-app-diagnose-buttons">
-        <button type="button" id="ef-diag-refresh">Aktualisieren</button>
-        <button type="button" id="ef-diag-copy">Kopieren</button>
-        <button type="button" id="ef-diag-hide">Ausblenden</button>
-    </div>
-</div>
 
 <div id="eflow">
     <div id="scale-host">
@@ -6986,43 +6824,72 @@ class Energiefluss extends IPSModuleStrict
     let browserViewStateInitialized = false;
 
     function initializeBrowserViewState() {
-        if (browserViewStateInitialized) {
-            return;
-        }
+        /*
+         * In der Symcon-App ist die Instanz-ID sofort verfügbar.
+         * Deshalb dort direkt instanzspezifisch laden – ohne Widget-Erkennung,
+         * Wartezeit oder Geometrie-Matching.
+         */
+        const appScope = getAppInstanceStorageScope();
 
-        browserViewStateInitialized = true;
+        if (appScope) {
+            const appViewKey =
+                `symcon-energiefluss-${appScope}-view`;
+            const appLayoutKey =
+                `symcon-energiefluss-${appScope}-technical-layout`;
 
-        try {
-            const storedView =
-                window.localStorage.getItem(VIEW_STORAGE_KEY);
+            const storedView = window.localStorage.getItem(appViewKey);
+            const storedLayout = window.localStorage.getItem(appLayoutKey);
 
-            if (
-                storedView === 'flow'
-                || storedView === 'house'
-            ) {
+            if (storedView === 'flow' || storedView === 'house') {
                 currentDisplayMode = storedView;
             }
 
-            const storedTechnicalLayout =
-                window.localStorage.getItem(
-                    TECHNICAL_LAYOUT_STORAGE_KEY
-                );
-
             if (
-                [
-                    'compact',
-                    'compact-wide',
-                    'lite',
-                    'lite-wide',
-                    'full',
-                    'full-wide'
-                ].includes(storedTechnicalLayout)
+                storedLayout === 'compact'
+                || storedLayout === 'compact-wide'
+                || storedLayout === 'lite'
+                || storedLayout === 'lite-wide'
+                || storedLayout === 'full'
+                || storedLayout === 'full-wide'
             ) {
-                currentTechnicalLayout =
-                    storedTechnicalLayout;
+                currentTechnicalLayout = storedLayout;
             }
-        } catch (error) {
-            // LocalStorage ist optional.
+
+            widgetStorageScope = appScope;
+            widgetViewStorageKey = appViewKey;
+            widgetTechnicalLayoutStorageKey = appLayoutKey;
+            widgetDetectionReady = true;
+
+            updateTechnicalLayoutButtons();
+            updateDisplayModeButton();
+            return;
+        }
+
+        /*
+         * Browser: unverändert das bewährte Wärmepumpen-Prinzip als sofortige
+         * Basis laden; anschließend kann die vorhandene Widget-Erkennung auf
+         * die konkrete Kachel umschalten.
+         */
+        const browserView = window.localStorage.getItem(
+            'symcon-energiefluss-view'
+        );
+        const browserLayout = window.localStorage.getItem(
+            'symcon-energiefluss-technical-layout'
+        );
+
+        if (browserView === 'flow' || browserView === 'house') {
+            currentDisplayMode = browserView;
+        }
+
+        if (
+            browserLayout === 'compact'
+            || browserLayout === 'compact-wide'
+            || browserLayout === 'lite'
+            || browserLayout === 'lite-wide'
+            || browserLayout === 'full'
+            || browserLayout === 'full-wide'
+        ) {
+            currentTechnicalLayout = browserLayout;
         }
 
         updateTechnicalLayoutButtons();
@@ -7040,6 +6907,40 @@ class Energiefluss extends IPSModuleStrict
     let widgetTechnicalLayoutStorageKey = null;
     let widgetDetectionStarted = false;
     let widgetDetectionReady = false;
+
+    /*
+     * Symcon-App:
+     * Die HTML-Kachel läuft dort als eigenes Top-Level-Dokument. Es gibt
+     * deshalb weder frameElement noch Parent-Grid und somit keine Widget-ID.
+     *
+     * Dafür ist die Zielinstanz sofort aus /visu/<InstanzID>/ bekannt.
+     * Pro Energiefluss-Instanz wird deshalb ein eigener Zustand gespeichert.
+     */
+    function isSymconStandaloneTile() {
+        return window.parent === window && !window.frameElement;
+    }
+
+    function getEnergyFlowInstanceID() {
+        try {
+            const match = window.location.pathname.match(/\/visu\/(\d+)\/?/);
+            return match ? match[1] : null;
+        } catch (_) {
+            return null;
+        }
+    }
+
+    function getAppInstanceStorageScope() {
+        if (!isSymconStandaloneTile()) {
+            return null;
+        }
+
+        const instanceID = getEnergyFlowInstanceID();
+        if (!instanceID) {
+            return null;
+        }
+
+        return `app-instance-${instanceID}`;
+    }
 
     function getVisualizationStorageScope() {
         const parseMaybeJson = value => {
@@ -7360,6 +7261,13 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function startWidgetDetection() {
+        // In der Symcon-App ist die Instanz bereits der eindeutige Schlüssel.
+        // Dort gibt es kein Parent-Grid und die Browser-Widget-Erkennung darf
+        // deshalb gar nicht erst anlaufen.
+        if (getAppInstanceStorageScope()) {
+            return;
+        }
+
         if (widgetDetectionStarted) {
             return;
         }
@@ -7871,245 +7779,6 @@ class Energiefluss extends IPSModuleStrict
     let lastStateData = null;
     let lastCompactLayout = window.matchMedia('(max-width: 600px)').matches;
 
-
-    // ===== TEMPORÄRE APP-/BROWSER-DIAGNOSE =====
-    function efSafe(fn, fallback = null) {
-        try {
-            return fn();
-        } catch (error) {
-            return `FEHLER: ${error && error.message ? error.message : String(error)}`;
-        }
-    }
-
-    function efStorageSnapshot(storage) {
-        if (!storage || typeof storage.length !== 'number') {
-            return {available: false};
-        }
-
-        const interesting = {};
-        const allKeys = [];
-
-        for (let i = 0; i < storage.length; i++) {
-            const key = storage.key(i);
-            if (!key) continue;
-            allKeys.push(key);
-
-            if (
-                /symcon|flutter|energiefluss|waermepumpe|view|grid|tile|widget/i.test(key)
-            ) {
-                let value = null;
-                try {
-                    value = storage.getItem(key);
-                } catch (_) {}
-                interesting[key] = value;
-            }
-        }
-
-        return {
-            available: true,
-            count: storage.length,
-            interesting,
-            allKeyCount: allKeys.length
-        };
-    }
-
-    function efFrameInfo(frame, index) {
-        return efSafe(() => {
-            const rect = frame.getBoundingClientRect();
-            const src = frame.getAttribute('src') || frame.src || '';
-            return {
-                i: index,
-                id: frame.id || '',
-                name: frame.name || '',
-                src,
-                x: Math.round(rect.left),
-                y: Math.round(rect.top),
-                width: Math.round(rect.width),
-                height: Math.round(rect.height),
-                parentTag: frame.parentElement?.tagName || '',
-                parentId: frame.parentElement?.id || ''
-            };
-        }, {i:index, error:'nicht lesbar'});
-    }
-
-    function efBuildDiagnostic() {
-        const result = {
-            timestamp: new Date().toISOString(),
-            userAgent: navigator.userAgent,
-            platform: navigator.platform || '',
-            standalone:
-                window.matchMedia?.('(display-mode: standalone)')?.matches || false,
-            location: {
-                href: location.href,
-                origin: location.origin,
-                pathname: location.pathname,
-                search: location.search,
-                hash: location.hash
-            },
-            viewport: {
-                innerWidth: window.innerWidth,
-                innerHeight: window.innerHeight,
-                devicePixelRatio: window.devicePixelRatio,
-                screenWidth: window.screen?.width,
-                screenHeight: window.screen?.height,
-                orientation:
-                    screen.orientation?.type ||
-                    (window.innerWidth > window.innerHeight ? 'landscape' : 'portrait')
-            },
-            frame: {
-                parentIsSelf: window.parent === window,
-                topIsSelf: window.top === window,
-                frameElementExists: !!window.frameElement,
-                frameElementTag: window.frameElement?.tagName || null,
-                frameElementSrc:
-                    window.frameElement?.getAttribute?.('src') || null
-            },
-            localStorage: efSafe(
-                () => efStorageSnapshot(window.localStorage),
-                {available:false}
-            ),
-            sessionStorage: efSafe(
-                () => efStorageSnapshot(window.sessionStorage),
-                {available:false}
-            ),
-            parentAccess: {},
-            serverRequest:
-                window.__EF_REQUEST_DIAGNOSTIC__ || null,
-            detected: {
-                browserView: typeof currentDisplayMode !== 'undefined'
-                    ? currentDisplayMode : null,
-                technicalLayout: typeof currentTechnicalLayout !== 'undefined'
-                    ? currentTechnicalLayout : null,
-                widgetScope: typeof widgetStorageScope !== 'undefined'
-                    ? widgetStorageScope : null,
-                widgetViewKey: typeof widgetViewStorageKey !== 'undefined'
-                    ? widgetViewStorageKey : null,
-                widgetLayoutKey: typeof widgetTechnicalLayoutStorageKey !== 'undefined'
-                    ? widgetTechnicalLayoutStorageKey : null,
-                detectionReady: typeof widgetDetectionReady !== 'undefined'
-                    ? widgetDetectionReady : null
-            }
-        };
-
-        result.parentAccess.sameOriginDocument = efSafe(
-            () => !!window.parent.document,
-            false
-        );
-
-        result.parentAccess.href = efSafe(
-            () => window.parent.location.href,
-            null
-        );
-
-        result.parentAccess.localStorage = efSafe(
-            () => efStorageSnapshot(window.parent.localStorage),
-            {available:false}
-        );
-
-        result.parentAccess.iframes = efSafe(
-            () => Array.from(
-                window.parent.document.querySelectorAll('iframe')
-            ).map(efFrameInfo),
-            []
-        );
-
-        result.parentAccess.iframeCount =
-            Array.isArray(result.parentAccess.iframes)
-                ? result.parentAccess.iframes.length
-                : null;
-
-        result.parentAccess.flutterPlatformViews = efSafe(
-            () => Array.from(
-                window.parent.document.querySelectorAll('flt-platform-view')
-            ).map((el, i) => ({
-                i,
-                id: el.id || '',
-                slot: el.getAttribute('slot') || ''
-            })).slice(0, 50),
-            []
-        );
-
-        result.currentFrameRect = efSafe(() => {
-            const r = window.frameElement?.getBoundingClientRect();
-            return r ? {
-                x: Math.round(r.left),
-                y: Math.round(r.top),
-                width: Math.round(r.width),
-                height: Math.round(r.height)
-            } : null;
-        }, null);
-
-        result.visualizationStorageScope = efSafe(
-            () => typeof getVisualizationStorageScope === 'function'
-                ? getVisualizationStorageScope()
-                : null,
-            null
-        );
-
-        return result;
-    }
-
-    function efRenderDiagnostic() {
-        const el = document.getElementById('ef-app-diagnose-text');
-        if (!el) return;
-
-        const data = efBuildDiagnostic();
-        window.__EF_LAST_DIAGNOSTIC__ = data;
-        el.textContent = JSON.stringify(data, null, 2);
-    }
-
-    function efInitDiagnostic() {
-        const refresh = document.getElementById('ef-diag-refresh');
-        const copy = document.getElementById('ef-diag-copy');
-        const hide = document.getElementById('ef-diag-hide');
-
-        refresh?.addEventListener('click', () => efRenderDiagnostic());
-
-        copy?.addEventListener('click', async () => {
-            efRenderDiagnostic();
-            const text = JSON.stringify(
-                window.__EF_LAST_DIAGNOSTIC__ || efBuildDiagnostic(),
-                null,
-                2
-            );
-
-            try {
-                await navigator.clipboard.writeText(text);
-                copy.textContent = 'Kopiert';
-                setTimeout(() => copy.textContent = 'Kopieren', 1200);
-            } catch (_) {
-                const area = document.createElement('textarea');
-                area.value = text;
-                area.style.position = 'fixed';
-                area.style.opacity = '0';
-                document.body.appendChild(area);
-                area.select();
-                try { document.execCommand('copy'); } catch (_) {}
-                area.remove();
-                copy.textContent = 'Kopiert?';
-                setTimeout(() => copy.textContent = 'Kopieren', 1200);
-            }
-        });
-
-        hide?.addEventListener('click', () => {
-            document.getElementById('ef-app-diagnose')?.classList.add('hidden');
-        });
-
-        efRenderDiagnostic();
-
-        // Mehrere Momentaufnahmen, weil Flutter/Apps die Parent-Struktur
-        // eventuell erst nach dem ersten HTML-Render fertigstellen.
-        setTimeout(efRenderDiagnostic, 250);
-        setTimeout(efRenderDiagnostic, 1000);
-        setTimeout(efRenderDiagnostic, 2500);
-    }
-
-    if (document.readyState === 'loading') {
-        document.addEventListener('DOMContentLoaded', efInitDiagnostic, {once:true});
-    } else {
-        efInitDiagnostic();
-    }
-
     function handleMessage(data) {
         const d = typeof data === 'string' ? JSON.parse(data) : data;
 
@@ -8127,9 +7796,6 @@ class Energiefluss extends IPSModuleStrict
 
         lastStateData = d;
         setState(d);
-
-        setTimeout(efRenderDiagnostic, 0);
-        setTimeout(efRenderDiagnostic, 300);
     }
 
     function refreshResponsiveState() {
