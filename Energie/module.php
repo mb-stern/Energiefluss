@@ -1790,6 +1790,46 @@ class Energiefluss extends IPSModuleStrict
     }
 
 
+
+    /* ===== TEMPORÄRE APP-/BROWSER-DIAGNOSE ===== */
+    #ef-app-diagnose {
+        position: fixed;
+        z-index: 2147483647;
+        left: 6px;
+        right: 6px;
+        top: 6px;
+        max-height: calc(100vh - 12px);
+        overflow: auto;
+        box-sizing: border-box;
+        padding: 8px;
+        border-radius: 8px;
+        background: rgba(20,20,20,.94);
+        color: #fff;
+        font: 11px/1.3 monospace;
+        white-space: pre-wrap;
+        overflow-wrap: anywhere;
+        box-shadow: 0 2px 10px rgba(0,0,0,.35);
+    }
+    #ef-app-diagnose.hidden { display:none; }
+    #ef-app-diagnose-buttons {
+        display:flex;
+        gap:6px;
+        position:sticky;
+        top:0;
+        margin-bottom:6px;
+        background:rgba(20,20,20,.94);
+        padding-bottom:4px;
+    }
+    #ef-app-diagnose button {
+        font: 12px sans-serif;
+        padding: 5px 8px;
+        border: 1px solid #888;
+        border-radius: 6px;
+        background: #333;
+        color: #fff;
+    }
+    #ef-app-diagnose-text { margin:0; }
+
 </style>
 <script src="/icons.js"></script>
 <script>
@@ -1800,6 +1840,15 @@ class Energiefluss extends IPSModuleStrict
 <script type="module"
         src="/user/Energiefluss/vendor/power-flow-card.js">
 </script>
+
+<div id="ef-app-diagnose">
+    <div id="ef-app-diagnose-buttons">
+        <button type="button" id="ef-diag-refresh">Aktualisieren</button>
+        <button type="button" id="ef-diag-copy">Kopieren</button>
+        <button type="button" id="ef-diag-hide">Ausblenden</button>
+    </div>
+    <pre id="ef-app-diagnose-text">Diagnose wird geladen …</pre>
+</div>
 
 <div id="eflow">
     <div id="scale-host">
@@ -7709,6 +7758,243 @@ class Energiefluss extends IPSModuleStrict
     let lastStateData = null;
     let lastCompactLayout = window.matchMedia('(max-width: 600px)').matches;
 
+
+    // ===== TEMPORÄRE APP-/BROWSER-DIAGNOSE =====
+    function efSafe(fn, fallback = null) {
+        try {
+            return fn();
+        } catch (error) {
+            return `FEHLER: ${error && error.message ? error.message : String(error)}`;
+        }
+    }
+
+    function efStorageSnapshot(storage) {
+        if (!storage || typeof storage.length !== 'number') {
+            return {available: false};
+        }
+
+        const interesting = {};
+        const allKeys = [];
+
+        for (let i = 0; i < storage.length; i++) {
+            const key = storage.key(i);
+            if (!key) continue;
+            allKeys.push(key);
+
+            if (
+                /symcon|flutter|energiefluss|waermepumpe|view|grid|tile|widget/i.test(key)
+            ) {
+                let value = null;
+                try {
+                    value = storage.getItem(key);
+                } catch (_) {}
+                interesting[key] = value;
+            }
+        }
+
+        return {
+            available: true,
+            count: storage.length,
+            interesting,
+            allKeyCount: allKeys.length
+        };
+    }
+
+    function efFrameInfo(frame, index) {
+        return efSafe(() => {
+            const rect = frame.getBoundingClientRect();
+            const src = frame.getAttribute('src') || frame.src || '';
+            return {
+                i: index,
+                id: frame.id || '',
+                name: frame.name || '',
+                src,
+                x: Math.round(rect.left),
+                y: Math.round(rect.top),
+                width: Math.round(rect.width),
+                height: Math.round(rect.height),
+                parentTag: frame.parentElement?.tagName || '',
+                parentId: frame.parentElement?.id || ''
+            };
+        }, {i:index, error:'nicht lesbar'});
+    }
+
+    function efBuildDiagnostic() {
+        const result = {
+            timestamp: new Date().toISOString(),
+            userAgent: navigator.userAgent,
+            platform: navigator.platform || '',
+            standalone:
+                window.matchMedia?.('(display-mode: standalone)')?.matches || false,
+            location: {
+                href: location.href,
+                origin: location.origin,
+                pathname: location.pathname,
+                search: location.search,
+                hash: location.hash
+            },
+            viewport: {
+                innerWidth: window.innerWidth,
+                innerHeight: window.innerHeight,
+                devicePixelRatio: window.devicePixelRatio,
+                screenWidth: window.screen?.width,
+                screenHeight: window.screen?.height,
+                orientation:
+                    screen.orientation?.type ||
+                    (window.innerWidth > window.innerHeight ? 'landscape' : 'portrait')
+            },
+            frame: {
+                parentIsSelf: window.parent === window,
+                topIsSelf: window.top === window,
+                frameElementExists: !!window.frameElement,
+                frameElementTag: window.frameElement?.tagName || null,
+                frameElementSrc:
+                    window.frameElement?.getAttribute?.('src') || null
+            },
+            localStorage: efSafe(
+                () => efStorageSnapshot(window.localStorage),
+                {available:false}
+            ),
+            sessionStorage: efSafe(
+                () => efStorageSnapshot(window.sessionStorage),
+                {available:false}
+            ),
+            parentAccess: {},
+            detected: {
+                browserView: typeof currentDisplayMode !== 'undefined'
+                    ? currentDisplayMode : null,
+                technicalLayout: typeof currentTechnicalLayout !== 'undefined'
+                    ? currentTechnicalLayout : null,
+                widgetScope: typeof widgetStorageScope !== 'undefined'
+                    ? widgetStorageScope : null,
+                widgetViewKey: typeof widgetViewStorageKey !== 'undefined'
+                    ? widgetViewStorageKey : null,
+                widgetLayoutKey: typeof widgetTechnicalLayoutStorageKey !== 'undefined'
+                    ? widgetTechnicalLayoutStorageKey : null,
+                detectionReady: typeof widgetDetectionReady !== 'undefined'
+                    ? widgetDetectionReady : null
+            }
+        };
+
+        result.parentAccess.sameOriginDocument = efSafe(
+            () => !!window.parent.document,
+            false
+        );
+
+        result.parentAccess.href = efSafe(
+            () => window.parent.location.href,
+            null
+        );
+
+        result.parentAccess.localStorage = efSafe(
+            () => efStorageSnapshot(window.parent.localStorage),
+            {available:false}
+        );
+
+        result.parentAccess.iframes = efSafe(
+            () => Array.from(
+                window.parent.document.querySelectorAll('iframe')
+            ).map(efFrameInfo),
+            []
+        );
+
+        result.parentAccess.iframeCount =
+            Array.isArray(result.parentAccess.iframes)
+                ? result.parentAccess.iframes.length
+                : null;
+
+        result.parentAccess.flutterPlatformViews = efSafe(
+            () => Array.from(
+                window.parent.document.querySelectorAll('flt-platform-view')
+            ).map((el, i) => ({
+                i,
+                id: el.id || '',
+                slot: el.getAttribute('slot') || ''
+            })).slice(0, 50),
+            []
+        );
+
+        result.currentFrameRect = efSafe(() => {
+            const r = window.frameElement?.getBoundingClientRect();
+            return r ? {
+                x: Math.round(r.left),
+                y: Math.round(r.top),
+                width: Math.round(r.width),
+                height: Math.round(r.height)
+            } : null;
+        }, null);
+
+        result.visualizationStorageScope = efSafe(
+            () => typeof getVisualizationStorageScope === 'function'
+                ? getVisualizationStorageScope()
+                : null,
+            null
+        );
+
+        return result;
+    }
+
+    function efRenderDiagnostic() {
+        const el = document.getElementById('ef-app-diagnose-text');
+        if (!el) return;
+
+        const data = efBuildDiagnostic();
+        window.__EF_LAST_DIAGNOSTIC__ = data;
+        el.textContent = JSON.stringify(data, null, 2);
+    }
+
+    function efInitDiagnostic() {
+        const refresh = document.getElementById('ef-diag-refresh');
+        const copy = document.getElementById('ef-diag-copy');
+        const hide = document.getElementById('ef-diag-hide');
+
+        refresh?.addEventListener('click', () => efRenderDiagnostic());
+
+        copy?.addEventListener('click', async () => {
+            efRenderDiagnostic();
+            const text = JSON.stringify(
+                window.__EF_LAST_DIAGNOSTIC__ || efBuildDiagnostic(),
+                null,
+                2
+            );
+
+            try {
+                await navigator.clipboard.writeText(text);
+                copy.textContent = 'Kopiert';
+                setTimeout(() => copy.textContent = 'Kopieren', 1200);
+            } catch (_) {
+                const area = document.createElement('textarea');
+                area.value = text;
+                area.style.position = 'fixed';
+                area.style.opacity = '0';
+                document.body.appendChild(area);
+                area.select();
+                try { document.execCommand('copy'); } catch (_) {}
+                area.remove();
+                copy.textContent = 'Kopiert?';
+                setTimeout(() => copy.textContent = 'Kopieren', 1200);
+            }
+        });
+
+        hide?.addEventListener('click', () => {
+            document.getElementById('ef-app-diagnose')?.classList.add('hidden');
+        });
+
+        efRenderDiagnostic();
+
+        // Mehrere Momentaufnahmen, weil Flutter/Apps die Parent-Struktur
+        // eventuell erst nach dem ersten HTML-Render fertigstellen.
+        setTimeout(efRenderDiagnostic, 250);
+        setTimeout(efRenderDiagnostic, 1000);
+        setTimeout(efRenderDiagnostic, 2500);
+    }
+
+    if (document.readyState === 'loading') {
+        document.addEventListener('DOMContentLoaded', efInitDiagnostic, {once:true});
+    } else {
+        efInitDiagnostic();
+    }
+
     function handleMessage(data) {
         const d = typeof data === 'string' ? JSON.parse(data) : data;
 
@@ -7726,6 +8012,9 @@ class Energiefluss extends IPSModuleStrict
 
         lastStateData = d;
         setState(d);
+
+        setTimeout(efRenderDiagnostic, 0);
+        setTimeout(efRenderDiagnostic, 300);
     }
 
     function refreshResponsiveState() {
