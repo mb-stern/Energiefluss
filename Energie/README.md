@@ -271,6 +271,9 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.8 (25.08.2026)
+- Es wird nun intern auf ganze Watt abgerundet, um unschöne Darstellungen von zB 1W Solarproduktion in der Nacht zu vermeiden.
+
 ### Version 1.7 (24.08.2026)
 - Konfiguration der Ansichten aus dem Konfigurationsformular entfernt. So kann auf jedem Gerät eine individuelle Ansicht gewählt werden. Werden pro View mehrere unterschiedliche Ansichten gewünscht, muss die Instanz geklont werden. Die Kacheln in der Visu identifizieren sich nun über die Instanz.
 
