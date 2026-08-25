@@ -7547,15 +7547,46 @@ class Energiefluss extends IPSModuleStrict
         if (wallboxInfo) wallboxInfo.style.borderColor = AC.wallbox;
     }
 
+    // Momentane Leistungswerte werden intern nur in ganzen Watt
+    // weiterverarbeitet. Integer und Float bleiben als Eingabewerte erlaubt.
+    // Math.trunc() schneidet Nachkommastellen zur Null hin ab:
+    // 0.9 -> 0 W, -0.9 -> 0 W, 125.8 -> 125 W.
+    function wholeWatts(value) {
+        const numeric = Number(value);
+        return Number.isFinite(numeric) ? Math.trunc(numeric) : 0;
+    }
+
     function setState(d) {
         applyConfiguredColors(d);
-        const grid = d.grid || 0;
+
+        // Ausschließlich Leistungswerte in W normalisieren.
+        // Energie, SOC, Spannung, Strom, Frequenz usw. bleiben unverändert.
+        const grid = wholeWatts(d.grid);
         const imp = Math.max(grid, 0);
 
-        const pvs = d.pvs || [];
-        const batteries = d.batteries || [];
-        const groups = d.groups || [];
-        const wallbox = d.wallbox || { name: 'Wallbox', value: 0, energy: '', socText: '', hasSoc: false };
+        const pvs = (d.pvs || []).map(pv => ({
+            ...pv,
+            value: wholeWatts(pv.value)
+        }));
+
+        const batteries = (d.batteries || []).map(bat => ({
+            ...bat,
+            value: wholeWatts(bat.value)
+        }));
+
+        const groups = (d.groups || []).map(group => ({
+            ...group,
+            value: wholeWatts(group.value)
+        }));
+
+        const wallboxSource =
+            d.wallbox ||
+            { name: 'Wallbox', value: 0, energy: '', socText: '', hasSoc: false };
+
+        const wallbox = {
+            ...wallboxSource,
+            value: wholeWatts(wallboxSource.value)
+        };
 
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
@@ -7566,7 +7597,7 @@ class Energiefluss extends IPSModuleStrict
             0
         );
 
-        const inverterPower = Number(d.inverterPower || 0);
+        const inverterPower = wholeWatts(d.inverterPower);
         const calculatedHouseInverterGrid = Math.max(
             (Number.isFinite(inverterPower) ? inverterPower : 0) + grid,
             0
@@ -7586,7 +7617,7 @@ class Energiefluss extends IPSModuleStrict
             d.available?.housePowerConfigured &&
             Number.isFinite(Number(d.housePower))
         ) {
-            haus = Math.max(Number(d.housePower), 0);
+            haus = Math.max(wholeWatts(d.housePower), 0);
         } else if (houseCalculationMode === 'inverter-grid') {
             // Wechselrichterleistung gesamt + Netzbezug − Netzeinspeisung.
             haus = calculatedHouseInverterGrid;
@@ -7597,7 +7628,26 @@ class Energiefluss extends IPSModuleStrict
         }
 
         // Neue technische Ansicht.
-        renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups);
+        const powerState = {
+            ...d,
+            grid,
+            inverterPower,
+            housePower: wholeWatts(d.housePower),
+            pvs,
+            batteries,
+            groups,
+            wallbox
+        };
+
+        renderTechnicalView(
+            powerState,
+            grid,
+            haus,
+            pvs,
+            batteries,
+            wallbox,
+            groups
+        );
 
         // Alte SVG-Struktur bleibt intern nur für Abwärtskompatibilität erhalten.
         clearDynamicSources();
@@ -7700,7 +7750,7 @@ class Energiefluss extends IPSModuleStrict
         );
 
         buildHouseView(
-            d,
+            powerState,
             grid,
             houseViewPower,
             pvs,
