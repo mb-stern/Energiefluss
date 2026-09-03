@@ -271,6 +271,9 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.9 (03.09.2026)
+- Codekorrekturen nach Store-Review.
+
 ### Version 1.8 (25.08.2026)
 - Es wird nun intern auf ganze Watt abgerundet, um unschöne Darstellungen von zB 1W Solarproduktion in der Nacht zu vermeiden.
 
