@@ -130,8 +130,6 @@ class Energiefluss extends IPSModuleStrict
         parent::ApplyChanges();
 
         try {
-            $this->EnsureVisualizationAssets();
-
             foreach ($this->GetMessageList() as $senderID => $messages) {
                 foreach ($messages as $message) {
                     if ($message === VM_UPDATE) {
@@ -908,7 +906,10 @@ class Energiefluss extends IPSModuleStrict
                     );
                 }
 
-                IPS_SetProperty($this->InstanceID, $property, $color);
+                // Nur das geöffnete Konfigurationsformular aktualisieren.
+                // Der Benutzer kann die importierten Werte prüfen und anschließend
+                // selbst über "Änderungen übernehmen" in die Instanz schreiben.
+                $this->UpdateFormField($property, 'value', $color);
                 $imported++;
             }
 
@@ -916,16 +917,14 @@ class Energiefluss extends IPSModuleStrict
                 return 'Im JSON wurden keine bekannten Hausfarben gefunden.';
             }
 
-            // Das JSON ist nur eine vorübergehende Eingabe und soll nicht
-            // dauerhaft in der Instanzkonfiguration gespeichert bleiben.
-            IPS_SetProperty($this->InstanceID, 'HouseColorJson', '');
-            IPS_ApplyChanges($this->InstanceID);
-
-            // Auch den aktuell geöffneten Formulareditor sofort leeren.
+            // Das Importfeld ist nur eine temporäre Eingabe. Auch diese Änderung
+            // bleibt zunächst im geöffneten Formular und wird nicht direkt gespeichert.
             $this->UpdateFormField('HouseColorJson', 'value', '');
-            $this->ReloadForm();
 
-            return sprintf('%d Hausfarben wurden übernommen.', $imported);
+            return sprintf(
+                '%d Hausfarben wurden in die Konfiguration übernommen. Bitte prüfen und mit "Änderungen übernehmen" speichern.',
+                $imported
+            );
         } catch (JsonException $e) {
             return 'Ungültiges JSON: ' . $e->getMessage();
         } catch (Throwable $e) {
@@ -969,7 +968,9 @@ class Energiefluss extends IPSModuleStrict
 
     public function ResetHouseColors(): void
     {
-        // Originalfarben der eingebetteten Haus-SVG wiederherstellen.
+        // Originalfarben der eingebetteten Haus-SVG in das geöffnete
+        // Konfigurationsformular eintragen. Gespeichert werden sie erst, wenn
+        // der Benutzer "Änderungen übernehmen" auswählt.
         $defaults = [
             'HouseColorFacade'        => 2107187,  // #202733
             'HouseColorRoof'          => 1646636,  // #19202c
@@ -984,11 +985,8 @@ class Energiefluss extends IPSModuleStrict
         ];
 
         foreach ($defaults as $property => $value) {
-            IPS_SetProperty($this->InstanceID, $property, $value);
+            $this->UpdateFormField($property, 'value', $value);
         }
-
-        IPS_ApplyChanges($this->InstanceID);
-        $this->ReloadForm();
     }
 
     public function ReloadHtml(): void
@@ -1138,6 +1136,19 @@ class Energiefluss extends IPSModuleStrict
         $showHouse = $displayMode === 'house';
         $flowDisplay = $showHouse ? 'none' : 'block';
         $houseDisplay = $showHouse ? 'block' : 'none';
+
+        // Die Vendor-Dateien bleiben vollständig im Modulverzeichnis. Sie werden
+        // als data:-Modul-URLs direkt in das HTML injiziert; dadurch ist weder ein
+        // öffentliches Laufzeitverzeichnis noch ein zusätzlicher WebHook erforderlich.
+        $litModuleUrl = $this->GetVisualizationModuleDataUrl('lit-core.min.js');
+        $powerFlowModuleUrl = $this->GetVisualizationModuleDataUrl(
+            'power-flow-card.js',
+            ['./lit-core.min.js' => $litModuleUrl]
+        );
+        $sunsynkModuleUrl = $this->GetVisualizationModuleDataUrl(
+            'sunsynk-power-flow-card.js',
+            ['./lit-core.min.js' => $litModuleUrl]
+        );
 
         $html = <<<'HTML'
 <style>
@@ -1789,9 +1800,7 @@ class Energiefluss extends IPSModuleStrict
     // Die Original-Card registriert sich beim Laden über window.customCards.push(...).
     window.customCards = window.customCards || [];
 </script>
-<script type="module"
-        src="/user/Energiefluss/vendor/power-flow-card.js">
-</script>
+<script type="module" src="__POWER_FLOW_MODULE_URL__"></script>
 
 <div id="eflow">
     <div id="scale-host">
@@ -3639,7 +3648,7 @@ class Energiefluss extends IPSModuleStrict
         }
 
         if (!sunsynkModulePromise) {
-            const moduleUrl = '/user/Energiefluss/vendor/sunsynk-power-flow-card.js';
+            const moduleUrl = '__SUNSYNK_MODULE_URL__';
             sunsynkModulePromise = import(moduleUrl).catch(err => {
                 sunsynkModulePromise = null;
                 throw new Error(`Originale Sunsynk-JS konnte nicht importiert werden: ${err.message}`);
@@ -7951,99 +7960,60 @@ class Energiefluss extends IPSModuleStrict
 HTML;
 
         return str_replace(
-            ['__FLOW_DISPLAY__', '__HOUSE_DISPLAY__'],
-            [$flowDisplay, $houseDisplay],
+            [
+                '__FLOW_DISPLAY__',
+                '__HOUSE_DISPLAY__',
+                '__POWER_FLOW_MODULE_URL__',
+                '__SUNSYNK_MODULE_URL__',
+            ],
+            [
+                $flowDisplay,
+                $houseDisplay,
+                htmlspecialchars($powerFlowModuleUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+                $sunsynkModuleUrl,
+            ],
             $html
         );
     }
 
-    private function EnsureVisualizationAssets(): void
+    private function GetVisualizationModuleDataUrl(string $asset, array $replacements = []): string
     {
-        /*
-         * Quelle der Visualisierungsdateien ist ausschließlich der Modulbaum:
-         *
-         *   assets/vendor/power-flow-card.js
-         *   assets/vendor/lit-core.min.js
-         *   assets/vendor/sunsynk-power-flow-card.js
-         *
-         * Der /user/-Ordner ist nur die vom Symcon-Webserver erreichbare
-         * Laufzeitkopie. Es findet keinerlei Download aus dem Internet statt.
-         */
-        $sourceDir = __DIR__
+        $path = __DIR__
             . DIRECTORY_SEPARATOR
             . 'assets'
             . DIRECTORY_SEPARATOR
-            . 'vendor';
-
-        $targetDir = IPS_GetKernelDir()
-            . 'user'
+            . 'vendor'
             . DIRECTORY_SEPARATOR
-            . 'Energiefluss'
-            . DIRECTORY_SEPARATOR
-            . 'vendor';
+            . $asset;
 
-        if (!is_dir($targetDir)) {
-            if (!@mkdir($targetDir, 0777, true) && !is_dir($targetDir)) {
-                $this->LogMessage(
-                    'Visualisierung: Web-Verzeichnis konnte nicht erstellt werden: ' . $targetDir,
-                    KL_ERROR
-                );
-                return;
-            }
+        if (!is_file($path)) {
+            throw new RuntimeException('Visualisierungsdatei fehlt im Modulbaum: ' . $asset);
         }
 
-        $assets = [
-            'power-flow-card.js',
-            'lit-core.min.js',
-            'sunsynk-power-flow-card.js',
-        ];
-
-        foreach ($assets as $asset) {
-            $source = $sourceDir . DIRECTORY_SEPARATOR . $asset;
-            $target = $targetDir . DIRECTORY_SEPARATOR . $asset;
-
-            if (!is_file($source)) {
-                $this->LogMessage(
-                    'Visualisierung: Datei fehlt im Modulbaum: ' . $source,
-                    KL_ERROR
-                );
-                continue;
-            }
-
-            $copyRequired = !is_file($target);
-
-            if (!$copyRequired) {
-                $sourceSize = @filesize($source);
-                $targetSize = @filesize($target);
-                $sourceMTime = @filemtime($source);
-                $targetMTime = @filemtime($target);
-
-                $copyRequired =
-                    $sourceSize !== $targetSize
-                    || $sourceMTime === false
-                    || $targetMTime === false
-                    || $sourceMTime > $targetMTime;
-            }
-
-            if (!$copyRequired) {
-                continue;
-            }
-
-            if (!@copy($source, $target)) {
-                $this->LogMessage(
-                    'Hausansicht: Datei konnte nicht veröffentlicht werden: ' . $asset,
-                    KL_ERROR
-                );
-                continue;
-            }
-
-            $mtime = @filemtime($source);
-            if ($mtime !== false) {
-                @touch($target, $mtime);
-            }
+        $source = file_get_contents($path);
+        if ($source === false) {
+            throw new RuntimeException('Visualisierungsdatei konnte nicht gelesen werden: ' . $asset);
         }
+
+        // Falls ein Vendor-Modul die lokal mitgelieferte Lit-Datei relativ
+        // referenziert, wird diese Referenz ebenfalls auf eine eingebettete
+        // data:-Modul-URL umgebogen.
+        foreach ($replacements as $relativeImport => $moduleUrl) {
+            $source = str_replace(
+                [
+                    "'" . $relativeImport . "'",
+                    '"' . $relativeImport . '"',
+                ],
+                [
+                    "'" . $moduleUrl . "'",
+                    '"' . $moduleUrl . '"',
+                ],
+                $source
+            );
+        }
+
+        return 'data:text/javascript;base64,' . base64_encode($source);
     }
-
 
     private function ConfigureCalculatedVariables(): void
     {
