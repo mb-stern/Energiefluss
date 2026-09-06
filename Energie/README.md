@@ -271,6 +271,9 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.10 (06.09.2026)
+- Zusätzlicher Code wird nun über einen Webhook und nicht mehr direkt ins html geladen, um die Output Buffer Fehlermeldung zu vermeiden.
+
 ### Version 1.9 (03.09.2026)
 - Codekorrekturen nach Store-Review.
 
