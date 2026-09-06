@@ -19,6 +19,12 @@ class Energiefluss extends IPSModuleStrict
     {
         parent::Create();
 
+        // Alle Vendor-Assets der Visualisierung über genau einen
+        // instanzspezifischen IPSModuleStrict-WebHook ausliefern. Das gewünschte
+        // Asset wird per Query-Parameter ausgewählt. Dadurch bleiben die Dateien
+        // im Modulverzeichnis und große Base64-data:-URLs entfallen vollständig.
+        $this->RegisterHook($this->GetVisualizationWebHookBaseAddress());
+
         // Dynamische Anlagen.
         $this->RegisterPropertyString('Producers', '[]');
         $this->RegisterPropertyString('Batteries', '[]');
@@ -1137,18 +1143,11 @@ class Energiefluss extends IPSModuleStrict
         $flowDisplay = $showHouse ? 'none' : 'block';
         $houseDisplay = $showHouse ? 'block' : 'none';
 
-        // Die Vendor-Dateien bleiben vollständig im Modulverzeichnis. Sie werden
-        // als data:-Modul-URLs direkt in das HTML injiziert; dadurch ist weder ein
-        // öffentliches Laufzeitverzeichnis noch ein zusätzlicher WebHook erforderlich.
-        $litModuleUrl = $this->GetVisualizationModuleDataUrl('lit-core.min.js');
-        $powerFlowModuleUrl = $this->GetVisualizationModuleDataUrl(
-            'power-flow-card.js',
-            ['./lit-core.min.js' => $litModuleUrl]
-        );
-        $sunsynkModuleUrl = $this->GetVisualizationModuleDataUrl(
-            'sunsynk-power-flow-card.js',
-            ['./lit-core.min.js' => $litModuleUrl]
-        );
+        // Die Vendor-Dateien bleiben vollständig im Modulverzeichnis und werden
+        // über instanzspezifische WebHooks ausgeliefert. Damit bleibt die HTML-
+        // Ausgabe klein und läuft nicht mehr in das Output-Buffer-Limit.
+        $powerFlowModuleUrl = $this->GetVisualizationModuleWebHookUrl('power-flow-card.js');
+        $sunsynkModuleUrl = $this->GetVisualizationModuleWebHookUrl('sunsynk-power-flow-card.js');
 
         $html = <<<'HTML'
 <style>
@@ -7976,43 +7975,96 @@ HTML;
         );
     }
 
-    private function GetVisualizationModuleDataUrl(string $asset, array $replacements = []): string
+    private function GetVisualizationWebHookAssets(): array
     {
-        $path = __DIR__
-            . DIRECTORY_SEPARATOR
-            . 'assets'
-            . DIRECTORY_SEPARATOR
-            . 'vendor'
-            . DIRECTORY_SEPARATOR
-            . $asset;
+        return [
+            'lit-core.min.js',
+            'power-flow-card.js',
+            'sunsynk-power-flow-card.js',
+        ];
+    }
 
-        if (!is_file($path)) {
-            throw new RuntimeException('Visualisierungsdatei fehlt im Modulbaum: ' . $asset);
+    private function GetVisualizationWebHookBaseAddress(): string
+    {
+        return 'energiefluss-assets-' . $this->InstanceID;
+    }
+
+    private function GetVisualizationModuleWebHookUrl(string $asset): string
+    {
+        if (!in_array($asset, $this->GetVisualizationWebHookAssets(), true)) {
+            throw new InvalidArgumentException('Unbekanntes Visualisierungs-Asset: ' . $asset);
         }
 
-        $source = file_get_contents($path);
-        if ($source === false) {
-            throw new RuntimeException('Visualisierungsdatei konnte nicht gelesen werden: ' . $asset);
-        }
+        return '/hook/'
+            . $this->GetVisualizationWebHookBaseAddress()
+            . '?asset='
+            . rawurlencode($asset);
+    }
 
-        // Falls ein Vendor-Modul die lokal mitgelieferte Lit-Datei relativ
-        // referenziert, wird diese Referenz ebenfalls auf eine eingebettete
-        // data:-Modul-URL umgebogen.
-        foreach ($replacements as $relativeImport => $moduleUrl) {
-            $source = str_replace(
-                [
-                    "'" . $relativeImport . "'",
-                    '"' . $relativeImport . '"',
-                ],
-                [
-                    "'" . $moduleUrl . "'",
-                    '"' . $moduleUrl . '"',
-                ],
-                $source
-            );
-        }
+    protected function ProcessHookData(): void
+    {
+        try {
+            $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+            $requestPath = (string) (parse_url($requestUri, PHP_URL_PATH) ?? '');
+            $hookPath = '/hook/' . $this->GetVisualizationWebHookBaseAddress();
 
-        return 'data:text/javascript;base64,' . base64_encode($source);
+            // Nur exakt den für diese Instanz registrierten Hook bedienen.
+            if ($requestPath !== $hookPath) {
+                http_response_code(404);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'Not found';
+                return;
+            }
+
+            $asset = isset($_GET['asset']) ? (string) $_GET['asset'] : '';
+            if (!in_array($asset, $this->GetVisualizationWebHookAssets(), true)) {
+                http_response_code(404);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'Not found';
+                return;
+            }
+
+            $path = __DIR__
+                . DIRECTORY_SEPARATOR
+                . 'assets'
+                . DIRECTORY_SEPARATOR
+                . 'vendor'
+                . DIRECTORY_SEPARATOR
+                . $asset;
+
+            if (!is_file($path)) {
+                http_response_code(404);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'Asset not found';
+                return;
+            }
+
+            $source = file_get_contents($path);
+            if ($source === false) {
+                throw new RuntimeException('Visualisierungsdatei konnte nicht gelesen werden: ' . $asset);
+            }
+
+            // Die beiden Karten importieren Lit relativ als ./lit-core.min.js.
+            // Bei einem einzigen Hook mit Query-Parameter würde der Browser
+            // diesen relativen Import sonst neben /hook/ auflösen. Deshalb den
+            // Import auf die absolute URL desselben WebHooks umschreiben.
+            if ($asset !== 'lit-core.min.js') {
+                $litUrl = $this->GetVisualizationModuleWebHookUrl('lit-core.min.js');
+                $source = str_replace('./lit-core.min.js', $litUrl, $source);
+            }
+
+            header('Content-Type: text/javascript; charset=utf-8');
+            header('X-Content-Type-Options: nosniff');
+            header('Cache-Control: no-cache, no-store, must-revalidate');
+            header('Pragma: no-cache');
+            header('Content-Length: ' . strlen($source));
+            echo $source;
+        } catch (Throwable $e) {
+            $this->LogMessage('ProcessHookData: ' . $e->getMessage(), KL_ERROR);
+            http_response_code(500);
+            header('Content-Type: text/plain; charset=utf-8');
+            echo 'Internal server error';
+        }
     }
 
     private function ConfigureCalculatedVariables(): void
