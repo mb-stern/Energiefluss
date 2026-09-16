@@ -4072,7 +4072,7 @@ class Energiefluss extends IPSModuleStrict
             inverter: {
                 modern: true,
                 model: 'goodwe',
-                colour: d.houseColors?.inverter || '#0d151c',
+                colour: d.colors?.inverter || AC.inverter,
                 autarky: ['power', 'energy', 'no'].includes(d.autarkyCalculationMode)
                     ? d.autarkyCalculationMode
                     : 'energy',
@@ -5880,7 +5880,6 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot || !d) return;
 
         const inverterColour =
-            d.houseColors?.inverter ||
             d.colors?.inverter ||
             AC.inverter;
 
@@ -9699,7 +9698,7 @@ HTML;
                 'batteryAccent'    => $this->ColorToHex($this->ReadPropertyInteger('HouseColorBatteryAccent')),
             ],
             'colors'           => [
-                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('HouseColorInverter')),
+                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('ColorInverter')),
                 'solar'     => $this->ColorToHex($this->ReadPropertyInteger('ColorSolar')),
                 'import'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridImport')),
                 'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
