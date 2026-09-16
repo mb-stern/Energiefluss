@@ -1047,7 +1047,15 @@ class Energiefluss extends IPSModuleStrict
                 . '}'
                 . 'const base=origin();'
                 . 'frame.src=base ? new URL(raw,base).href : raw;'
-                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid},"*");}'
+                . 'function theme(){'
+                . 'let probe="";try{probe=getComputedStyle(document.documentElement).getPropertyValue("--content-color").trim();}catch(e){}'
+                . 'if(!probe){try{probe=getComputedStyle(document.body).color||"";}catch(e){}}'
+                . 'let dark=null;const m=probe&&probe.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);'
+                . 'if(m){dark=(0.299*m[1]+0.587*m[2]+0.114*m[3])/255>0.5;}'
+                . 'else if(probe&&probe[0]==="#"&&probe.length>=7){const r=parseInt(probe.substr(1,2),16),g=parseInt(probe.substr(3,2),16),b=parseInt(probe.substr(5,2),16);dark=(0.299*r+0.587*g+0.114*b)/255>0.5;}'
+                . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
+                . 'return {dark:dark};}'
+                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
                 . 'frame.addEventListener("load",function(){ready=true;send(last);});'
                 . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
                 . '})();</script>';
@@ -1907,6 +1915,15 @@ class Energiefluss extends IPSModuleStrict
 
 <script>
     function detectTheme() {
+        // Im WebHook-Host existiert ein eigener HTTP-Dokumentkontext. Wenn die
+        // kleine Symcon/IPS-View-Bridge das Theme übermittelt hat, verwenden wir
+        // ausschließlich diese Information. An den konfigurierten Card-Farben
+        // wird dabei nichts verändert.
+        if (window.__EF_BRIDGE_THEME__ && typeof window.__EF_BRIDGE_THEME__.dark === 'boolean') {
+            document.documentElement.setAttribute('data-theme', window.__EF_BRIDGE_THEME__.dark ? 'dark' : 'light');
+            return;
+        }
+
         let probe = getComputedStyle(document.documentElement).getPropertyValue('--content-color').trim();
         if (!probe) probe = getComputedStyle(document.body).color;
 
@@ -8067,6 +8084,14 @@ window.addEventListener('message', function (event) {
     }
 
     window.__EF_SERVER_GRID__ = message.grid ?? null;
+
+    // Theme stammt aus dem ursprünglichen Symcon/IPS-View-Kachelkontext.
+    // Es wird nur an den WebHook-Host gespiegelt; Farbmuster und konfigurierte
+    // Modulfarben bleiben vollständig unverändert.
+    if (message.theme && typeof message.theme.dark === 'boolean') {
+        window.__EF_BRIDGE_THEME__ = { dark: message.theme.dark };
+        document.documentElement.setAttribute('data-theme', message.theme.dark ? 'dark' : 'light');
+    }
 
     if (typeof handleMessage === 'function') {
         handleMessage(message.payload);
