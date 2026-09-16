@@ -6778,8 +6778,12 @@ class Energiefluss extends IPSModuleStrict
                 wallbox,
                 groups
             );
-            host.appendChild(card);
-            sunsynkCard = card;
+
+            // Den ersten Lit-Render vollständig außerhalb des sichtbaren DOM
+            // durchführen. Dadurch kann die Vendor-Card ihren internen
+            // Anfangszustand nicht kurz sichtbar darstellen. Es gibt hier
+            // bewusst keinen Timer und keine künstliche Verzögerung: wir
+            // warten ausschließlich auf Lit selbst (updateComplete).
             card.__symconLastData = d;
             card.__symconRatioContext = {
                 d,
@@ -6788,6 +6792,12 @@ class Energiefluss extends IPSModuleStrict
                 pvs,
                 batteries
             };
+            await card.updateComplete;
+
+            // Erst die bereits mit vollständiger Symcon-Konfiguration und
+            // vollständigem HASS-Zustand gerenderte Card sichtbar einhängen.
+            host.replaceChildren(card);
+            sunsynkCard = card;
             await applySunsynkViewOverrides(card, d);
             scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
