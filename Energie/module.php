@@ -6757,18 +6757,44 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+    // Reine Startdiagnose; keine Änderung an Konfiguration oder Render-Reihenfolge.
+    const __efSunsynkDiagStart = performance.now();
+    const __efSunsynkDiag = [];
+    function __efDiag(label, extra = null) {
+        const entry = {ms: Math.round((performance.now()-__efSunsynkDiagStart)*10)/10, label, extra};
+        __efSunsynkDiag.push(entry);
+        console.log('[EF-SUNSYNK-DIAG]', entry.ms + ' ms', label, extra ?? '');
+    }
+    function __efDiagCard(card, label) {
+        let info = {};
+        try {
+            const cfg = card?.config || card?._config || null;
+            info = {connected:!!card?.isConnected,hasShadowRoot:!!card?.shadowRoot,shadowChildren:card?.shadowRoot?.childElementCount??null,configKeys:cfg&&typeof cfg==='object'?Object.keys(cfg):[],mppts:cfg?.solar?.mppts??null,batteryCount:cfg?.battery?.count??null};
+        } catch(e) { info={diagError:String(e)}; }
+        __efDiag(label, info);
+    }
+    window.__EF_SUNSYNK_DIAG__ = __efSunsynkDiag;
+
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
+        __efDiag("ensure: start", {pvs:pvs.length,batteries:batteries.length,groups:groups.length,hasWallbox:!!d.hasWallbox});
         sunsynkInitPromise = (async () => {
+            __efDiag("vendor load: start");
             await loadOriginalSunsynkModule();
+            __efDiag("vendor load: done");
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
+            __efDiagCard(card, 'createElement');
 
             // Wie in Lovelace: zuerst Konfiguration und hass setzen,
             // anschließend das Element in den DOM einhängen.
             window.__symconHasWallbox = !!d.hasWallbox;
-            card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
+            const __efCfg = createSunsynkConfig(d, pvs, batteries, wallbox, groups);
+            __efDiag("setConfig: before", {mppts:__efCfg?.solar?.mppts??null,batteryCount:__efCfg?.battery?.count??null,topKeys:Object.keys(__efCfg||{})});
+            card.setConfig(__efCfg);
+            __efDiagCard(card, "setConfig: after");
+            __efDiag("hass: before");
             card.hass = createSunsynkHass(
                 d,
                 grid,
@@ -6778,7 +6804,9 @@ class Energiefluss extends IPSModuleStrict
                 wallbox,
                 groups
             );
+            __efDiagCard(card, "append: before");
             host.appendChild(card);
+            __efDiagCard(card, "append: after");
             sunsynkCard = card;
             card.__symconLastData = d;
             card.__symconRatioContext = {
@@ -6788,10 +6816,13 @@ class Energiefluss extends IPSModuleStrict
                 pvs,
                 batteries
             };
+            __efDiagCard(card, "overrides: before");
             await applySunsynkViewOverrides(card, d);
+            __efDiagCard(card, "overrides: after");
             scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
             document.getElementById('sunsynk-loading').style.display = 'none';
+            __efDiagCard(card, 'loading hidden');
             if (sunsynkPending) {
                 const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
             }
@@ -6809,6 +6840,7 @@ class Energiefluss extends IPSModuleStrict
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
         updateTechnicalLayoutButtons();
+        __efDiag("renderTechnicalView", {cardExists:!!sunsynkCard,pending:!!sunsynkPending,pvs:pvs.length,batteries:batteries.length,groups:groups.length,hasWallbox:!!d.hasWallbox});
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
             ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
@@ -7999,6 +8031,23 @@ class Energiefluss extends IPSModuleStrict
 
     fit();
     requestAnimationFrame(frame);
+
+    // Diagnose-Schaltfläche absichtlich unten, damit sie auch in der Symcon-Kachel erreichbar ist.
+    const __efDiagButton = document.createElement('button');
+    __efDiagButton.textContent = 'Sunsynk Diagnose kopieren';
+    Object.assign(__efDiagButton.style, {position:'fixed',right:'8px',bottom:'8px',zIndex:'2147483647',padding:'7px 10px',fontSize:'12px'});
+    __efDiagButton.addEventListener('click', async () => {
+        const rows = (window.__EF_SUNSYNK_DIAG__ || []).map(x => `${x.ms} ms | ${x.label} | ${JSON.stringify(x.extra)}`).join('\n');
+        const text = 'Energiefluss Sunsynk Startdiagnose\n' + rows;
+        try {
+            await navigator.clipboard.writeText(text);
+            __efDiagButton.textContent = 'Diagnose kopiert';
+        } catch (e) {
+            console.log(text);
+            __efDiagButton.textContent = 'Diagnose in Konsole';
+        }
+    });
+    document.body.appendChild(__efDiagButton);
 </script>
 HTML;
 
