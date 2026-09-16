@@ -1800,6 +1800,9 @@ class Energiefluss extends IPSModuleStrict
     window.customCards = window.customCards || [];
 </script>
 <script type="module" src="__POWER_FLOW_MODULE_URL__"></script>
+<!-- Sunsynk ebenfalls direkt als ES-Modul laden. IPS-View/Kachel führen statische
+     module-Skripte zuverlässiger aus als einen späteren dynamischen import(). -->
+<script type="module" src="__SUNSYNK_MODULE_URL__"></script>
 
 <div id="eflow">
     <div id="scale-host">
@@ -1879,23 +1882,59 @@ class Energiefluss extends IPSModuleStrict
 
 <script>
     function detectTheme() {
-        let probe = getComputedStyle(document.documentElement).getPropertyValue('--content-color').trim();
-        if (!probe) probe = getComputedStyle(document.body).color;
+        const parseColor = value => {
+            const text = String(value || '').trim();
+            const m = text.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
+            if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
+            if (/^#[0-9a-f]{6}$/i.test(text)) {
+                return [
+                    parseInt(text.slice(1, 3), 16),
+                    parseInt(text.slice(3, 5), 16),
+                    parseInt(text.slice(5, 7), 16)
+                ];
+            }
+            return null;
+        };
+        const luminance = rgb => rgb
+            ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255
+            : null;
+
+        const rootStyle = getComputedStyle(document.documentElement);
+        const bodyStyle = getComputedStyle(document.body);
+
+        // IPS-View/Symcon zuerst über den tatsächlich geerbten Hintergrund
+        // erkennen. Ist dieser transparent, ist die Textfarbe der bessere Probe.
+        const backgroundCandidates = [
+            rootStyle.getPropertyValue('--content-background-color'),
+            rootStyle.getPropertyValue('--content-background'),
+            bodyStyle.backgroundColor,
+            rootStyle.backgroundColor
+        ];
 
         let dark = null;
-        const m = probe && probe.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
-        if (m) {
-            const lum = (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) / 255;
-            dark = lum > 0.5;
-        } else if (probe && probe[0] === '#' && probe.length >= 7) {
-            const r = parseInt(probe.substr(1, 2), 16);
-            const g = parseInt(probe.substr(3, 2), 16);
-            const b = parseInt(probe.substr(5, 2), 16);
-            dark = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5;
+        for (const candidate of backgroundCandidates) {
+            const rgb = parseColor(candidate);
+            if (!rgb) continue;
+            const lum = luminance(rgb);
+            if (lum !== null) { dark = lum < 0.5; break; }
         }
 
         if (dark === null) {
-            dark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
+            const textCandidates = [
+                rootStyle.getPropertyValue('--content-color'),
+                bodyStyle.color,
+                rootStyle.color
+            ];
+            for (const candidate of textCandidates) {
+                const rgb = parseColor(candidate);
+                if (!rgb) continue;
+                const lum = luminance(rgb);
+                if (lum !== null) { dark = lum > 0.5; break; }
+            }
+        }
+
+        if (dark === null) {
+            dark = !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
         }
 
         document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
@@ -1903,6 +1942,10 @@ class Energiefluss extends IPSModuleStrict
 
     detectTheme();
     window.addEventListener('load', detectTheme);
+    window.addEventListener('focus', detectTheme);
+    new MutationObserver(detectTheme).observe(document.documentElement, {
+        attributes: true, attributeFilter: ['class', 'style', 'data-theme']
+    });
     setInterval(detectTheme, 2000);
 
     // Zentrale Farbdefinition – entspricht der ursprünglichen
@@ -3642,22 +3685,28 @@ class Energiefluss extends IPSModuleStrict
     async function loadOriginalSunsynkModule() {
         ensureHaCompatibility();
 
-        if (customElements.get('sunsynk-power-flow-card')) {
-            return;
-        }
+        if (customElements.get('sunsynk-power-flow-card')) return;
 
         if (!sunsynkModulePromise) {
-            const moduleUrl = '__SUNSYNK_MODULE_URL__';
-            sunsynkModulePromise = import(moduleUrl).catch(err => {
+            sunsynkModulePromise = Promise.race([
+                customElements.whenDefined('sunsynk-power-flow-card'),
+                new Promise((_, reject) => setTimeout(
+                    () => reject(new Error(
+                        'sunsynk-power-flow-card wurde nach 8 Sekunden nicht registriert. ' +
+                        'Bitte den WebHook/Asset-Aufruf prüfen.'
+                    )),
+                    8000
+                ))
+            ]).catch(err => {
                 sunsynkModulePromise = null;
-                throw new Error(`Originale Sunsynk-JS konnte nicht importiert werden: ${err.message}`);
+                throw err;
             });
         }
 
         await sunsynkModulePromise;
 
         if (!customElements.get('sunsynk-power-flow-card')) {
-            throw new Error('Die JS-Datei wurde geladen, hat aber sunsynk-power-flow-card nicht registriert.');
+            throw new Error('Sunsynk-JS wurde aufgerufen, das Custom Element fehlt jedoch.');
         }
     }
 
@@ -7969,7 +8018,7 @@ HTML;
                 $flowDisplay,
                 $houseDisplay,
                 htmlspecialchars($powerFlowModuleUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-                $sunsynkModuleUrl,
+                htmlspecialchars($sunsynkModuleUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
             ],
             $html
         );
