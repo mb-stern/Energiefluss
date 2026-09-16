@@ -1018,11 +1018,47 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            // Sofortiger Browserzustand wie bei der Wärmepumpe.
-            // Die Widget-ID wird anschließend nur ergänzend ermittelt.
-            return $this->GetVisualizationHtml('flow')
-                . '<script>window.__EF_SERVER_GRID__=' . $gridPayload
-                . ';handleMessage(' . $payload . ');</script>';
+            // Die eigentliche Visualisierung läuft in einer normalen HTTP-Seite
+            // des instanzspezifischen WebHooks. IP-Symcon/IPS-View liefert die
+            // Kachel selbst als data:text/html aus; dort stehen u. a. localStorage
+            // und normale Modul-Imports nicht zuverlässig zur Verfügung.
+            //
+            // Die kleine data:-Kachel ist deshalb nur noch die Bridge. Sie lädt
+            // den unveränderten Visualisierungs-Host per iframe und reicht alle
+            // Symcon-Payloads per postMessage weiter.
+            $hostUrl = $this->GetVisualizationModuleWebHookUrl('visualization-host');
+            $hostUrlJson = json_encode(
+                $hostUrl,
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+
+            return '<style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}</style>'
+                . '<iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write"></iframe>'
+                . '<script>(function(){'
+                . 'const raw=' . $hostUrlJson . ';'
+                . 'const initial=' . $payload . ';'
+                . 'const grid=' . $gridPayload . ';'
+                . 'const frame=document.getElementById("ef-bridge-frame");'
+                . 'let ready=false,last=initial;'
+                . 'function origin(){'
+                . 'try{if(document.referrer){const u=new URL(document.referrer);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
+                . 'try{const a=window.location.ancestorOrigins;if(a&&a.length){const u=new URL(a[0]);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
+                . 'return "";'
+                . '}'
+                . 'const base=origin();'
+                . 'frame.src=base ? new URL(raw,base).href : raw;'
+                . 'function theme(){'
+                . 'let probe="";try{probe=getComputedStyle(document.documentElement).getPropertyValue("--content-color").trim();}catch(e){}'
+                . 'if(!probe){try{probe=getComputedStyle(document.body).color||"";}catch(e){}}'
+                . 'let dark=null;const m=probe&&probe.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);'
+                . 'if(m){dark=(0.299*m[1]+0.587*m[2]+0.114*m[3])/255>0.5;}'
+                . 'else if(probe&&probe[0]==="#"&&probe.length>=7){const r=parseInt(probe.substr(1,2),16),g=parseInt(probe.substr(3,2),16),b=parseInt(probe.substr(5,2),16);dark=(0.299*r+0.587*g+0.114*b)/255>0.5;}'
+                . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
+                . 'return {dark:dark};}'
+                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
+                . 'frame.addEventListener("load",function(){ready=true;send(last);});'
+                . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
+                . '})();</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
@@ -1879,6 +1915,15 @@ class Energiefluss extends IPSModuleStrict
 
 <script>
     function detectTheme() {
+        // Im WebHook-Host existiert ein eigener HTTP-Dokumentkontext. Wenn die
+        // kleine Symcon/IPS-View-Bridge das Theme übermittelt hat, verwenden wir
+        // ausschließlich diese Information. An den konfigurierten Card-Farben
+        // wird dabei nichts verändert.
+        if (window.__EF_BRIDGE_THEME__ && typeof window.__EF_BRIDGE_THEME__.dark === 'boolean') {
+            document.documentElement.setAttribute('data-theme', window.__EF_BRIDGE_THEME__.dark ? 'dark' : 'light');
+            return;
+        }
+
         let probe = getComputedStyle(document.documentElement).getPropertyValue('--content-color').trim();
         if (!probe) probe = getComputedStyle(document.body).color;
 
@@ -4027,7 +4072,7 @@ class Energiefluss extends IPSModuleStrict
             inverter: {
                 modern: true,
                 model: 'goodwe',
-                colour: d.houseColors?.inverter || '#0d151c',
+                colour: d.colors?.inverter || AC.inverter,
                 autarky: ['power', 'energy', 'no'].includes(d.autarkyCalculationMode)
                     ? d.autarkyCalculationMode
                     : 'energy',
@@ -5835,7 +5880,6 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot || !d) return;
 
         const inverterColour =
-            d.houseColors?.inverter ||
             d.colors?.inverter ||
             AC.inverter;
 
@@ -7978,6 +8022,7 @@ HTML;
     private function GetVisualizationWebHookAssets(): array
     {
         return [
+            'visualization-host',
             'lit-core.min.js',
             'power-flow-card.js',
             'sunsynk-power-flow-card.js',
@@ -8021,6 +8066,50 @@ HTML;
                 http_response_code(404);
                 header('Content-Type: text/plain; charset=utf-8');
                 echo 'Not found';
+                return;
+            }
+
+            if ($asset === 'visualization-host') {
+                // Vollständige Visualisierung unter normalem HTTP-Origin. Dadurch
+                // funktionieren localStorage und die originalen Card-Module auch
+                // in IPS-View, ohne die Vendor-Cards verändern zu müssen.
+                $html = $this->GetVisualizationHtml('flow');
+                $html .= <<<'HTML'
+<script>
+window.addEventListener('message', function (event) {
+    const message = event.data;
+    if (!message || message.__energieflussBridge !== true) {
+        return;
+    }
+
+    window.__EF_SERVER_GRID__ = message.grid ?? null;
+
+    // Theme stammt aus dem ursprünglichen Symcon/IPS-View-Kachelkontext.
+    // Es wird nur an den WebHook-Host gespiegelt; Farbmuster und konfigurierte
+    // Modulfarben bleiben vollständig unverändert.
+    if (message.theme && typeof message.theme.dark === 'boolean') {
+        window.__EF_BRIDGE_THEME__ = { dark: message.theme.dark };
+        document.documentElement.setAttribute('data-theme', message.theme.dark ? 'dark' : 'light');
+    }
+
+    if (typeof handleMessage === 'function') {
+        handleMessage(message.payload);
+    }
+});
+
+// Dem Parent signalisieren, dass der Host Nachrichten empfangen kann.
+try {
+    window.parent.postMessage({__energieflussHostReady: true}, '*');
+} catch (_) {}
+</script>
+HTML;
+
+                header('Content-Type: text/html; charset=utf-8');
+                header('X-Content-Type-Options: nosniff');
+                header('Cache-Control: no-cache, no-store, must-revalidate');
+                header('Pragma: no-cache');
+                header('Content-Length: ' . strlen($html));
+                echo $html;
                 return;
             }
 
@@ -9609,7 +9698,7 @@ HTML;
                 'batteryAccent'    => $this->ColorToHex($this->ReadPropertyInteger('HouseColorBatteryAccent')),
             ],
             'colors'           => [
-                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('HouseColorInverter')),
+                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('ColorInverter')),
                 'solar'     => $this->ColorToHex($this->ReadPropertyInteger('ColorSolar')),
                 'import'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridImport')),
                 'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
