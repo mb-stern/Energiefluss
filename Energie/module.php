@@ -1148,6 +1148,7 @@ class Energiefluss extends IPSModuleStrict
         // Ausgabe klein und läuft nicht mehr in das Output-Buffer-Limit.
         $powerFlowModuleUrl = $this->GetVisualizationModuleWebHookUrl('power-flow-card.js');
         $sunsynkModuleUrl = $this->GetVisualizationModuleWebHookUrl('sunsynk-power-flow-card.js');
+        $litModuleUrl = $this->GetVisualizationModuleWebHookUrl('lit-core.min.js');
 
         $html = <<<'HTML'
 <style>
@@ -1800,9 +1801,14 @@ class Energiefluss extends IPSModuleStrict
     window.customCards = window.customCards || [];
 </script>
 <script type="module" src="__POWER_FLOW_MODULE_URL__"></script>
-<!-- Sunsynk ebenfalls direkt als ES-Modul laden. IPS-View/Kachel führen statische
-     module-Skripte zuverlässiger aus als einen späteren dynamischen import(). -->
-<script type="module" src="__SUNSYNK_MODULE_URL__"></script>
+
+<div id="eflow-diagnostic" style="
+    position:fixed; left:8px; top:8px; z-index:2147483647;
+    max-width:calc(100vw - 16px); padding:8px 10px;
+    border-radius:7px; background:rgba(0,0,0,.82); color:#fff;
+    font:12px/1.35 monospace; white-space:pre-wrap; pointer-events:none;">
+Diagnose startet …
+</div>
 
 <div id="eflow">
     <div id="scale-host">
@@ -1882,59 +1888,23 @@ class Energiefluss extends IPSModuleStrict
 
 <script>
     function detectTheme() {
-        const parseColor = value => {
-            const text = String(value || '').trim();
-            const m = text.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/i);
-            if (m) return [Number(m[1]), Number(m[2]), Number(m[3])];
-            if (/^#[0-9a-f]{6}$/i.test(text)) {
-                return [
-                    parseInt(text.slice(1, 3), 16),
-                    parseInt(text.slice(3, 5), 16),
-                    parseInt(text.slice(5, 7), 16)
-                ];
-            }
-            return null;
-        };
-        const luminance = rgb => rgb
-            ? (0.299 * rgb[0] + 0.587 * rgb[1] + 0.114 * rgb[2]) / 255
-            : null;
-
-        const rootStyle = getComputedStyle(document.documentElement);
-        const bodyStyle = getComputedStyle(document.body);
-
-        // IPS-View/Symcon zuerst über den tatsächlich geerbten Hintergrund
-        // erkennen. Ist dieser transparent, ist die Textfarbe der bessere Probe.
-        const backgroundCandidates = [
-            rootStyle.getPropertyValue('--content-background-color'),
-            rootStyle.getPropertyValue('--content-background'),
-            bodyStyle.backgroundColor,
-            rootStyle.backgroundColor
-        ];
+        let probe = getComputedStyle(document.documentElement).getPropertyValue('--content-color').trim();
+        if (!probe) probe = getComputedStyle(document.body).color;
 
         let dark = null;
-        for (const candidate of backgroundCandidates) {
-            const rgb = parseColor(candidate);
-            if (!rgb) continue;
-            const lum = luminance(rgb);
-            if (lum !== null) { dark = lum < 0.5; break; }
+        const m = probe && probe.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+        if (m) {
+            const lum = (0.299 * m[1] + 0.587 * m[2] + 0.114 * m[3]) / 255;
+            dark = lum > 0.5;
+        } else if (probe && probe[0] === '#' && probe.length >= 7) {
+            const r = parseInt(probe.substr(1, 2), 16);
+            const g = parseInt(probe.substr(3, 2), 16);
+            const b = parseInt(probe.substr(5, 2), 16);
+            dark = (0.299 * r + 0.587 * g + 0.114 * b) / 255 > 0.5;
         }
 
         if (dark === null) {
-            const textCandidates = [
-                rootStyle.getPropertyValue('--content-color'),
-                bodyStyle.color,
-                rootStyle.color
-            ];
-            for (const candidate of textCandidates) {
-                const rgb = parseColor(candidate);
-                if (!rgb) continue;
-                const lum = luminance(rgb);
-                if (lum !== null) { dark = lum > 0.5; break; }
-            }
-        }
-
-        if (dark === null) {
-            dark = !!(window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches);
+            dark = window.matchMedia && matchMedia('(prefers-color-scheme: dark)').matches;
         }
 
         document.documentElement.setAttribute('data-theme', dark ? 'dark' : 'light');
@@ -1942,10 +1912,6 @@ class Energiefluss extends IPSModuleStrict
 
     detectTheme();
     window.addEventListener('load', detectTheme);
-    window.addEventListener('focus', detectTheme);
-    new MutationObserver(detectTheme).observe(document.documentElement, {
-        attributes: true, attributeFilter: ['class', 'style', 'data-theme']
-    });
     setInterval(detectTheme, 2000);
 
     // Zentrale Farbdefinition – entspricht der ursprünglichen
@@ -3685,28 +3651,22 @@ class Energiefluss extends IPSModuleStrict
     async function loadOriginalSunsynkModule() {
         ensureHaCompatibility();
 
-        if (customElements.get('sunsynk-power-flow-card')) return;
+        if (customElements.get('sunsynk-power-flow-card')) {
+            return;
+        }
 
         if (!sunsynkModulePromise) {
-            sunsynkModulePromise = Promise.race([
-                customElements.whenDefined('sunsynk-power-flow-card'),
-                new Promise((_, reject) => setTimeout(
-                    () => reject(new Error(
-                        'sunsynk-power-flow-card wurde nach 8 Sekunden nicht registriert. ' +
-                        'Bitte den WebHook/Asset-Aufruf prüfen.'
-                    )),
-                    8000
-                ))
-            ]).catch(err => {
+            const moduleUrl = '__SUNSYNK_MODULE_URL__';
+            sunsynkModulePromise = import(moduleUrl).catch(err => {
                 sunsynkModulePromise = null;
-                throw err;
+                throw new Error(`Originale Sunsynk-JS konnte nicht importiert werden: ${err.message}`);
             });
         }
 
         await sunsynkModulePromise;
 
         if (!customElements.get('sunsynk-power-flow-card')) {
-            throw new Error('Sunsynk-JS wurde aufgerufen, das Custom Element fehlt jedoch.');
+            throw new Error('Die JS-Datei wurde geladen, hat aber sunsynk-power-flow-card nicht registriert.');
         }
     }
 
@@ -6763,6 +6723,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
+        EF_DIAG.add('ensureSunsynkCard(): START');
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
         sunsynkInitPromise = (async () => {
@@ -6813,6 +6774,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
+        EF_DIAG.add('renderTechnicalView(): START');
         updateTechnicalLayoutButtons();
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
@@ -7614,6 +7576,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function setState(d) {
+        EF_DIAG.add('setState(): START');
         applyConfiguredColors(d);
 
         // Ausschließlich Leistungswerte in W normalisieren.
@@ -7830,7 +7793,60 @@ class Energiefluss extends IPSModuleStrict
     let lastStateData = null;
     let lastCompactLayout = window.matchMedia('(max-width: 600px)').matches;
 
+    const EF_DIAG = {
+        lines: [],
+        add(message) {
+            const line = new Date().toLocaleTimeString() + '  ' + message;
+            this.lines.push(line);
+            if (this.lines.length > 14) this.lines.shift();
+            const el = document.getElementById('eflow-diagnostic');
+            if (el) el.textContent = this.lines.join('\n');
+            console.log('[Energiefluss Diagnose]', message);
+        }
+    };
+
+    async function runEflowHookDiagnostic() {
+        EF_DIAG.add('HTML/JavaScript: OK');
+        EF_DIAG.add('Browser: ' + navigator.userAgent);
+
+        const tests = [
+            ['Hook Lit', '__LIT_MODULE_URL__'],
+            ['Hook Sunsynk', '__SUNSYNK_MODULE_URL__']
+        ];
+
+        for (const [name, url] of tests) {
+            try {
+                const response = await fetch(url, { cache: 'no-store' });
+                const body = await response.text();
+                EF_DIAG.add(
+                    name + ': HTTP ' + response.status +
+                    ', ' + body.length + ' Bytes' +
+                    ', Typ=' + (response.headers.get('content-type') || '?')
+                );
+            } catch (err) {
+                EF_DIAG.add(name + ': FEHLER ' + err.message);
+            }
+        }
+
+        try {
+            EF_DIAG.add('Sunsynk import(): START');
+            await loadOriginalSunsynkModule();
+            EF_DIAG.add(
+                'Sunsynk import(): OK, Element=' +
+                (customElements.get('sunsynk-power-flow-card') ? 'registriert' : 'FEHLT')
+            );
+        } catch (err) {
+            EF_DIAG.add('Sunsynk import(): FEHLER ' + err.message);
+        }
+    }
+
+    setTimeout(() => {
+        runEflowHookDiagnostic().catch(err => EF_DIAG.add('Diagnosefehler: ' + err.message));
+    }, 100);
+
     function handleMessage(data) {
+        EF_DIAG.add('handleMessage(): empfangen');
+
         const d = typeof data === 'string' ? JSON.parse(data) : data;
 
         if (d && d.command === 'reloadHtml') {
@@ -8013,12 +8029,14 @@ HTML;
                 '__HOUSE_DISPLAY__',
                 '__POWER_FLOW_MODULE_URL__',
                 '__SUNSYNK_MODULE_URL__',
+                '__LIT_MODULE_URL__',
             ],
             [
                 $flowDisplay,
                 $houseDisplay,
                 htmlspecialchars($powerFlowModuleUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
-                htmlspecialchars($sunsynkModuleUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
+                $sunsynkModuleUrl,
+                $litModuleUrl,
             ],
             $html
         );
