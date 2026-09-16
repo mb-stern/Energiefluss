@@ -8262,6 +8262,20 @@ HTML;
     protected function ProcessHookData(): void
     {
         try {
+            // Die Visualisierung wird von IP-Symcon als data:text/html geladen.
+            // Dieses Dokument besitzt den Origin "null". Die Vendor-Module werden
+            // dagegen über den Symcon-WebHook geladen und benötigen deshalb CORS.
+            header('Access-Control-Allow-Origin: *');
+            header('Access-Control-Allow-Methods: GET, OPTIONS');
+            header('Access-Control-Allow-Headers: Content-Type');
+            header('Access-Control-Max-Age: 86400');
+
+            $requestMethod = strtoupper((string) ($_SERVER['REQUEST_METHOD'] ?? 'GET'));
+            if ($requestMethod === 'OPTIONS') {
+                http_response_code(204);
+                return;
+            }
+
             $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
             $requestPath = (string) (parse_url($requestUri, PHP_URL_PATH) ?? '');
             $hookPath = '/hook/' . $this->GetVisualizationWebHookBaseAddress();
