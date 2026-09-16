@@ -6765,6 +6765,14 @@ class Energiefluss extends IPSModuleStrict
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
 
+            // Die originale Sunsynk-Komponente baut nach dem Einhängen zunächst
+            // ihren Grundzustand auf. Unsere Layout-Anpassungen folgen direkt
+            // danach über updateComplete. Damit dieser interne Zwischenzustand
+            // nicht kurz sichtbar wird, bleibt ausschließlich die neue Card bis
+            // zum abgeschlossenen ersten Aufbau unsichtbar. Kein Timer/Delay:
+            // sichtbar wird sie unmittelbar nach applySunsynkViewOverrides().
+            card.style.visibility = 'hidden';
+
             // Wie in Lovelace: zuerst Konfiguration und hass setzen,
             // anschließend das Element in den DOM einhängen.
             window.__symconHasWallbox = !!d.hasWallbox;
@@ -6791,6 +6799,10 @@ class Energiefluss extends IPSModuleStrict
             await applySunsynkViewOverrides(card, d);
             scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
+
+            // Erster vollständiger Aufbau ist abgeschlossen. Ab jetzt darf die
+            // Card sichtbar sein; weitere Zustandsupdates laufen unverändert.
+            card.style.visibility = 'visible';
             document.getElementById('sunsynk-loading').style.display = 'none';
             if (sunsynkPending) {
                 const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
