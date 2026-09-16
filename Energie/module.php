@@ -8074,6 +8074,11 @@ HTML;
                 // funktionieren localStorage und die originalen Card-Module auch
                 // in IPS-View, ohne die Vendor-Cards verändern zu müssen.
                 $html = $this->GetVisualizationHtml('flow');
+
+                // Den HTTP-Host bis zum ersten echten Symcon-Payload unsichtbar halten.
+                // Kein Timer/Delay: sichtbar wird er ausschließlich ereignisgesteuert,
+                // nachdem handleMessage() den ersten vollständigen Zustand übernommen hat.
+                $html .= '<style id="ef-initial-visibility">html{visibility:hidden}</style>';
                 $html .= <<<'HTML'
 <script>
 window.addEventListener('message', function (event) {
@@ -8094,6 +8099,13 @@ window.addEventListener('message', function (event) {
 
     if (typeof handleMessage === 'function') {
         handleMessage(message.payload);
+
+        // Erst nach Verarbeitung des ersten vollständigen Payloads einblenden.
+        // Bewusst ohne setTimeout/Interval oder künstliche Verzögerung.
+        const initialVisibility = document.getElementById('ef-initial-visibility');
+        if (initialVisibility) {
+            initialVisibility.remove();
+        }
     }
 });
 
