@@ -6810,7 +6810,20 @@ class Energiefluss extends IPSModuleStrict
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
         updateTechnicalLayoutButtons();
         if (!sunsynkCard) {
-            sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
+            // Beim allerersten Payload die Karte direkt mit genau diesen Daten
+            // aufbauen. Den gleichen Payload NICHT gleichzeitig als pending
+            // vormerken, sonst wird er nach ensureSunsynkCard() ein zweites Mal
+            // per setConfig()/hass gerendert und die Sunsynk-Card zeigt kurz
+            // ihren ersten, noch nicht endgültigen Renderzustand.
+            //
+            // Nur wenn der asynchrone Erstaufbau bereits läuft und währenddessen
+            // wirklich ein NEUER Symcon-Payload eintrifft, merken wir den
+            // neuesten Stand für die anschließende Aktualisierung vor.
+            if (sunsynkInitPromise) {
+                sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
+                return;
+            }
+
             ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
             return;
         }
