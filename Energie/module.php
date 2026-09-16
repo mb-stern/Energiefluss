@@ -1148,7 +1148,6 @@ class Energiefluss extends IPSModuleStrict
         // Ausgabe klein und läuft nicht mehr in das Output-Buffer-Limit.
         $powerFlowModuleUrl = $this->GetVisualizationModuleWebHookUrl('power-flow-card.js');
         $sunsynkModuleUrl = $this->GetVisualizationModuleWebHookUrl('sunsynk-power-flow-card.js');
-        $litModuleUrl = $this->GetVisualizationModuleWebHookUrl('lit-core.min.js');
 
         $html = <<<'HTML'
 <style>
@@ -1800,15 +1799,10 @@ class Energiefluss extends IPSModuleStrict
     // Die Original-Card registriert sich beim Laden über window.customCards.push(...).
     window.customCards = window.customCards || [];
 </script>
-<script type="module" src="__POWER_FLOW_MODULE_URL__"></script>
-
-<div id="eflow-diagnostic" style="
-    position:fixed; left:8px; top:8px; z-index:2147483647;
-    max-width:calc(100vw - 16px); padding:8px 10px;
-    border-radius:7px; background:rgba(0,0,0,.82); color:#fff;
-    font:12px/1.35 monospace; white-space:pre-wrap; pointer-events:none;">
-Diagnose startet …
-</div>
+<script type="module">
+    // Die eigentliche URL wird nach Definition von resolveSymconHookUrl()
+    // weiter unten geladen. Dieser Block bleibt absichtlich leer.
+</script>
 
 <div id="eflow">
     <div id="scale-host">
@@ -3648,6 +3642,101 @@ Diagnose startet …
         });
     }
 
+    function resolveSymconHookUrl(url) {
+        const raw = String(url || '').trim();
+        if (!raw) {
+            throw new Error('Leere Hook-URL');
+        }
+
+        // Bereits absolut -> unverändert verwenden.
+        try {
+            const parsed = new URL(raw);
+            if (parsed.protocol === 'http:' || parsed.protocol === 'https:') {
+                return parsed.href;
+            }
+        } catch (_) {
+        }
+
+        const candidates = [];
+
+        // Normale Dokument-URL, falls die Kachel nicht als srcdoc/about:blank läuft.
+        try {
+            if (window.location && /^https?:$/.test(window.location.protocol)) {
+                candidates.push(window.location.origin);
+            }
+        } catch (_) {
+        }
+
+        // IP-Symcon-Kacheln laufen je nach Client in iframe/srcdoc.
+        // Dann ist der Parent/Top-Kontext die relevante Symcon-Adresse.
+        try {
+            if (window.parent && window.parent !== window.parent.parent &&
+                window.parent.location && /^https?:$/.test(window.parent.location.protocol)) {
+                candidates.push(window.parent.location.origin);
+            }
+        } catch (_) {
+        }
+        try {
+            if (window.parent && window.parent.location &&
+                /^https?:$/.test(window.parent.location.protocol)) {
+                candidates.push(window.parent.location.origin);
+            }
+        } catch (_) {
+        }
+        try {
+            if (window.top && window.top.location &&
+                /^https?:$/.test(window.top.location.protocol)) {
+                candidates.push(window.top.location.origin);
+            }
+        } catch (_) {
+        }
+
+        // Chromium stellt bei eingebetteten Dokumenten häufig die Origin-Kette
+        // bereit, auch wenn location selbst about:blank ist.
+        try {
+            const origins = window.location.ancestorOrigins;
+            if (origins && origins.length) {
+                for (let i = 0; i < origins.length; i++) {
+                    if (/^https?:\/\//i.test(origins[i])) {
+                        candidates.push(origins[i]);
+                    }
+                }
+            }
+        } catch (_) {
+        }
+
+        for (const base of [...new Set(candidates)]) {
+            try {
+                return new URL(raw, base).href;
+            } catch (_) {
+            }
+        }
+
+        throw new Error(
+            'Hook-Basisadresse konnte nicht ermittelt werden. location=' +
+            String(window.location && window.location.href)
+        );
+    }
+
+    let powerFlowModulePromise = null;
+
+    function loadPowerFlowModule() {
+        if (customElements.get('power-flow-card')) {
+            return Promise.resolve();
+        }
+        if (!powerFlowModulePromise) {
+            const moduleUrl = resolveSymconHookUrl('__POWER_FLOW_MODULE_URL__');
+            powerFlowModulePromise = import(moduleUrl).catch(err => {
+                powerFlowModulePromise = null;
+                throw err;
+            });
+        }
+        return powerFlowModulePromise;
+    }
+
+    // Früh laden, damit die Hausansicht weiterhin wie bisher bereitsteht.
+    loadPowerFlowModule().catch(err => console.error('Power Flow Card Modul:', err));
+
     async function loadOriginalSunsynkModule() {
         ensureHaCompatibility();
 
@@ -3656,7 +3745,7 @@ Diagnose startet …
         }
 
         if (!sunsynkModulePromise) {
-            const moduleUrl = '__SUNSYNK_MODULE_URL__';
+            const moduleUrl = resolveSymconHookUrl('__SUNSYNK_MODULE_URL__');
             sunsynkModulePromise = import(moduleUrl).catch(err => {
                 sunsynkModulePromise = null;
                 throw new Error(`Originale Sunsynk-JS konnte nicht importiert werden: ${err.message}`);
@@ -6723,7 +6812,6 @@ Diagnose startet …
     }
 
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
-        EF_DIAG.add('ensureSunsynkCard(): START');
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
         sunsynkInitPromise = (async () => {
@@ -6774,7 +6862,6 @@ Diagnose startet …
     }
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
-        EF_DIAG.add('renderTechnicalView(): START');
         updateTechnicalLayoutButtons();
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
@@ -7576,7 +7663,6 @@ Diagnose startet …
     }
 
     function setState(d) {
-        EF_DIAG.add('setState(): START');
         applyConfiguredColors(d);
 
         // Ausschließlich Leistungswerte in W normalisieren.
@@ -7793,60 +7879,7 @@ Diagnose startet …
     let lastStateData = null;
     let lastCompactLayout = window.matchMedia('(max-width: 600px)').matches;
 
-    const EF_DIAG = {
-        lines: [],
-        add(message) {
-            const line = new Date().toLocaleTimeString() + '  ' + message;
-            this.lines.push(line);
-            if (this.lines.length > 14) this.lines.shift();
-            const el = document.getElementById('eflow-diagnostic');
-            if (el) el.textContent = this.lines.join('\n');
-            console.log('[Energiefluss Diagnose]', message);
-        }
-    };
-
-    async function runEflowHookDiagnostic() {
-        EF_DIAG.add('HTML/JavaScript: OK');
-        EF_DIAG.add('Browser: ' + navigator.userAgent);
-
-        const tests = [
-            ['Hook Lit', '__LIT_MODULE_URL__'],
-            ['Hook Sunsynk', '__SUNSYNK_MODULE_URL__']
-        ];
-
-        for (const [name, url] of tests) {
-            try {
-                const response = await fetch(url, { cache: 'no-store' });
-                const body = await response.text();
-                EF_DIAG.add(
-                    name + ': HTTP ' + response.status +
-                    ', ' + body.length + ' Bytes' +
-                    ', Typ=' + (response.headers.get('content-type') || '?')
-                );
-            } catch (err) {
-                EF_DIAG.add(name + ': FEHLER ' + err.message);
-            }
-        }
-
-        try {
-            EF_DIAG.add('Sunsynk import(): START');
-            await loadOriginalSunsynkModule();
-            EF_DIAG.add(
-                'Sunsynk import(): OK, Element=' +
-                (customElements.get('sunsynk-power-flow-card') ? 'registriert' : 'FEHLT')
-            );
-        } catch (err) {
-            EF_DIAG.add('Sunsynk import(): FEHLER ' + err.message);
-        }
-    }
-
-    setTimeout(() => {
-        runEflowHookDiagnostic().catch(err => EF_DIAG.add('Diagnosefehler: ' + err.message));
-    }, 100);
-
     function handleMessage(data) {
-        EF_DIAG.add('handleMessage(): empfangen');
-
         const d = typeof data === 'string' ? JSON.parse(data) : data;
 
         if (d && d.command === 'reloadHtml') {
@@ -8029,14 +8062,12 @@ HTML;
                 '__HOUSE_DISPLAY__',
                 '__POWER_FLOW_MODULE_URL__',
                 '__SUNSYNK_MODULE_URL__',
-                '__LIT_MODULE_URL__',
             ],
             [
                 $flowDisplay,
                 $houseDisplay,
                 htmlspecialchars($powerFlowModuleUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
                 $sunsynkModuleUrl,
-                $litModuleUrl,
             ],
             $html
         );
