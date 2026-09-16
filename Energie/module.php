@@ -1805,21 +1805,23 @@ class Energiefluss extends IPSModuleStrict
 </script>
 
 <div id="eflow-diagnostic-panel" style="
-    position:fixed; left:8px; right:8px; top:8px; z-index:2147483647;
-    height:min(70vh,620px); padding:10px; box-sizing:border-box;
+    position:fixed; left:8px; right:8px; top:8px; bottom:8px; z-index:2147483647;
+    padding:10px; box-sizing:border-box; display:flex; flex-direction:column;
     border-radius:8px; background:rgba(0,0,0,.94); color:#fff;
     font:12px/1.35 monospace;">
-    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
-        <strong style="font:700 13px/1.2 sans-serif;">Energiefluss Diagnose</strong>
-        <button id="eflow-diag-copy" type="button" style="pointer-events:auto;padding:5px 9px;">Kopieren</button>
-        <button id="eflow-diag-download" type="button" style="pointer-events:auto;padding:5px 9px;">Download .txt</button>
-        <button id="eflow-diag-hide" type="button" style="pointer-events:auto;padding:5px 9px;">Ausblenden</button>
-    </div>
+    <strong style="font:700 13px/1.2 sans-serif;margin-bottom:8px;">Energiefluss Diagnose</strong>
     <textarea id="eflow-diagnostic" readonly spellcheck="false" style="
-        width:100%;height:calc(100% - 38px);resize:none;box-sizing:border-box;
+        width:100%;flex:1;min-height:0;resize:none;box-sizing:border-box;
         padding:8px;border:1px solid #555;border-radius:5px;
         background:#090909;color:#fff;font:12px/1.4 monospace;
         white-space:pre;overflow:auto;">Diagnose startet …</textarea>
+    <div style="
+        display:flex;gap:8px;align-items:center;justify-content:center;
+        flex:0 0 auto;padding-top:10px;pointer-events:auto;">
+        <button id="eflow-diag-copy" type="button" style="pointer-events:auto;padding:7px 12px;">Kopieren</button>
+        <button id="eflow-diag-download" type="button" style="pointer-events:auto;padding:7px 12px;">Download .txt</button>
+        <button id="eflow-diag-hide" type="button" style="pointer-events:auto;padding:7px 12px;">Ausblenden</button>
+    </div>
 </div>
 
 <div id="eflow">
