@@ -1804,6 +1804,15 @@ class Energiefluss extends IPSModuleStrict
     // weiter unten geladen. Dieser Block bleibt absichtlich leer.
 </script>
 
+<div id="eflow-diagnostic" style="
+    position:fixed; left:8px; top:8px; z-index:2147483647;
+    max-width:calc(100vw - 16px); max-height:55vh; overflow:auto;
+    padding:8px 10px; border-radius:7px;
+    background:rgba(0,0,0,.88); color:#fff;
+    font:12px/1.35 monospace; white-space:pre-wrap; pointer-events:none;">
+Diagnose startet …
+</div>
+
 <div id="eflow">
     <div id="scale-host">
         <div id="scale-root">
@@ -3642,6 +3651,26 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+    const EF_DIAG = {
+        lines: [],
+        add(message) {
+            const line = new Date().toLocaleTimeString() + '  ' + message;
+            this.lines.push(line);
+            if (this.lines.length > 24) this.lines.shift();
+            const el = document.getElementById('eflow-diagnostic');
+            if (el) el.textContent = this.lines.join('\n');
+            console.log('[Energiefluss Diagnose]', message);
+        }
+    };
+
+    function diagValue(label, getter) {
+        try {
+            EF_DIAG.add(label + ': ' + String(getter()));
+        } catch (err) {
+            EF_DIAG.add(label + ': NICHT ERREICHBAR (' + err.message + ')');
+        }
+    }
+
     function resolveSymconHookUrl(url) {
         const raw = String(url || '').trim();
         if (!raw) {
@@ -3726,6 +3755,7 @@ class Energiefluss extends IPSModuleStrict
         }
         if (!powerFlowModulePromise) {
             const moduleUrl = resolveSymconHookUrl('__POWER_FLOW_MODULE_URL__');
+            EF_DIAG.add('PowerFlow absolute URL: ' + moduleUrl);
             powerFlowModulePromise = import(moduleUrl).catch(err => {
                 powerFlowModulePromise = null;
                 throw err;
@@ -3737,7 +3767,65 @@ class Energiefluss extends IPSModuleStrict
     // Früh laden, damit die Hausansicht weiterhin wie bisher bereitsteht.
     loadPowerFlowModule().catch(err => console.error('Power Flow Card Modul:', err));
 
+    async function runDetailedHookDiagnostic() {
+        EF_DIAG.add('=== Detaildiagnose ===');
+        diagValue('window.location.href', () => window.location.href);
+        diagValue('window.location.protocol', () => window.location.protocol);
+        diagValue('document.baseURI', () => document.baseURI);
+        diagValue('document.referrer', () => document.referrer || '(leer)');
+        diagValue('parent.location.href', () => window.parent.location.href);
+        diagValue('top.location.href', () => window.top.location.href);
+        diagValue('ancestorOrigins', () => {
+            const a = window.location.ancestorOrigins;
+            return a && a.length ? Array.from(a).join(' | ') : '(leer/nicht vorhanden)';
+        });
+
+        const rawLit = '__LIT_MODULE_URL__';
+        const rawSun = '__SUNSYNK_MODULE_URL__';
+        EF_DIAG.add('Lit raw: ' + rawLit);
+        EF_DIAG.add('Sunsynk raw: ' + rawSun);
+
+        for (const [name, raw] of [['Lit', rawLit], ['Sunsynk', rawSun]]) {
+            let resolved;
+            try {
+                resolved = resolveSymconHookUrl(raw);
+                EF_DIAG.add(name + ' resolved: ' + resolved);
+            } catch (err) {
+                EF_DIAG.add(name + ' resolve: FEHLER ' + err.message);
+                continue;
+            }
+
+            try {
+                const response = await fetch(resolved, {cache:'no-store'});
+                const body = await response.text();
+                EF_DIAG.add(name + ' fetch: HTTP ' + response.status +
+                    ', ' + body.length + ' Bytes, ' +
+                    (response.headers.get('content-type') || '?'));
+            } catch (err) {
+                EF_DIAG.add(name + ' fetch: FEHLER ' + err.message);
+            }
+        }
+
+        try {
+            EF_DIAG.add('Sunsynk import(): START');
+            await loadOriginalSunsynkModule();
+            EF_DIAG.add('Sunsynk import(): OK');
+        } catch (err) {
+            EF_DIAG.add('Sunsynk import(): FEHLER ' + err.message);
+        }
+
+        EF_DIAG.add('customElement Sunsynk: ' +
+            (customElements.get('sunsynk-power-flow-card') ? 'JA' : 'NEIN'));
+    }
+
+    setTimeout(() => {
+        runDetailedHookDiagnostic().catch(err =>
+            EF_DIAG.add('Detaildiagnose FEHLER: ' + err.message)
+        );
+    }, 150);
+
     async function loadOriginalSunsynkModule() {
+        EF_DIAG.add('loadOriginalSunsynkModule(): START');
         ensureHaCompatibility();
 
         if (customElements.get('sunsynk-power-flow-card')) {
@@ -3746,6 +3834,7 @@ class Energiefluss extends IPSModuleStrict
 
         if (!sunsynkModulePromise) {
             const moduleUrl = resolveSymconHookUrl('__SUNSYNK_MODULE_URL__');
+            EF_DIAG.add('Sunsynk absolute URL: ' + moduleUrl);
             sunsynkModulePromise = import(moduleUrl).catch(err => {
                 sunsynkModulePromise = null;
                 throw new Error(`Originale Sunsynk-JS konnte nicht importiert werden: ${err.message}`);
@@ -6812,6 +6901,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
+        EF_DIAG.add('ensureSunsynkCard(): START');
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
         sunsynkInitPromise = (async () => {
@@ -6862,6 +6952,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
+        EF_DIAG.add('renderTechnicalView(): START');
         updateTechnicalLayoutButtons();
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
@@ -7663,6 +7754,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function setState(d) {
+        EF_DIAG.add('setState(): START');
         applyConfiguredColors(d);
 
         // Ausschließlich Leistungswerte in W normalisieren.
@@ -7880,6 +7972,7 @@ class Energiefluss extends IPSModuleStrict
     let lastCompactLayout = window.matchMedia('(max-width: 600px)').matches;
 
     function handleMessage(data) {
+        EF_DIAG.add('handleMessage(): empfangen');
         const d = typeof data === 'string' ? JSON.parse(data) : data;
 
         if (d && d.command === 'reloadHtml') {
@@ -8062,12 +8155,14 @@ HTML;
                 '__HOUSE_DISPLAY__',
                 '__POWER_FLOW_MODULE_URL__',
                 '__SUNSYNK_MODULE_URL__',
+                '__LIT_MODULE_URL__',
             ],
             [
                 $flowDisplay,
                 $houseDisplay,
                 htmlspecialchars($powerFlowModuleUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8'),
                 $sunsynkModuleUrl,
+                $this->GetVisualizationModuleWebHookUrl('lit-core.min.js'),
             ],
             $html
         );
