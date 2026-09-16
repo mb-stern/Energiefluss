@@ -1804,13 +1804,22 @@ class Energiefluss extends IPSModuleStrict
     // weiter unten geladen. Dieser Block bleibt absichtlich leer.
 </script>
 
-<div id="eflow-diagnostic" style="
-    position:fixed; left:8px; top:8px; z-index:2147483647;
-    max-width:calc(100vw - 16px); max-height:55vh; overflow:auto;
-    padding:8px 10px; border-radius:7px;
-    background:rgba(0,0,0,.88); color:#fff;
-    font:12px/1.35 monospace; white-space:pre-wrap; pointer-events:none;">
-Diagnose startet …
+<div id="eflow-diagnostic-panel" style="
+    position:fixed; left:8px; right:8px; top:8px; z-index:2147483647;
+    height:min(70vh,620px); padding:10px; box-sizing:border-box;
+    border-radius:8px; background:rgba(0,0,0,.94); color:#fff;
+    font:12px/1.35 monospace;">
+    <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px;">
+        <strong style="font:700 13px/1.2 sans-serif;">Energiefluss Diagnose</strong>
+        <button id="eflow-diag-copy" type="button" style="pointer-events:auto;padding:5px 9px;">Kopieren</button>
+        <button id="eflow-diag-download" type="button" style="pointer-events:auto;padding:5px 9px;">Download .txt</button>
+        <button id="eflow-diag-hide" type="button" style="pointer-events:auto;padding:5px 9px;">Ausblenden</button>
+    </div>
+    <textarea id="eflow-diagnostic" readonly spellcheck="false" style="
+        width:100%;height:calc(100% - 38px);resize:none;box-sizing:border-box;
+        padding:8px;border:1px solid #555;border-radius:5px;
+        background:#090909;color:#fff;font:12px/1.4 monospace;
+        white-space:pre;overflow:auto;">Diagnose startet …</textarea>
 </div>
 
 <div id="eflow">
@@ -3658,7 +3667,7 @@ Diagnose startet …
             this.lines.push(line);
             if (this.lines.length > 24) this.lines.shift();
             const el = document.getElementById('eflow-diagnostic');
-            if (el) el.textContent = this.lines.join('\n');
+            if (el) el.value = this.lines.join('\n');
             console.log('[Energiefluss Diagnose]', message);
         }
     };
@@ -3767,11 +3776,65 @@ Diagnose startet …
     // Früh laden, damit die Hausansicht weiterhin wie bisher bereitsteht.
     loadPowerFlowModule().catch(err => console.error('Power Flow Card Modul:', err));
 
+    function initDiagnosticPanel() {
+        const area = document.getElementById('eflow-diagnostic');
+        const panel = document.getElementById('eflow-diagnostic-panel');
+        const copy = document.getElementById('eflow-diag-copy');
+        const download = document.getElementById('eflow-diag-download');
+        const hide = document.getElementById('eflow-diag-hide');
+
+        if (copy) copy.addEventListener('click', async () => {
+            const value = area ? area.value : EF_DIAG.lines.join('\n');
+            try {
+                await navigator.clipboard.writeText(value);
+                copy.textContent = 'Kopiert ✓';
+            } catch (_) {
+                if (area) {
+                    area.focus();
+                    area.select();
+                    try { document.execCommand('copy'); } catch (_) {}
+                }
+                copy.textContent = 'Markiert';
+            }
+            setTimeout(() => copy.textContent = 'Kopieren', 1600);
+        });
+
+        if (download) download.addEventListener('click', () => {
+            const value = area ? area.value : EF_DIAG.lines.join('\n');
+            const blob = new Blob([value], {type:'text/plain;charset=utf-8'});
+            const url = URL.createObjectURL(blob);
+            const a = document.createElement('a');
+            a.href = url;
+            a.download = 'energiefluss-diagnose-' +
+                new Date().toISOString().replace(/[:.]/g, '-') + '.txt';
+            document.body.appendChild(a);
+            a.click();
+            a.remove();
+            setTimeout(() => URL.revokeObjectURL(url), 1000);
+        });
+
+        if (hide) hide.addEventListener('click', () => {
+            if (panel) panel.style.display = 'none';
+        });
+    }
+
+    setTimeout(initDiagnosticPanel, 0);
+
     async function runDetailedHookDiagnostic() {
         EF_DIAG.add('=== Detaildiagnose ===');
-        diagValue('window.location.href', () => window.location.href);
+        diagValue('window.location.href', () => {
+            const href = String(window.location.href || '');
+            return href.startsWith('data:')
+                ? 'data:text/html… (' + href.length + ' Zeichen)'
+                : href;
+        });
         diagValue('window.location.protocol', () => window.location.protocol);
-        diagValue('document.baseURI', () => document.baseURI);
+        diagValue('document.baseURI', () => {
+            const uri = String(document.baseURI || '');
+            return uri.startsWith('data:')
+                ? 'data:text/html… (' + uri.length + ' Zeichen)'
+                : uri;
+        });
         diagValue('document.referrer', () => document.referrer || '(leer)');
         diagValue('parent.location.href', () => window.parent.location.href);
         diagValue('top.location.href', () => window.top.location.href);
