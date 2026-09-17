@@ -6757,44 +6757,18 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
-    // Reine Startdiagnose; keine Änderung an Konfiguration oder Render-Reihenfolge.
-    const __efSunsynkDiagStart = performance.now();
-    const __efSunsynkDiag = [];
-    function __efDiag(label, extra = null) {
-        const entry = {ms: Math.round((performance.now()-__efSunsynkDiagStart)*10)/10, label, extra};
-        __efSunsynkDiag.push(entry);
-        console.log('[EF-SUNSYNK-DIAG]', entry.ms + ' ms', label, extra ?? '');
-    }
-    function __efDiagCard(card, label) {
-        let info = {};
-        try {
-            const cfg = card?.config || card?._config || null;
-            info = {connected:!!card?.isConnected,hasShadowRoot:!!card?.shadowRoot,shadowChildren:card?.shadowRoot?.childElementCount??null,configKeys:cfg&&typeof cfg==='object'?Object.keys(cfg):[],mppts:cfg?.solar?.mppts??null,batteryCount:cfg?.battery?.count??null};
-        } catch(e) { info={diagError:String(e)}; }
-        __efDiag(label, info);
-    }
-    window.__EF_SUNSYNK_DIAG__ = __efSunsynkDiag;
-
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
-        __efDiag("ensure: start", {pvs:pvs.length,batteries:batteries.length,groups:groups.length,hasWallbox:!!d.hasWallbox});
         sunsynkInitPromise = (async () => {
-            __efDiag("vendor load: start");
             await loadOriginalSunsynkModule();
-            __efDiag("vendor load: done");
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
-            __efDiagCard(card, 'createElement');
 
             // Wie in Lovelace: zuerst Konfiguration und hass setzen,
             // anschließend das Element in den DOM einhängen.
             window.__symconHasWallbox = !!d.hasWallbox;
-            const __efCfg = createSunsynkConfig(d, pvs, batteries, wallbox, groups);
-            __efDiag("setConfig: before", {mppts:__efCfg?.solar?.mppts??null,batteryCount:__efCfg?.battery?.count??null,topKeys:Object.keys(__efCfg||{})});
-            card.setConfig(__efCfg);
-            __efDiagCard(card, "setConfig: after");
-            __efDiag("hass: before");
+            card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
             card.hass = createSunsynkHass(
                 d,
                 grid,
@@ -6804,9 +6778,7 @@ class Energiefluss extends IPSModuleStrict
                 wallbox,
                 groups
             );
-            __efDiagCard(card, "append: before");
             host.appendChild(card);
-            __efDiagCard(card, "append: after");
             sunsynkCard = card;
             card.__symconLastData = d;
             card.__symconRatioContext = {
@@ -6816,13 +6788,10 @@ class Energiefluss extends IPSModuleStrict
                 pvs,
                 batteries
             };
-            __efDiagCard(card, "overrides: before");
             await applySunsynkViewOverrides(card, d);
-            __efDiagCard(card, "overrides: after");
             scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
             document.getElementById('sunsynk-loading').style.display = 'none';
-            __efDiagCard(card, 'loading hidden');
             if (sunsynkPending) {
                 const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
             }
@@ -6840,9 +6809,20 @@ class Energiefluss extends IPSModuleStrict
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
         updateTechnicalLayoutButtons();
-        __efDiag("renderTechnicalView", {cardExists:!!sunsynkCard,pending:!!sunsynkPending,pvs:pvs.length,batteries:batteries.length,groups:groups.length,hasWallbox:!!d.hasWallbox});
         if (!sunsynkCard) {
-            sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
+            // Beim Öffnen kann die Bridge zuerst einen noch unvollständigen
+            // Bootstrap-Zustand liefern (z. B. 0 PV / 0 Batterien / 0 Gruppen).
+            // Diesen Zustand nur merken, aber daraus keine Sunsynk-Card bauen.
+            // Sobald ein nachfolgender echter Payload die konfigurierte Struktur
+            // enthält, wird die Card unmittelbar und genau mit diesem Zustand
+            // erzeugt. Kein setTimeout, kein Interval, kein künstlicher Delay.
+            const structure = d?.technicalStructure;
+            if (structure && structure.ready === false) {
+                sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
+                return;
+            }
+
+            sunsynkPending = null;
             ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
             return;
         }
@@ -8031,33 +8011,6 @@ class Energiefluss extends IPSModuleStrict
 
     fit();
     requestAnimationFrame(frame);
-
-    // Diagnose-Schaltfläche absichtlich unten, damit sie auch in der Symcon-Kachel erreichbar ist.
-    // Keine Clipboard-API: Die Diagnose wird direkt in einem markierbaren Textfeld angezeigt.
-    const __efDiagButton = document.createElement('button');
-    __efDiagButton.textContent = 'Sunsynk Diagnose anzeigen';
-    Object.assign(__efDiagButton.style, {position:'fixed',right:'8px',bottom:'8px',zIndex:'2147483647',padding:'7px 10px',fontSize:'12px'});
-
-    const __efDiagPanel = document.createElement('div');
-    Object.assign(__efDiagPanel.style, {position:'fixed',left:'8px',right:'8px',bottom:'48px',height:'45%',zIndex:'2147483646',display:'none',padding:'8px',boxSizing:'border-box',background:'var(--card-background-color, #fff)',border:'1px solid rgba(127,127,127,.65)',borderRadius:'6px'});
-
-    const __efDiagText = document.createElement('textarea');
-    __efDiagText.readOnly = true;
-    __efDiagText.setAttribute('aria-label', 'Sunsynk Startdiagnose');
-    Object.assign(__efDiagText.style, {width:'100%',height:'100%',boxSizing:'border-box',resize:'none',fontFamily:'monospace',fontSize:'11px'});
-    __efDiagPanel.appendChild(__efDiagText);
-
-    __efDiagButton.addEventListener('click', () => {
-        const rows = (window.__EF_SUNSYNK_DIAG__ || []).map(x => `${x.ms} ms | ${x.label} | ${JSON.stringify(x.extra)}`).join('\n');
-        __efDiagText.value = 'Energiefluss Sunsynk Startdiagnose\n' + rows;
-        __efDiagPanel.style.display = 'block';
-        __efDiagText.focus();
-        __efDiagText.select();
-        __efDiagButton.textContent = 'Diagnose aktualisieren';
-    });
-
-    document.body.appendChild(__efDiagPanel);
-    document.body.appendChild(__efDiagButton);
 </script>
 HTML;
 
@@ -9629,7 +9582,45 @@ HTML;
             : 1.0;
         $gridConnectedStatus = ((float) $gridConnectedRaw) != 0.0 ? 'on-grid' : 'off-grid';
 
+        // Struktur-Schutz für den ersten Aufbau der Sunsynk-Karte.
+        // IP-Symcon kann beim Öffnen der Kachel zunächst einen Bootstrap-Payload
+        // liefern, in dem die dynamischen Listen noch leer sind. Die erwartete
+        // Struktur wird deshalb direkt aus der gespeicherten Konfiguration
+        // bestimmt und mit dem tatsächlich aufgebauten Payload verglichen.
+        // JavaScript erzeugt die Sunsynk-Card erst, wenn beides übereinstimmt.
+        // Das ist rein ereignisgesteuert; es gibt keinen Timer und keinen Delay.
+        $expectedPvCount = 0;
+        if (is_array($decodedPVs)) {
+            foreach (array_slice($decodedPVs, 0, 6) as $source) {
+                $powerID = (int) ($source['VariableID'] ?? $source['String1PowerVariableID'] ?? 0);
+                if ($powerID > 0) {
+                    $expectedPvCount++;
+                }
+            }
+        }
+
+        $expectedBatteryCount = 0;
+        if (is_array($decodedBatteries)) {
+            foreach (array_slice($decodedBatteries, 0, 2) as $source) {
+                if ((int) ($source['VariableID'] ?? 0) > 0) {
+                    $expectedBatteryCount++;
+                }
+            }
+        }
+
+        $expectedGroupCount = is_array($decoded) ? count($decoded) : 0;
+        $technicalStructureReady =
+            count($pvs) >= $expectedPvCount &&
+            count($batteries) >= $expectedBatteryCount &&
+            count($groups) >= $expectedGroupCount;
+
         return [
+            'technicalStructure' => [
+                'ready' => $technicalStructureReady,
+                'expectedPvs' => $expectedPvCount,
+                'expectedBatteries' => $expectedBatteryCount,
+                'expectedGroups' => $expectedGroupCount,
+            ],
             'pvs'              => $pvs,
             'housePvs'         => $housePvs,
             'batteries'        => $batteries,
