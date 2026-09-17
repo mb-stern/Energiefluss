@@ -1012,41 +1012,53 @@ class Energiefluss extends IPSModuleStrict
                 $this->BuildPayload(),
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
+
             $gridPayload = json_encode(
                 $this->GetVisualizationGridPayload(),
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
-            $hostUrl = $this->GetVisualizationModuleWebHookUrl('visualization-host');
 
-            return '<iframe id="energiefluss-host" style="width:100%;height:100%;border:0;display:block;background:transparent"'
-                . ' src="' . htmlspecialchars($hostUrl, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '"></iframe>'
-                . '<script>'
-                . 'const __efFrame=document.getElementById("energiefluss-host");'
-                . 'const __efPayload=' . $payload . ';'
-                . 'const __efGrid=' . $gridPayload . ';'
-                . 'function __efTheme(){'
-                . ' const d=document.documentElement,b=document.body;'
-                . ' const dark=(d&&d.getAttribute("data-theme")==="dark")'
-                . ' ||(b&&b.getAttribute("data-theme")==="dark")'
-                . ' ||window.matchMedia("(prefers-color-scheme: dark)").matches;'
-                . ' return {dark:!!dark};'
+            // Die eigentliche Visualisierung läuft in einer normalen HTTP-Seite
+            // des instanzspezifischen WebHooks. IP-Symcon/IPS-View liefert die
+            // Kachel selbst als data:text/html aus; dort stehen u. a. localStorage
+            // und normale Modul-Imports nicht zuverlässig zur Verfügung.
+            //
+            // Die kleine data:-Kachel ist deshalb nur noch die Bridge. Sie lädt
+            // den unveränderten Visualisierungs-Host per iframe und reicht alle
+            // Symcon-Payloads per postMessage weiter.
+            $hostUrl = $this->GetVisualizationModuleWebHookUrl('visualization-host');
+            $hostUrlJson = json_encode(
+                $hostUrl,
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+
+            return '<style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}</style>'
+                . '<iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write"></iframe>'
+                . '<script>(function(){'
+                . 'const raw=' . $hostUrlJson . ';'
+                . 'const initial=' . $payload . ';'
+                . 'const grid=' . $gridPayload . ';'
+                . 'const frame=document.getElementById("ef-bridge-frame");'
+                . 'let ready=false,last=initial;'
+                . 'function origin(){'
+                . 'try{if(document.referrer){const u=new URL(document.referrer);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
+                . 'try{const a=window.location.ancestorOrigins;if(a&&a.length){const u=new URL(a[0]);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
+                . 'return "";'
                 . '}'
-                . 'function __efSend(payload){'
-                . ' if(!__efFrame||!__efFrame.contentWindow)return;'
-                . ' __efFrame.contentWindow.postMessage({__energieflussBridge:true,payload:payload,grid:__efGrid,theme:__efTheme()},"*");'
-                . '}'
-                . 'window.addEventListener("message",function(event){'
-                . ' const m=event.data;'
-                . ' if(!m||m.__energieflussHostReady!==true)return;'
-                . ' __efSend(__efPayload);'
-                . '});'
-                . 'window.handleMessage=function(data){'
-                . ' let d=data;'
-                . ' if(typeof d==="string"){try{d=JSON.parse(d);}catch(_){return;}}'
-                . ' if(!d||d.__energieflussHostReady===true)return;'
-                . ' __efSend(d);'
-                . '};'
-                . '</script>';
+                . 'const base=origin();'
+                . 'frame.src=base ? new URL(raw,base).href : raw;'
+                . 'function theme(){'
+                . 'let probe="";try{probe=getComputedStyle(document.documentElement).getPropertyValue("--content-color").trim();}catch(e){}'
+                . 'if(!probe){try{probe=getComputedStyle(document.body).color||"";}catch(e){}}'
+                . 'let dark=null;const m=probe&&probe.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);'
+                . 'if(m){dark=(0.299*m[1]+0.587*m[2]+0.114*m[3])/255>0.5;}'
+                . 'else if(probe&&probe[0]==="#"&&probe.length>=7){const r=parseInt(probe.substr(1,2),16),g=parseInt(probe.substr(3,2),16),b=parseInt(probe.substr(5,2),16);dark=(0.299*r+0.587*g+0.114*b)/255>0.5;}'
+                . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
+                . 'return {dark:dark};}'
+                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
+                . 'frame.addEventListener("load",function(){ready=true;send(last);});'
+                . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
+                . '})();</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
@@ -1903,6 +1915,12 @@ class Energiefluss extends IPSModuleStrict
 
 <script>
     function detectTheme() {
+        // Im WebHook-Host das vom IPS/Symcon-Tile übermittelte Theme verwenden.
+        if (window.__EF_BRIDGE_THEME__ && typeof window.__EF_BRIDGE_THEME__.dark === 'boolean') {
+            document.documentElement.setAttribute('data-theme', window.__EF_BRIDGE_THEME__.dark ? 'dark' : 'light');
+            return;
+        }
+
         let probe = getComputedStyle(document.documentElement).getPropertyValue('--content-color').trim();
         if (!probe) probe = getComputedStyle(document.body).color;
 
@@ -8042,45 +8060,55 @@ HTML;
             }
 
             $asset = isset($_GET['asset']) ? (string) $_GET['asset'] : '';
+            if (!in_array($asset, $this->GetVisualizationWebHookAssets(), true)) {
+                http_response_code(404);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'Not found';
+                return;
+            }
 
             if ($asset === 'visualization-host') {
-                header('Content-Type: text/html; charset=utf-8');
-                header('Cache-Control: no-store, no-cache, must-revalidate, max-age=0');
-
+                // Vollständige Visualisierung unter normalem HTTP-Origin.
                 $html = $this->GetVisualizationHtml('flow');
                 $html .= <<<'HTML'
 <script>
 window.addEventListener('message', function (event) {
     const message = event.data;
-    if (!message || message.__energieflussBridge !== true) return;
+    if (!message || message.__energieflussBridge !== true) {
+        return;
+    }
 
     window.__EF_SERVER_GRID__ = message.grid ?? null;
 
     if (message.theme && typeof message.theme.dark === 'boolean') {
+        window.__EF_BRIDGE_THEME__ = { dark: message.theme.dark };
         document.documentElement.setAttribute('data-theme', message.theme.dark ? 'dark' : 'light');
     }
 
+    // HostReady ist ausschließlich ein Handshake und niemals Anlagendaten.
     const payload = message.payload;
-    if (!payload || payload.__energieflussHostReady === true) return;
+    if (!payload || payload.__energieflussHostReady === true) {
+        return;
+    }
 
     if (typeof handleMessage === 'function') {
         handleMessage(payload);
     }
 });
 
+// Nur dem Parent Bereitschaft melden. Nicht selbst als Energieflusszustand verarbeiten.
 try {
     window.parent.postMessage({__energieflussHostReady: true}, '*');
 } catch (_) {}
 </script>
 HTML;
-                echo $html;
-                return;
-            }
 
-            if (!in_array($asset, $this->GetVisualizationWebHookAssets(), true)) {
-                http_response_code(404);
-                header('Content-Type: text/plain; charset=utf-8');
-                echo 'Not found';
+                header('Content-Type: text/html; charset=utf-8');
+                header('X-Content-Type-Options: nosniff');
+                header('Cache-Control: no-cache, no-store, must-revalidate');
+                header('Pragma: no-cache');
+                header('Content-Length: ' . strlen($html));
+                echo $html;
                 return;
             }
 
