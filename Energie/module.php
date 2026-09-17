@@ -8142,25 +8142,6 @@ HTML;
                 // funktionieren localStorage und die originalen Card-Module auch
                 // in IPS-View, ohne die Vendor-Cards verändern zu müssen.
                 $html = $this->GetVisualizationHtml('flow');
-
-                // Initialzustand direkt in das HTTP-Host-Dokument einbetten.
-                // Dadurch muss die Sunsynk-Card beim ersten Öffnen nicht erst
-                // auf die postMessage-Bridge des data:-Tiles warten.
-                $initialPayload = json_encode(
-                    $this->BuildPayload(),
-                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                );
-                $initialGridPayload = json_encode(
-                    $this->GetVisualizationGridPayload(),
-                    JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-                );
-
-                $html .= '<script>'
-                    . 'window.__EF_SERVER_GRID__=' . $initialGridPayload . ';'
-                    . 'window.__EF_INITIAL_PAYLOAD__=' . $initialPayload . ';'
-                    . 'if(typeof handleMessage==="function"){handleMessage(window.__EF_INITIAL_PAYLOAD__);}'
-                    . '</script>';
-
                 $html .= <<<'HTML'
 <script>
 window.addEventListener('message', function (event) {
@@ -8180,18 +8161,7 @@ window.addEventListener('message', function (event) {
     }
 
     if (typeof handleMessage === 'function') {
-        const incomingSignature = JSON.stringify(message.payload);
-        const initialSignature = window.__EF_INITIAL_PAYLOAD__
-            ? JSON.stringify(window.__EF_INITIAL_PAYLOAD__)
-            : null;
-
-        if (incomingSignature !== initialSignature) {
-            handleMessage(message.payload);
-        }
-
-        // Nur die allererste identische Bridge-Nachricht unterdrücken.
-        // Danach sind normale Symcon-Updates wieder uneingeschränkt aktiv.
-        window.__EF_INITIAL_PAYLOAD__ = null;
+        handleMessage(message.payload);
     }
 });
 
