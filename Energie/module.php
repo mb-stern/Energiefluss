@@ -8033,20 +8033,30 @@ class Energiefluss extends IPSModuleStrict
     requestAnimationFrame(frame);
 
     // Diagnose-Schaltfläche absichtlich unten, damit sie auch in der Symcon-Kachel erreichbar ist.
+    // Keine Clipboard-API: Die Diagnose wird direkt in einem markierbaren Textfeld angezeigt.
     const __efDiagButton = document.createElement('button');
-    __efDiagButton.textContent = 'Sunsynk Diagnose kopieren';
+    __efDiagButton.textContent = 'Sunsynk Diagnose anzeigen';
     Object.assign(__efDiagButton.style, {position:'fixed',right:'8px',bottom:'8px',zIndex:'2147483647',padding:'7px 10px',fontSize:'12px'});
-    __efDiagButton.addEventListener('click', async () => {
+
+    const __efDiagPanel = document.createElement('div');
+    Object.assign(__efDiagPanel.style, {position:'fixed',left:'8px',right:'8px',bottom:'48px',height:'45%',zIndex:'2147483646',display:'none',padding:'8px',boxSizing:'border-box',background:'var(--card-background-color, #fff)',border:'1px solid rgba(127,127,127,.65)',borderRadius:'6px'});
+
+    const __efDiagText = document.createElement('textarea');
+    __efDiagText.readOnly = true;
+    __efDiagText.setAttribute('aria-label', 'Sunsynk Startdiagnose');
+    Object.assign(__efDiagText.style, {width:'100%',height:'100%',boxSizing:'border-box',resize:'none',fontFamily:'monospace',fontSize:'11px'});
+    __efDiagPanel.appendChild(__efDiagText);
+
+    __efDiagButton.addEventListener('click', () => {
         const rows = (window.__EF_SUNSYNK_DIAG__ || []).map(x => `${x.ms} ms | ${x.label} | ${JSON.stringify(x.extra)}`).join('\n');
-        const text = 'Energiefluss Sunsynk Startdiagnose\n' + rows;
-        try {
-            await navigator.clipboard.writeText(text);
-            __efDiagButton.textContent = 'Diagnose kopiert';
-        } catch (e) {
-            console.log(text);
-            __efDiagButton.textContent = 'Diagnose in Konsole';
-        }
+        __efDiagText.value = 'Energiefluss Sunsynk Startdiagnose\n' + rows;
+        __efDiagPanel.style.display = 'block';
+        __efDiagText.focus();
+        __efDiagText.select();
+        __efDiagButton.textContent = 'Diagnose aktualisieren';
     });
+
+    document.body.appendChild(__efDiagPanel);
     document.body.appendChild(__efDiagButton);
 </script>
 HTML;
