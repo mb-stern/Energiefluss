@@ -1847,7 +1847,7 @@ class Energiefluss extends IPSModuleStrict
                     <div id="stage">
                         <div id="technical-dashboard" class="full">
                             <div id="sunsynk-host">
-                                <div id="sunsynk-loading">Technische Energieflusskarte wird geladen …</div>
+                                <div id="sunsynk-loading" style="display:none" aria-hidden="true">Technische Energieflusskarte wird geladen …</div>
                                 <div id="sunsynk-error"></div>
                             </div>
                         </div>
