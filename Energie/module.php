@@ -6764,33 +6764,53 @@ class Energiefluss extends IPSModuleStrict
             await loadOriginalSunsynkModule();
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
-            // Diagnose v22: eindeutige Identität dieser konkreten Card-Instanz.
+            // Diagnose v23: protokolliert ausnahmslos jeden setConfig()-Aufruf
+            // derselben Sunsynk-Card, ohne den Renderablauf zu verändern.
             window.__efSunsynkCardSequence = (window.__efSunsynkCardSequence || 0) + 1;
             const efCardIdentity = window.__efSunsynkCardSequence;
-            card.dataset.efCardIdentity = String(efCardIdentity);
+            let efSetConfigSequence = 0;
+            const efOriginalSetConfig = card.setConfig.bind(card);
 
-            const efCardBadge = document.createElement('div');
-            efCardBadge.textContent = 'CARD #' + efCardIdentity;
-            efCardBadge.style.cssText = 'position:absolute;left:8px;bottom:8px;z-index:2147483647;padding:4px 7px;border-radius:5px;background:rgba(0,0,0,.78);color:#fff;font:600 11px/1.2 monospace;pointer-events:none;';
-            const efCardHost = document.getElementById('sunsynk-host');
-            if (efCardHost) {
-                const efPos = getComputedStyle(efCardHost).position;
-                if (!efPos || efPos === 'static') efCardHost.style.position = 'relative';
-                efCardHost.appendChild(efCardBadge);
+            const efDiagBox = document.createElement('div');
+            efDiagBox.style.cssText = 'position:absolute;left:8px;bottom:8px;z-index:2147483647;max-width:calc(100% - 16px);padding:5px 7px;border-radius:5px;background:rgba(0,0,0,.82);color:#fff;font:600 11px/1.25 monospace;white-space:pre-wrap;pointer-events:none;';
+            efDiagBox.textContent = 'CARD #' + efCardIdentity + ' | setConfig: 0';
+
+            const efDiagHost = document.getElementById('sunsynk-host');
+            if (efDiagHost) {
+                const efPos = getComputedStyle(efDiagHost).position;
+                if (!efPos || efPos === 'static') efDiagHost.style.position = 'relative';
+                efDiagHost.appendChild(efDiagBox);
             }
 
-            console.info('[EF Sunsynk Diagnose] createElement CARD #' + efCardIdentity);
+            card.setConfig = function(config) {
+                efSetConfigSequence++;
+                const solar = config && config.solar ? config.solar : {};
+                const battery = config && config.battery ? config.battery : {};
+                const entities = config && config.entities ? config.entities : {};
+                const info = {
+                    card: efCardIdentity,
+                    call: efSetConfigSequence,
+                    mppts: solar.mppts ?? null,
+                    batteryCount: battery.count ?? null,
+                    showSolar: config ? config.show_solar : null,
+                    showBattery: config ? config.show_battery : null,
+                    showGrid: config ? config.show_grid : null,
+                    entityKeys: Object.keys(entities).length
+                };
+                efDiagBox.textContent =
+                    'CARD #' + efCardIdentity +
+                    ' | setConfig #' + efSetConfigSequence +
+                    ' | MPPT ' + String(info.mppts) +
+                    ' | BAT ' + String(info.batteryCount) +
+                    ' | Entities ' + String(info.entityKeys);
+                console.info('[EF Sunsynk setConfig Diagnose]', info, config);
+                return efOriginalSetConfig(config);
+            };
 
 
             // Wie in Lovelace: zuerst Konfiguration und hass setzen,
             // anschließend das Element in den DOM einhängen.
             window.__symconHasWallbox = !!d.hasWallbox;
-            console.info('[EF Sunsynk Diagnose] setConfig CARD #' + efCardIdentity, {
-                pvs: Array.isArray(pvs) ? pvs.length : null,
-                batteries: Array.isArray(batteries) ? batteries.length : null,
-                groups: Array.isArray(groups) ? groups.length : null,
-                hasWallbox: !!d.hasWallbox
-            });
             card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
             card.hass = createSunsynkHass(
                 d,
@@ -6802,19 +6822,14 @@ class Energiefluss extends IPSModuleStrict
                 groups
             );
             host.appendChild(card);
-            console.info('[EF Sunsynk Diagnose] append CARD #' + efCardIdentity, {
-                connected: card.isConnected,
-                shadowRoot: !!card.shadowRoot
-            });
-
             sunsynkCard = card;
-            if (efCardHost && window.MutationObserver) {
-                const efBadgeObserver = new MutationObserver(function () {
-                    if (card.isConnected && !efCardBadge.isConnected) {
-                        efCardHost.appendChild(efCardBadge);
+            if (efDiagHost && window.MutationObserver) {
+                const efDiagObserver = new MutationObserver(function () {
+                    if (card.isConnected && !efDiagBox.isConnected) {
+                        efDiagHost.appendChild(efDiagBox);
                     }
                 });
-                efBadgeObserver.observe(efCardHost, {childList:true});
+                efDiagObserver.observe(efDiagHost, {childList:true});
             }
 
             card.__symconLastData = d;
