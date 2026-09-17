@@ -6857,7 +6857,52 @@ class Energiefluss extends IPSModuleStrict
         return sunsynkInitPromise;
     }
 
+    let __efTechnicalStateNo = 0;
+    let __efTechnicalFirstState = null;
+    let __efTechnicalFirstUsableState = null;
+
+    function __efTechnicalStateSnapshot(d, grid, haus, pvs, batteries, wallbox, groups) {
+        return {
+            no: ++__efTechnicalStateNo,
+            time: Math.round(performance.now() * 10) / 10,
+            hasWallbox: !!d.hasWallbox,
+            pvs: Array.isArray(pvs) ? pvs.length : -1,
+            batteries: Array.isArray(batteries) ? batteries.length : -1,
+            groups: Array.isArray(groups) ? groups.length : -1,
+            data: d,
+            grid: grid,
+            haus: haus,
+            pvData: pvs,
+            batteryData: batteries,
+            wallbox: wallbox,
+            groupData: groups
+        };
+    }
+
+    function __efShowTechnicalStateComparison() {
+        const old = document.getElementById('__ef-state-compare');
+        if (old) old.remove();
+
+        const box = document.createElement('div');
+        box.id = '__ef-state-compare';
+        box.style.cssText = 'position:fixed;left:8px;right:8px;bottom:8px;z-index:2147483647;max-height:42vh;overflow:auto;background:#111;color:#eee;border:1px solid #777;border-radius:6px;padding:8px;font:11px/1.35 monospace;white-space:pre-wrap;word-break:break-word;';
+        box.textContent =
+            'SUNSYNK ERSTZUSTAND-VERGLEICH (v27)\\n\\n' +
+            'ERSTER renderTechnicalView:\\n' + JSON.stringify(__efTechnicalFirstState, null, 2) +
+            '\\n\\nERSTER VOLLSTAENDIG/VERWENDBAR:\\n' + JSON.stringify(__efTechnicalFirstUsableState, null, 2);
+        document.body.appendChild(box);
+    }
+
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
+        const __snap = __efTechnicalStateSnapshot(d, grid, haus, pvs, batteries, wallbox, groups);
+        if (!__efTechnicalFirstState) {
+            __efTechnicalFirstState = __snap;
+        }
+        if (!__efTechnicalFirstUsableState && sunsynkHasUsableStructure(d, pvs, batteries, groups)) {
+            __efTechnicalFirstUsableState = __snap;
+            requestAnimationFrame(__efShowTechnicalStateComparison);
+        }
+
         updateTechnicalLayoutButtons();
 
         if (!sunsynkCard) {
