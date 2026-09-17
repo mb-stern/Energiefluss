@@ -6757,98 +6757,96 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+    function sunsynkHasUsableStructure(d, pvs, batteries, groups) {
+        // Der Bridge-Start kann kurz einen noch leeren Strukturzustand liefern.
+        // Diesen niemals zum Aufbau der Vendor-Card verwenden. Sobald mindestens
+        // ein reales Anlagenelement vorhanden ist, darf die Card entstehen.
+        return pvs.length > 0 ||
+            batteries.length > 0 ||
+            groups.length > 0 ||
+            !!d.hasWallbox;
+    }
+
+    function sunsynkConfigSignature(config) {
+        // createSunsynkConfig() erzeugt die komplette, deterministische
+        // Konfiguration. Nur wenn sie sich tatsächlich ändert, darf setConfig()
+        // erneut laufen. Reine Messwertupdates gehen ausschließlich über hass.
+        return JSON.stringify(config);
+    }
+
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
+
+        // Kein Timer: der nächste echte Symcon-Payload ruft diese Funktion
+        // automatisch erneut auf. Der leere Bridge-Start erzeugt keine Card.
+        if (!sunsynkHasUsableStructure(d, pvs, batteries, groups)) {
+            sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
+            return null;
+        }
+
         sunsynkInitPromise = (async () => {
             await loadOriginalSunsynkModule();
+
+            // Während des Modulimports kann bereits ein neuerer Payload
+            // eingetroffen sein. Für den Erstaufbau immer den aktuellsten nehmen.
+            let initialArgs = [d, grid, haus, pvs, batteries, wallbox, groups];
+            if (sunsynkPending) {
+                initialArgs = sunsynkPending;
+                sunsynkPending = null;
+            }
+
+            const [initialD, initialGrid, initialHaus, initialPvs, initialBatteries, initialWallbox, initialGroups] = initialArgs;
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
-            // Diagnose v23: protokolliert ausnahmslos jeden setConfig()-Aufruf
-            // derselben Sunsynk-Card, ohne den Renderablauf zu verändern.
-            window.__efSunsynkCardSequence = (window.__efSunsynkCardSequence || 0) + 1;
-            const efCardIdentity = window.__efSunsynkCardSequence;
-            let efSetConfigSequence = 0;
-            const efOriginalSetConfig = card.setConfig.bind(card);
-
-            const efDiagBox = document.createElement('div');
-            efDiagBox.style.cssText = 'position:absolute;left:8px;bottom:8px;z-index:2147483647;max-width:calc(100% - 16px);padding:5px 7px;border-radius:5px;background:rgba(0,0,0,.82);color:#fff;font:600 11px/1.25 monospace;white-space:pre-wrap;pointer-events:none;';
-            efDiagBox.textContent = 'CARD #' + efCardIdentity + ' | setConfig: 0';
-
-            const efDiagHost = document.getElementById('sunsynk-host');
-            if (efDiagHost) {
-                const efPos = getComputedStyle(efDiagHost).position;
-                if (!efPos || efPos === 'static') efDiagHost.style.position = 'relative';
-                efDiagHost.appendChild(efDiagBox);
-            }
-
-            card.setConfig = function(config) {
-                efSetConfigSequence++;
-                const solar = config && config.solar ? config.solar : {};
-                const battery = config && config.battery ? config.battery : {};
-                const entities = config && config.entities ? config.entities : {};
-                const info = {
-                    card: efCardIdentity,
-                    call: efSetConfigSequence,
-                    mppts: solar.mppts ?? null,
-                    batteryCount: battery.count ?? null,
-                    showSolar: config ? config.show_solar : null,
-                    showBattery: config ? config.show_battery : null,
-                    showGrid: config ? config.show_grid : null,
-                    entityKeys: Object.keys(entities).length
-                };
-                efDiagBox.textContent =
-                    'CARD #' + efCardIdentity +
-                    ' | setConfig #' + efSetConfigSequence +
-                    ' | MPPT ' + String(info.mppts) +
-                    ' | BAT ' + String(info.batteryCount) +
-                    ' | Entities ' + String(info.entityKeys);
-                console.info('[EF Sunsynk setConfig Diagnose]', info, config);
-                return efOriginalSetConfig(config);
-            };
-
-
-            // Wie in Lovelace: zuerst Konfiguration und hass setzen,
-            // anschließend das Element in den DOM einhängen.
-            window.__symconHasWallbox = !!d.hasWallbox;
-            card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
-            card.hass = createSunsynkHass(
-                d,
-                grid,
-                haus,
-                pvs,
-                batteries,
-                wallbox,
-                groups
+            const initialConfig = createSunsynkConfig(
+                initialD,
+                initialPvs,
+                initialBatteries,
+                initialWallbox,
+                initialGroups
             );
+
+            // Wie in Lovelace: Konfiguration und hass VOR dem DOM-Einhängen.
+            window.__symconHasWallbox = !!initialD.hasWallbox;
+            card.setConfig(initialConfig);
+            card.__symconConfigSignature = sunsynkConfigSignature(initialConfig);
+            card.hass = createSunsynkHass(
+                initialD,
+                initialGrid,
+                initialHaus,
+                initialPvs,
+                initialBatteries,
+                initialWallbox,
+                initialGroups
+            );
+
             host.appendChild(card);
             sunsynkCard = card;
-            if (efDiagHost && window.MutationObserver) {
-                const efDiagObserver = new MutationObserver(function () {
-                    if (card.isConnected && !efDiagBox.isConnected) {
-                        efDiagHost.appendChild(efDiagBox);
-                    }
-                });
-                efDiagObserver.observe(efDiagHost, {childList:true});
-            }
-
-            card.__symconLastData = d;
+            card.__symconLastData = initialD;
             card.__symconRatioContext = {
-                d,
-                grid,
-                haus,
-                pvs,
-                batteries
+                d: initialD,
+                grid: initialGrid,
+                haus: initialHaus,
+                pvs: initialPvs,
+                batteries: initialBatteries
             };
-            await applySunsynkViewOverrides(card, d);
-            scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
-            updateSunsynkWallboxAuxInfo(card, d, wallbox);
+
+            await applySunsynkViewOverrides(card, initialD);
+            scheduleSunsynkRatios(card, initialD, initialGrid, initialHaus, initialPvs, initialBatteries);
+            updateSunsynkWallboxAuxInfo(card, initialD, initialWallbox);
             document.getElementById('sunsynk-loading').style.display = 'none';
+
+            // Falls während des Aufbaus nochmals Daten eingetroffen sind,
+            // genau den neuesten Zustand anschließend normal verarbeiten.
             if (sunsynkPending) {
-                const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
+                const args = sunsynkPending;
+                sunsynkPending = null;
+                renderTechnicalView(...args);
             }
             return card;
         })().catch(err => {
+            sunsynkInitPromise = null;
             console.error('Sunsynk-Karte:', err);
             const loading = document.getElementById('sunsynk-loading');
             const error = document.getElementById('sunsynk-error');
@@ -6861,11 +6859,17 @@ class Energiefluss extends IPSModuleStrict
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
         updateTechnicalLayoutButtons();
+
         if (!sunsynkCard) {
+            // Immer nur den neuesten Zustand vormerken.
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
-            ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
+
+            if (sunsynkHasUsableStructure(d, pvs, batteries, groups)) {
+                ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
+            }
             return;
         }
+
         window.__symconHasWallbox = !!d.hasWallbox;
         sunsynkCard.__symconLastData = d;
         sunsynkCard.__symconRatioContext = {
@@ -6875,7 +6879,19 @@ class Energiefluss extends IPSModuleStrict
             pvs,
             batteries
         };
-        sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
+
+        const nextConfig = createSunsynkConfig(d, pvs, batteries, wallbox, groups);
+        const nextConfigSignature = sunsynkConfigSignature(nextConfig);
+
+        // Der entscheidende Unterschied: setConfig() nicht mehr bei jedem
+        // VM_UPDATE aufrufen. Nur eine echte Konfigurationsänderung darf den
+        // Vendor-Konfigurationszyklus erneut auslösen.
+        if (nextConfigSignature !== sunsynkCard.__symconConfigSignature) {
+            sunsynkCard.setConfig(nextConfig);
+            sunsynkCard.__symconConfigSignature = nextConfigSignature;
+        }
+
+        // Messwerte werden weiterhin bei jedem Payload sofort aktualisiert.
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
         applySunsynkViewOverrides(sunsynkCard, d);
         scheduleSunsynkRatios(sunsynkCard, d, grid, haus, pvs, batteries);
