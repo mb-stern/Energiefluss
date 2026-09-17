@@ -6764,10 +6764,33 @@ class Energiefluss extends IPSModuleStrict
             await loadOriginalSunsynkModule();
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
+            // Diagnose v22: eindeutige Identität dieser konkreten Card-Instanz.
+            window.__efSunsynkCardSequence = (window.__efSunsynkCardSequence || 0) + 1;
+            const efCardIdentity = window.__efSunsynkCardSequence;
+            card.dataset.efCardIdentity = String(efCardIdentity);
+
+            const efCardBadge = document.createElement('div');
+            efCardBadge.textContent = 'CARD #' + efCardIdentity;
+            efCardBadge.style.cssText = 'position:absolute;left:8px;bottom:8px;z-index:2147483647;padding:4px 7px;border-radius:5px;background:rgba(0,0,0,.78);color:#fff;font:600 11px/1.2 monospace;pointer-events:none;';
+            const efCardHost = document.getElementById('sunsynk-host');
+            if (efCardHost) {
+                const efPos = getComputedStyle(efCardHost).position;
+                if (!efPos || efPos === 'static') efCardHost.style.position = 'relative';
+                efCardHost.appendChild(efCardBadge);
+            }
+
+            console.info('[EF Sunsynk Diagnose] createElement CARD #' + efCardIdentity);
+
 
             // Wie in Lovelace: zuerst Konfiguration und hass setzen,
             // anschließend das Element in den DOM einhängen.
             window.__symconHasWallbox = !!d.hasWallbox;
+            console.info('[EF Sunsynk Diagnose] setConfig CARD #' + efCardIdentity, {
+                pvs: Array.isArray(pvs) ? pvs.length : null,
+                batteries: Array.isArray(batteries) ? batteries.length : null,
+                groups: Array.isArray(groups) ? groups.length : null,
+                hasWallbox: !!d.hasWallbox
+            });
             card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
             card.hass = createSunsynkHass(
                 d,
@@ -6779,7 +6802,21 @@ class Energiefluss extends IPSModuleStrict
                 groups
             );
             host.appendChild(card);
+            console.info('[EF Sunsynk Diagnose] append CARD #' + efCardIdentity, {
+                connected: card.isConnected,
+                shadowRoot: !!card.shadowRoot
+            });
+
             sunsynkCard = card;
+            if (efCardHost && window.MutationObserver) {
+                const efBadgeObserver = new MutationObserver(function () {
+                    if (card.isConnected && !efCardBadge.isConnected) {
+                        efCardHost.appendChild(efCardBadge);
+                    }
+                });
+                efBadgeObserver.observe(efCardHost, {childList:true});
+            }
+
             card.__symconLastData = d;
             card.__symconRatioContext = {
                 d,
@@ -6810,19 +6847,7 @@ class Energiefluss extends IPSModuleStrict
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
         updateTechnicalLayoutButtons();
         if (!sunsynkCard) {
-            // Beim Öffnen kann die Bridge zuerst einen noch unvollständigen
-            // Bootstrap-Zustand liefern (z. B. 0 PV / 0 Batterien / 0 Gruppen).
-            // Diesen Zustand nur merken, aber daraus keine Sunsynk-Card bauen.
-            // Sobald ein nachfolgender echter Payload die konfigurierte Struktur
-            // enthält, wird die Card unmittelbar und genau mit diesem Zustand
-            // erzeugt. Kein setTimeout, kein Interval, kein künstlicher Delay.
-            const structure = d?.technicalStructure;
-            if (structure && structure.ready === false) {
-                sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
-                return;
-            }
-
-            sunsynkPending = null;
+            sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
             ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
             return;
         }
@@ -9582,45 +9607,7 @@ HTML;
             : 1.0;
         $gridConnectedStatus = ((float) $gridConnectedRaw) != 0.0 ? 'on-grid' : 'off-grid';
 
-        // Struktur-Schutz für den ersten Aufbau der Sunsynk-Karte.
-        // IP-Symcon kann beim Öffnen der Kachel zunächst einen Bootstrap-Payload
-        // liefern, in dem die dynamischen Listen noch leer sind. Die erwartete
-        // Struktur wird deshalb direkt aus der gespeicherten Konfiguration
-        // bestimmt und mit dem tatsächlich aufgebauten Payload verglichen.
-        // JavaScript erzeugt die Sunsynk-Card erst, wenn beides übereinstimmt.
-        // Das ist rein ereignisgesteuert; es gibt keinen Timer und keinen Delay.
-        $expectedPvCount = 0;
-        if (is_array($decodedPVs)) {
-            foreach (array_slice($decodedPVs, 0, 6) as $source) {
-                $powerID = (int) ($source['VariableID'] ?? $source['String1PowerVariableID'] ?? 0);
-                if ($powerID > 0) {
-                    $expectedPvCount++;
-                }
-            }
-        }
-
-        $expectedBatteryCount = 0;
-        if (is_array($decodedBatteries)) {
-            foreach (array_slice($decodedBatteries, 0, 2) as $source) {
-                if ((int) ($source['VariableID'] ?? 0) > 0) {
-                    $expectedBatteryCount++;
-                }
-            }
-        }
-
-        $expectedGroupCount = is_array($decoded) ? count($decoded) : 0;
-        $technicalStructureReady =
-            count($pvs) >= $expectedPvCount &&
-            count($batteries) >= $expectedBatteryCount &&
-            count($groups) >= $expectedGroupCount;
-
         return [
-            'technicalStructure' => [
-                'ready' => $technicalStructureReady,
-                'expectedPvs' => $expectedPvCount,
-                'expectedBatteries' => $expectedBatteryCount,
-                'expectedGroups' => $expectedGroupCount,
-            ],
             'pvs'              => $pvs,
             'housePvs'         => $housePvs,
             'batteries'        => $batteries,
