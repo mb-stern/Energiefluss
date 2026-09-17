@@ -1847,7 +1847,7 @@ class Energiefluss extends IPSModuleStrict
                     <div id="stage">
                         <div id="technical-dashboard" class="full">
                             <div id="sunsynk-host">
-                                <div id="sunsynk-loading">Technische Energieflusskarte wird geladen …</div>
+                                <div id="sunsynk-loading" style="display:none" aria-hidden="true">Technische Energieflusskarte wird geladen …</div>
                                 <div id="sunsynk-error"></div>
                             </div>
                         </div>
@@ -1915,10 +1915,7 @@ class Energiefluss extends IPSModuleStrict
 
 <script>
     function detectTheme() {
-        // Im WebHook-Host existiert ein eigener HTTP-Dokumentkontext. Wenn die
-        // kleine Symcon/IPS-View-Bridge das Theme übermittelt hat, verwenden wir
-        // ausschließlich diese Information. An den konfigurierten Card-Farben
-        // wird dabei nichts verändert.
+        // Im WebHook-Host das vom IPS/Symcon-Tile übermittelte Theme verwenden.
         if (window.__EF_BRIDGE_THEME__ && typeof window.__EF_BRIDGE_THEME__.dark === 'boolean') {
             document.documentElement.setAttribute('data-theme', window.__EF_BRIDGE_THEME__.dark ? 'dark' : 'light');
             return;
@@ -4072,7 +4069,7 @@ class Energiefluss extends IPSModuleStrict
             inverter: {
                 modern: true,
                 model: 'goodwe',
-                colour: d.colors?.inverter || AC.inverter,
+                colour: d.houseColors?.inverter || '#0d151c',
                 autarky: ['power', 'energy', 'no'].includes(d.autarkyCalculationMode)
                     ? d.autarkyCalculationMode
                     : 'energy',
@@ -5880,6 +5877,7 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot || !d) return;
 
         const inverterColour =
+            d.houseColors?.inverter ||
             d.colors?.inverter ||
             AC.inverter;
 
@@ -8070,9 +8068,7 @@ HTML;
             }
 
             if ($asset === 'visualization-host') {
-                // Vollständige Visualisierung unter normalem HTTP-Origin. Dadurch
-                // funktionieren localStorage und die originalen Card-Module auch
-                // in IPS-View, ohne die Vendor-Cards verändern zu müssen.
+                // Vollständige Visualisierung unter normalem HTTP-Origin.
                 $html = $this->GetVisualizationHtml('flow');
                 $html .= <<<'HTML'
 <script>
@@ -8084,20 +8080,23 @@ window.addEventListener('message', function (event) {
 
     window.__EF_SERVER_GRID__ = message.grid ?? null;
 
-    // Theme stammt aus dem ursprünglichen Symcon/IPS-View-Kachelkontext.
-    // Es wird nur an den WebHook-Host gespiegelt; Farbmuster und konfigurierte
-    // Modulfarben bleiben vollständig unverändert.
     if (message.theme && typeof message.theme.dark === 'boolean') {
         window.__EF_BRIDGE_THEME__ = { dark: message.theme.dark };
         document.documentElement.setAttribute('data-theme', message.theme.dark ? 'dark' : 'light');
     }
 
+    // HostReady ist ausschließlich ein Handshake und niemals Anlagendaten.
+    const payload = message.payload;
+    if (!payload || payload.__energieflussHostReady === true) {
+        return;
+    }
+
     if (typeof handleMessage === 'function') {
-        handleMessage(message.payload);
+        handleMessage(payload);
     }
 });
 
-// Dem Parent signalisieren, dass der Host Nachrichten empfangen kann.
+// Nur dem Parent Bereitschaft melden. Nicht selbst als Energieflusszustand verarbeiten.
 try {
     window.parent.postMessage({__energieflussHostReady: true}, '*');
 } catch (_) {}
@@ -9698,7 +9697,7 @@ HTML;
                 'batteryAccent'    => $this->ColorToHex($this->ReadPropertyInteger('HouseColorBatteryAccent')),
             ],
             'colors'           => [
-                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('ColorInverter')),
+                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('HouseColorInverter')),
                 'solar'     => $this->ColorToHex($this->ReadPropertyInteger('ColorSolar')),
                 'import'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridImport')),
                 'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
