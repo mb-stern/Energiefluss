@@ -8002,6 +8002,7 @@ HTML;
     private function GetVisualizationWebHookAssets(): array
     {
         return [
+            'visualization-host',
             'lit-core.min.js',
             'power-flow-card.js',
             'sunsynk-power-flow-card.js',
