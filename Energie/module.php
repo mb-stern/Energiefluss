@@ -1018,11 +1018,47 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            // Sofortiger Browserzustand wie bei der Wärmepumpe.
-            // Die Widget-ID wird anschließend nur ergänzend ermittelt.
-            return $this->GetVisualizationHtml('flow')
-                . '<script>window.__EF_SERVER_GRID__=' . $gridPayload
-                . ';handleMessage(' . $payload . ');</script>';
+            // Die eigentliche Visualisierung läuft in einer normalen HTTP-Seite
+            // des instanzspezifischen WebHooks. IP-Symcon/IPS-View liefert die
+            // Kachel selbst als data:text/html aus; dort stehen u. a. localStorage
+            // und normale Modul-Imports nicht zuverlässig zur Verfügung.
+            //
+            // Die kleine data:-Kachel ist deshalb nur noch die Bridge. Sie lädt
+            // den unveränderten Visualisierungs-Host per iframe und reicht alle
+            // Symcon-Payloads per postMessage weiter.
+            $hostUrl = $this->GetVisualizationModuleWebHookUrl('visualization-host');
+            $hostUrlJson = json_encode(
+                $hostUrl,
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            );
+
+            return '<style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}</style>'
+                . '<iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write"></iframe>'
+                . '<script>(function(){'
+                . 'const raw=' . $hostUrlJson . ';'
+                . 'const initial=' . $payload . ';'
+                . 'const grid=' . $gridPayload . ';'
+                . 'const frame=document.getElementById("ef-bridge-frame");'
+                . 'let ready=false,last=initial;'
+                . 'function origin(){'
+                . 'try{if(document.referrer){const u=new URL(document.referrer);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
+                . 'try{const a=window.location.ancestorOrigins;if(a&&a.length){const u=new URL(a[0]);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
+                . 'return "";'
+                . '}'
+                . 'const base=origin();'
+                . 'frame.src=base ? new URL(raw,base).href : raw;'
+                . 'function theme(){'
+                . 'let probe="";try{probe=getComputedStyle(document.documentElement).getPropertyValue("--content-color").trim();}catch(e){}'
+                . 'if(!probe){try{probe=getComputedStyle(document.body).color||"";}catch(e){}}'
+                . 'let dark=null;const m=probe&&probe.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);'
+                . 'if(m){dark=(0.299*m[1]+0.587*m[2]+0.114*m[3])/255>0.5;}'
+                . 'else if(probe&&probe[0]==="#"&&probe.length>=7){const r=parseInt(probe.substr(1,2),16),g=parseInt(probe.substr(3,2),16),b=parseInt(probe.substr(5,2),16);dark=(0.299*r+0.587*g+0.114*b)/255>0.5;}'
+                . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
+                . 'return {dark:dark};}'
+                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
+                . 'frame.addEventListener("load",function(){ready=true;send(last);});'
+                . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
+                . '})();</script>';
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
@@ -1879,6 +1915,15 @@ class Energiefluss extends IPSModuleStrict
 
 <script>
     function detectTheme() {
+        // Im WebHook-Host existiert ein eigener HTTP-Dokumentkontext. Wenn die
+        // kleine Symcon/IPS-View-Bridge das Theme übermittelt hat, verwenden wir
+        // ausschließlich diese Information. An den konfigurierten Card-Farben
+        // wird dabei nichts verändert.
+        if (window.__EF_BRIDGE_THEME__ && typeof window.__EF_BRIDGE_THEME__.dark === 'boolean') {
+            document.documentElement.setAttribute('data-theme', window.__EF_BRIDGE_THEME__.dark ? 'dark' : 'light');
+            return;
+        }
+
         let probe = getComputedStyle(document.documentElement).getPropertyValue('--content-color').trim();
         if (!probe) probe = getComputedStyle(document.body).color;
 
@@ -4027,7 +4072,7 @@ class Energiefluss extends IPSModuleStrict
             inverter: {
                 modern: true,
                 model: 'goodwe',
-                colour: d.houseColors?.inverter || '#0d151c',
+                colour: d.colors?.inverter || AC.inverter,
                 autarky: ['power', 'energy', 'no'].includes(d.autarkyCalculationMode)
                     ? d.autarkyCalculationMode
                     : 'energy',
@@ -5835,7 +5880,6 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot || !d) return;
 
         const inverterColour =
-            d.houseColors?.inverter ||
             d.colors?.inverter ||
             AC.inverter;
 
@@ -6713,46 +6757,96 @@ class Energiefluss extends IPSModuleStrict
         });
     }
 
+    function sunsynkHasUsableStructure(d, pvs, batteries, groups) {
+        // Der Bridge-Start kann kurz einen noch leeren Strukturzustand liefern.
+        // Diesen niemals zum Aufbau der Vendor-Card verwenden. Sobald mindestens
+        // ein reales Anlagenelement vorhanden ist, darf die Card entstehen.
+        return pvs.length > 0 ||
+            batteries.length > 0 ||
+            groups.length > 0 ||
+            !!d.hasWallbox;
+    }
+
+    function sunsynkConfigSignature(config) {
+        // createSunsynkConfig() erzeugt die komplette, deterministische
+        // Konfiguration. Nur wenn sie sich tatsächlich ändert, darf setConfig()
+        // erneut laufen. Reine Messwertupdates gehen ausschließlich über hass.
+        return JSON.stringify(config);
+    }
+
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
+
+        // Kein Timer: der nächste echte Symcon-Payload ruft diese Funktion
+        // automatisch erneut auf. Der leere Bridge-Start erzeugt keine Card.
+        if (!sunsynkHasUsableStructure(d, pvs, batteries, groups)) {
+            sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
+            return null;
+        }
+
         sunsynkInitPromise = (async () => {
             await loadOriginalSunsynkModule();
+
+            // Während des Modulimports kann bereits ein neuerer Payload
+            // eingetroffen sein. Für den Erstaufbau immer den aktuellsten nehmen.
+            let initialArgs = [d, grid, haus, pvs, batteries, wallbox, groups];
+            if (sunsynkPending) {
+                initialArgs = sunsynkPending;
+                sunsynkPending = null;
+            }
+
+            const [initialD, initialGrid, initialHaus, initialPvs, initialBatteries, initialWallbox, initialGroups] = initialArgs;
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
-
-            // Wie in Lovelace: zuerst Konfiguration und hass setzen,
-            // anschließend das Element in den DOM einhängen.
-            window.__symconHasWallbox = !!d.hasWallbox;
-            card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
-            card.hass = createSunsynkHass(
-                d,
-                grid,
-                haus,
-                pvs,
-                batteries,
-                wallbox,
-                groups
+            const initialConfig = createSunsynkConfig(
+                initialD,
+                initialPvs,
+                initialBatteries,
+                initialWallbox,
+                initialGroups
             );
+
+            // Wie in Lovelace: Konfiguration und hass VOR dem DOM-Einhängen.
+            window.__symconHasWallbox = !!initialD.hasWallbox;
+            card.setConfig(initialConfig);
+            card.__symconConfigSignature = sunsynkConfigSignature(initialConfig);
+            card.hass = createSunsynkHass(
+                initialD,
+                initialGrid,
+                initialHaus,
+                initialPvs,
+                initialBatteries,
+                initialWallbox,
+                initialGroups
+            );
+
             host.appendChild(card);
             sunsynkCard = card;
-            card.__symconLastData = d;
+            card.__symconLastData = initialD;
             card.__symconRatioContext = {
-                d,
-                grid,
-                haus,
-                pvs,
-                batteries
+                d: initialD,
+                grid: initialGrid,
+                haus: initialHaus,
+                pvs: initialPvs,
+                batteries: initialBatteries
             };
-            await applySunsynkViewOverrides(card, d);
-            scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
-            updateSunsynkWallboxAuxInfo(card, d, wallbox);
+
+            await applySunsynkViewOverrides(card, initialD);
+            scheduleSunsynkRatios(card, initialD, initialGrid, initialHaus, initialPvs, initialBatteries);
+            updateSunsynkWallboxAuxInfo(card, initialD, initialWallbox);
             document.getElementById('sunsynk-loading').style.display = 'none';
+
+            // Falls während des Aufbaus nochmals Daten eingetroffen sind,
+            // genau den neuesten Zustand anschließend normal verarbeiten.
             if (sunsynkPending) {
-                const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
+                const args = sunsynkPending;
+                sunsynkPending = null;
+                renderTechnicalView(...args);
             }
             return card;
         })().catch(err => {
+            sunsynkInitPromise = null;
             console.error('Sunsynk-Karte:', err);
             const loading = document.getElementById('sunsynk-loading');
             const error = document.getElementById('sunsynk-error');
@@ -6765,11 +6859,17 @@ class Energiefluss extends IPSModuleStrict
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
         updateTechnicalLayoutButtons();
+
         if (!sunsynkCard) {
+            // Immer nur den neuesten Zustand vormerken.
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
-            ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
+
+            if (sunsynkHasUsableStructure(d, pvs, batteries, groups)) {
+                ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups).catch(() => {});
+            }
             return;
         }
+
         window.__symconHasWallbox = !!d.hasWallbox;
         sunsynkCard.__symconLastData = d;
         sunsynkCard.__symconRatioContext = {
@@ -6779,7 +6879,19 @@ class Energiefluss extends IPSModuleStrict
             pvs,
             batteries
         };
-        sunsynkCard.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
+
+        const nextConfig = createSunsynkConfig(d, pvs, batteries, wallbox, groups);
+        const nextConfigSignature = sunsynkConfigSignature(nextConfig);
+
+        // Der entscheidende Unterschied: setConfig() nicht mehr bei jedem
+        // VM_UPDATE aufrufen. Nur eine echte Konfigurationsänderung darf den
+        // Vendor-Konfigurationszyklus erneut auslösen.
+        if (nextConfigSignature !== sunsynkCard.__symconConfigSignature) {
+            sunsynkCard.setConfig(nextConfig);
+            sunsynkCard.__symconConfigSignature = nextConfigSignature;
+        }
+
+        // Messwerte werden weiterhin bei jedem Payload sofort aktualisiert.
         sunsynkCard.hass = createSunsynkHass(d, grid, haus, pvs, batteries, wallbox, groups);
         applySunsynkViewOverrides(sunsynkCard, d);
         scheduleSunsynkRatios(sunsynkCard, d, grid, haus, pvs, batteries);
@@ -7978,6 +8090,7 @@ HTML;
     private function GetVisualizationWebHookAssets(): array
     {
         return [
+            'visualization-host',
             'lit-core.min.js',
             'power-flow-card.js',
             'sunsynk-power-flow-card.js',
@@ -8024,6 +8137,50 @@ HTML;
                 return;
             }
 
+            if ($asset === 'visualization-host') {
+                // Vollständige Visualisierung unter normalem HTTP-Origin. Dadurch
+                // funktionieren localStorage und die originalen Card-Module auch
+                // in IPS-View, ohne die Vendor-Cards verändern zu müssen.
+                $html = $this->GetVisualizationHtml('flow');
+                $html .= <<<'HTML'
+<script>
+window.addEventListener('message', function (event) {
+    const message = event.data;
+    if (!message || message.__energieflussBridge !== true) {
+        return;
+    }
+
+    window.__EF_SERVER_GRID__ = message.grid ?? null;
+
+    // Theme stammt aus dem ursprünglichen Symcon/IPS-View-Kachelkontext.
+    // Es wird nur an den WebHook-Host gespiegelt; Farbmuster und konfigurierte
+    // Modulfarben bleiben vollständig unverändert.
+    if (message.theme && typeof message.theme.dark === 'boolean') {
+        window.__EF_BRIDGE_THEME__ = { dark: message.theme.dark };
+        document.documentElement.setAttribute('data-theme', message.theme.dark ? 'dark' : 'light');
+    }
+
+    if (typeof handleMessage === 'function') {
+        handleMessage(message.payload);
+    }
+});
+
+// Dem Parent signalisieren, dass der Host Nachrichten empfangen kann.
+try {
+    window.parent.postMessage({__energieflussHostReady: true}, '*');
+} catch (_) {}
+</script>
+HTML;
+
+                header('Content-Type: text/html; charset=utf-8');
+                header('X-Content-Type-Options: nosniff');
+                header('Cache-Control: no-cache, no-store, must-revalidate');
+                header('Pragma: no-cache');
+                header('Content-Length: ' . strlen($html));
+                echo $html;
+                return;
+            }
+
             $path = __DIR__
                 . DIRECTORY_SEPARATOR
                 . 'assets'
@@ -8051,19 +8208,6 @@ HTML;
             if ($asset !== 'lit-core.min.js') {
                 $litUrl = $this->GetVisualizationModuleWebHookUrl('lit-core.min.js');
                 $source = str_replace('./lit-core.min.js', $litUrl, $source);
-            }
-
-            // IP-Symcon Tile läuft als data:-Dokument (opaque origin).
-            // Die originale Sunsynk-Card liest localStorage ausschließlich als
-            // Sprach-Fallback. Dieser Zugriff wirft dort einen SecurityError.
-            // Nur diesen einen Vendor-Zugriff beim Ausliefern exception-sicher
-            // machen; die Vendor-Datei selbst bleibt unverändert.
-            if ($asset === 'sunsynk-power-flow-card.js') {
-                $source = str_replace(
-                    'localStorage.getItem("selectedLanguage")',
-                    '(()=>{try{return window.localStorage.getItem("selectedLanguage")}catch(_){return null}})()',
-                    $source
-                );
             }
 
             header('Content-Type: text/javascript; charset=utf-8');
@@ -9622,7 +9766,7 @@ HTML;
                 'batteryAccent'    => $this->ColorToHex($this->ReadPropertyInteger('HouseColorBatteryAccent')),
             ],
             'colors'           => [
-                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('HouseColorInverter')),
+                'inverter'  => $this->ColorToHex($this->ReadPropertyInteger('ColorInverter')),
                 'solar'     => $this->ColorToHex($this->ReadPropertyInteger('ColorSolar')),
                 'import'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridImport')),
                 'export'    => $this->ColorToHex($this->ReadPropertyInteger('ColorGridExport')),
