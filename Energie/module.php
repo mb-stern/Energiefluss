@@ -12,7 +12,7 @@
 
 declare(strict_types=1);
 
-// v38: IPS-WebHook-Sofortstart; Initial-Payload bei iframe-load; Browseransicht einmalig initialisieren.
+// v39: v38 JavaScript-Klammerfehler behoben; IPS-WebHook-Sofortstart bleibt unverändert.
 class Energiefluss extends IPSModuleStrict
 {
 
@@ -8124,8 +8124,6 @@ window.addEventListener('message', function (event) {
 
     if (typeof handleMessage === 'function') {
         handleMessage(payload);
-
-        }
     }
 });
 
