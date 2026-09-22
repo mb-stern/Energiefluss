@@ -6959,6 +6959,13 @@ class Energiefluss extends IPSModuleStrict
      */
     function getEnergyFlowInstanceID() {
         try {
+            // Im IPS-WebHook-Host ist /visu/<ID>/ nicht mehr Teil der URL.
+            // Die Modulinstanz wird deshalb vom PHP-WebHook explizit gesetzt.
+            if (window.__EF_INSTANCE_ID__ != null && String(window.__EF_INSTANCE_ID__) !== '') {
+                return String(window.__EF_INSTANCE_ID__);
+            }
+
+            // Direkte /visu/<ID>/ Darstellung weiterhin unterstützen.
             const match = window.location.pathname.match(/\/visu\/(\d+)\/?/);
             return match ? match[1] : null;
         } catch (_) {
@@ -8069,7 +8076,12 @@ HTML;
 
             if ($asset === 'visualization-host') {
                 // Vollständige Visualisierung unter normalem HTTP-Origin.
-                $html = $this->GetVisualizationHtml('flow');
+                // Die Instanz-ID wird explizit in das Host-Dokument gegeben, damit
+                // jede Energiefluss-Instanz eigene View-/Layout-Storage-Keys nutzt.
+                $html = '<script>window.__EF_INSTANCE_ID__='
+                    . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
+                    . ';</script>'
+                    . $this->GetVisualizationHtml('flow');
                 $html .= <<<'HTML'
 <script>
 window.addEventListener('message', function (event) {
