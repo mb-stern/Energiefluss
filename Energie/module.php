@@ -6935,7 +6935,14 @@ class Energiefluss extends IPSModuleStrict
 
         updateTechnicalLayoutButtons();
         updateDisplayModeButton();
-    }
+    
+        // Erst jetzt ist die instanzspezifisch gespeicherte Ansicht bekannt.
+        // Den Startschutz entfernen, damit niemals kurz die falsche Grundansicht erscheint.
+        const initialViewGuard = document.getElementById('ef-initial-view-guard');
+        if (initialViewGuard) {
+            initialViewGuard.remove();
+        }
+}
 
 
     /*
@@ -8081,6 +8088,9 @@ HTML;
                 $html = '<script>window.__EF_INSTANCE_ID__='
                     . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
                     . ';</script>'
+                    . '<style id="ef-initial-view-guard">'
+                    . '#flow-view,#house-view{visibility:hidden!important;}'
+                    . '</style>'
                     . $this->GetVisualizationHtml('flow');
                 $html .= <<<'HTML'
 <script>
