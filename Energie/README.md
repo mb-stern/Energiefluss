@@ -271,6 +271,10 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.12 (22.09.2026)
+- Paralles laufen lassen von mehreren Instanzen und individueller Ansicht funtkioniert wieder. 
+- Die Ladegeschwindigkeit der Kachel wurde verbessert.
+
 ### Version 1.11 (16.09.2026)
 - Anpassungen um die IPS-View Kompatibilität zu erreichen.
 
