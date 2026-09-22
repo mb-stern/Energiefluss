@@ -12,7 +12,7 @@
 
 declare(strict_types=1);
 
-// v37: Initial-Payload sofort bei iframe-load; Browseransicht nur einmal initialisieren.
+// v38: IPS-WebHook-Sofortstart; Initial-Payload bei iframe-load; Browseransicht einmalig initialisieren.
 class Energiefluss extends IPSModuleStrict
 {
 
@@ -1040,9 +1040,9 @@ class Energiefluss extends IPSModuleStrict
                 . 'const initial=' . $payload . ';'
                 . 'const grid=' . $gridPayload . ';'
                 . 'const frame=document.getElementById("ef-bridge-frame");'
-                . 'const bridgeStart=Date.now();'
+                
                 . 'let ready=false,last=initial;'
-                . 'function bridgeMark(name){return {name:name,at:Date.now(),sinceBridge:Date.now()-bridgeStart};}'
+                
                 . 'function origin(){'
                 . 'try{if(document.referrer){const u=new URL(document.referrer);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
                 . 'try{const a=window.location.ancestorOrigins;if(a&&a.length){const u=new URL(a[0]);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
@@ -1058,8 +1058,8 @@ class Energiefluss extends IPSModuleStrict
                 . 'else if(probe&&probe[0]==="#"&&probe.length>=7){const r=parseInt(probe.substr(1,2),16),g=parseInt(probe.substr(3,2),16),b=parseInt(probe.substr(5,2),16);dark=(0.299*r+0.587*g+0.114*b)/255>0.5;}'
                 . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
                 . 'return {dark:dark};}'
-                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme(),bridgeTiming:{bridgeStarted:{name:"Bridge-Kachel gestartet",at:bridgeStart,sinceBridge:0},iframeLoaded:window.__EF_IFRAME_LOAD_MARK__||null,payloadSent:bridgeMark("Payload an iframe gesendet")}},"*");}'
-                . 'frame.addEventListener("load",function(){window.__EF_IFRAME_LOAD_MARK__=bridgeMark("iframe load");ready=true;send(initial);});'
+                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
+                . 'frame.addEventListener("load",function(){ready=true;send(initial);});'
                 . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
                 . '})();</script>';
         } catch (Throwable $e) {
@@ -3685,7 +3685,6 @@ class Energiefluss extends IPSModuleStrict
     }
 
     async function loadOriginalSunsynkModule() {
-        if (typeof window.__efDiagMark === 'function') window.__efDiagMark('Sunsynk-Modul Laden START');
         ensureHaCompatibility();
 
         if (customElements.get('sunsynk-power-flow-card')) {
@@ -6760,7 +6759,6 @@ class Energiefluss extends IPSModuleStrict
     }
 
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
-        if (typeof window.__efDiagMark === 'function') window.__efDiagMark('ensureSunsynkCard START');
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
         sunsynkInitPromise = (async () => {
@@ -6811,7 +6809,6 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
-        if (typeof window.__efDiagMark === 'function') window.__efDiagMark('renderTechnicalView START');
         updateTechnicalLayoutButtons();
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
@@ -6873,12 +6870,9 @@ class Energiefluss extends IPSModuleStrict
 
     function initializeBrowserViewState() {
         if (window.__EF_BROWSER_VIEW_INITIALIZED__ === true) {
-            if (typeof window.__efDiagMark === 'function') window.__efDiagMark('Ansicht initialisieren übersprungen');
             return;
         }
         window.__EF_BROWSER_VIEW_INITIALIZED__ = true;
-
-        if (typeof window.__efDiagMark === 'function') window.__efDiagMark('Ansicht initialisieren START');
         /*
          * Einheitliche Speicherung in Browser UND Symcon-App:
          * Eine Energiefluss-Instanz = ein eigener gespeicherter Zustand.
@@ -8107,100 +8101,7 @@ HTML;
                     . $this->GetVisualizationHtml('flow');
                 $html .= <<<'HTML'
 <script>
-(function () {
-    const t0 = performance.now();
-    const marks = [];
-    window.__EF_DIAG_T0__ = t0;
-    window.__EF_DIAG_MARKS__ = marks;
 
-    function ensureBox() {
-        let box = document.getElementById('ef-load-diagnostic');
-        if (box || !document.body) return box;
-        box = document.createElement('div');
-        box.id = 'ef-load-diagnostic';
-        box.style.cssText = 'position:fixed;left:8px;right:8px;bottom:4px;z-index:2147483647;max-height:42vh;overflow:auto;padding:7px 9px;border-radius:7px;background:rgba(0,0,0,.82);color:#fff;font:11px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;pointer-events:auto';
-        const toolbar = document.createElement('div');
-        toolbar.style.cssText = 'position:sticky;top:0;z-index:2;display:flex;gap:6px;align-items:center;padding:0 0 6px;background:rgba(0,0,0,.92)';
-
-        const btn = document.createElement('button');
-        btn.type = 'button';
-        btn.textContent = 'Diagnose kopieren';
-        btn.style.cssText = 'font:inherit;cursor:pointer';
-
-        const status = document.createElement('span');
-        status.style.cssText = 'opacity:.85';
-
-        const pre = document.createElement('pre');
-        pre.style.cssText = 'margin:0;white-space:pre-wrap';
-
-        btn.addEventListener('click', function () {
-            const value = pre.textContent || '';
-
-            // IPS/IPS-View blockiert navigator.clipboard teilweise.
-            // Deshalb zuerst die klassische execCommand-Methode verwenden.
-            const ta = document.createElement('textarea');
-            ta.value = value;
-            ta.setAttribute('readonly', '');
-            ta.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
-            document.body.appendChild(ta);
-            ta.focus();
-            ta.select();
-            ta.setSelectionRange(0, ta.value.length);
-
-            let copied = false;
-            try {
-                copied = document.execCommand('copy');
-            } catch (_) {
-                copied = false;
-            }
-            ta.remove();
-
-            if (copied) {
-                status.textContent = 'Kopiert';
-                return;
-            }
-
-            // Fallback: Text sichtbar markieren, damit Strg+C sicher möglich ist.
-            try {
-                const range = document.createRange();
-                range.selectNodeContents(pre);
-                const sel = window.getSelection();
-                sel.removeAllRanges();
-                sel.addRange(range);
-                status.textContent = 'Text markiert – Strg+C';
-            } catch (_) {
-                status.textContent = 'Kopieren nicht möglich';
-            }
-        });
-
-        toolbar.appendChild(btn);
-        toolbar.appendChild(status);
-        box.appendChild(toolbar);
-        box.appendChild(pre);
-        document.body.appendChild(box);
-        return box;
-    }
-
-    window.__efDiagMark = function (name, detail) {
-        marks.push({ms: performance.now() - t0, name: name, detail: detail || ''});
-        const box = ensureBox();
-        if (box) {
-            const pre = box.querySelector('pre');
-            pre.textContent = marks.map(function (m) {
-                return m.ms.toFixed(1).padStart(7) + ' ms  ' + m.name + (m.detail ? '  |  ' + m.detail : '');
-            }).join('\n');
-        }
-    };
-
-    window.__efDiagMark('HTTP-WebHook-Host gestartet');
-    document.addEventListener('DOMContentLoaded', function () {
-        ensureBox();
-        window.__efDiagMark('DOMContentLoaded');
-    }, {once:true});
-    window.addEventListener('load', function () {
-        window.__efDiagMark('window.load');
-    }, {once:true});
-})();
 
 window.addEventListener('message', function (event) {
     const message = event.data;
@@ -8221,34 +8122,9 @@ window.addEventListener('message', function (event) {
         return;
     }
 
-    if (typeof window.__efDiagMark === 'function') {
-        const bt = message.bridgeTiming || null;
-        if (bt && !window.__EF_BRIDGE_TIMING_SHOWN__) {
-            window.__EF_BRIDGE_TIMING_SHOWN__ = true;
-            if (bt.bridgeStarted) {
-                window.__efDiagMark('BRIDGE: Kachel gestartet', '+' + String(bt.bridgeStarted.sinceBridge) + ' ms');
-            }
-            if (bt.iframeLoaded) {
-                window.__efDiagMark('BRIDGE: iframe load', '+' + String(bt.iframeLoaded.sinceBridge) + ' ms');
-            }
-            if (bt.payloadSent) {
-                window.__efDiagMark('BRIDGE: Payload gesendet', '+' + String(bt.payloadSent.sinceBridge) + ' ms');
-                const transport = Date.now() - Number(bt.payloadSent.at || Date.now());
-                window.__efDiagMark('BRIDGE: postMessage Transport', String(transport) + ' ms');
-            }
-        }
-        window.__efDiagMark(
-            'Bridge-Payload empfangen',
-            'pvs=' + String(Array.isArray(payload.pvs) ? payload.pvs.length : 0)
-            + ', batteries=' + String(Array.isArray(payload.batteries) ? payload.batteries.length : 0)
-            + ', groups=' + String(Array.isArray(payload.groups) ? payload.groups.length : 0)
-        );
-    }
-
     if (typeof handleMessage === 'function') {
         handleMessage(payload);
-        if (typeof window.__efDiagMark === 'function') {
-            window.__efDiagMark('handleMessage beendet');
+
         }
     }
 });
