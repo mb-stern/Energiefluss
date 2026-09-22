@@ -12,6 +12,7 @@
 
 declare(strict_types=1);
 
+// v37: Initial-Payload sofort bei iframe-load; Browseransicht nur einmal initialisieren.
 class Energiefluss extends IPSModuleStrict
 {
 
@@ -1058,7 +1059,7 @@ class Energiefluss extends IPSModuleStrict
                 . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
                 . 'return {dark:dark};}'
                 . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme(),bridgeTiming:{bridgeStarted:{name:"Bridge-Kachel gestartet",at:bridgeStart,sinceBridge:0},iframeLoaded:window.__EF_IFRAME_LOAD_MARK__||null,payloadSent:bridgeMark("Payload an iframe gesendet")}},"*");}'
-                . 'frame.addEventListener("load",function(){window.__EF_IFRAME_LOAD_MARK__=bridgeMark("iframe load");ready=true;send(last);});'
+                . 'frame.addEventListener("load",function(){window.__EF_IFRAME_LOAD_MARK__=bridgeMark("iframe load");ready=true;send(initial);});'
                 . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
                 . '})();</script>';
         } catch (Throwable $e) {
@@ -6871,6 +6872,12 @@ class Energiefluss extends IPSModuleStrict
     let browserViewStateInitialized = false;
 
     function initializeBrowserViewState() {
+        if (window.__EF_BROWSER_VIEW_INITIALIZED__ === true) {
+            if (typeof window.__efDiagMark === 'function') window.__efDiagMark('Ansicht initialisieren übersprungen');
+            return;
+        }
+        window.__EF_BROWSER_VIEW_INITIALIZED__ = true;
+
         if (typeof window.__efDiagMark === 'function') window.__efDiagMark('Ansicht initialisieren START');
         /*
          * Einheitliche Speicherung in Browser UND Symcon-App:
