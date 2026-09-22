@@ -8110,28 +8110,64 @@ HTML;
         box = document.createElement('div');
         box.id = 'ef-load-diagnostic';
         box.style.cssText = 'position:fixed;left:8px;right:8px;bottom:4px;z-index:2147483647;max-height:42vh;overflow:auto;padding:7px 9px;border-radius:7px;background:rgba(0,0,0,.82);color:#fff;font:11px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;pointer-events:auto';
-        const pre = document.createElement('pre');
-        pre.style.cssText = 'margin:0;white-space:pre-wrap';
+        const toolbar = document.createElement('div');
+        toolbar.style.cssText = 'position:sticky;top:0;z-index:2;display:flex;gap:6px;align-items:center;padding:0 0 6px;background:rgba(0,0,0,.92)';
+
         const btn = document.createElement('button');
         btn.type = 'button';
         btn.textContent = 'Diagnose kopieren';
-        btn.style.cssText = 'margin-top:5px;font:inherit';
-        btn.addEventListener('click', async function () {
+        btn.style.cssText = 'font:inherit;cursor:pointer';
+
+        const status = document.createElement('span');
+        status.style.cssText = 'opacity:.85';
+
+        const pre = document.createElement('pre');
+        pre.style.cssText = 'margin:0;white-space:pre-wrap';
+
+        btn.addEventListener('click', function () {
             const value = pre.textContent || '';
+
+            // IPS/IPS-View blockiert navigator.clipboard teilweise.
+            // Deshalb zuerst die klassische execCommand-Methode verwenden.
+            const ta = document.createElement('textarea');
+            ta.value = value;
+            ta.setAttribute('readonly', '');
+            ta.style.cssText = 'position:fixed;left:-9999px;top:0;width:1px;height:1px;opacity:0';
+            document.body.appendChild(ta);
+            ta.focus();
+            ta.select();
+            ta.setSelectionRange(0, ta.value.length);
+
+            let copied = false;
             try {
-                await navigator.clipboard.writeText(value);
-                btn.textContent = 'Kopiert';
+                copied = document.execCommand('copy');
             } catch (_) {
+                copied = false;
+            }
+            ta.remove();
+
+            if (copied) {
+                status.textContent = 'Kopiert';
+                return;
+            }
+
+            // Fallback: Text sichtbar markieren, damit Strg+C sicher möglich ist.
+            try {
                 const range = document.createRange();
                 range.selectNodeContents(pre);
                 const sel = window.getSelection();
                 sel.removeAllRanges();
                 sel.addRange(range);
-                btn.textContent = 'Text markiert';
+                status.textContent = 'Text markiert – Strg+C';
+            } catch (_) {
+                status.textContent = 'Kopieren nicht möglich';
             }
         });
+
+        toolbar.appendChild(btn);
+        toolbar.appendChild(status);
+        box.appendChild(toolbar);
         box.appendChild(pre);
-        box.appendChild(btn);
         document.body.appendChild(box);
         return box;
     }
