@@ -1039,7 +1039,9 @@ class Energiefluss extends IPSModuleStrict
                 . 'const initial=' . $payload . ';'
                 . 'const grid=' . $gridPayload . ';'
                 . 'const frame=document.getElementById("ef-bridge-frame");'
+                . 'const bridgeStart=Date.now();'
                 . 'let ready=false,last=initial;'
+                . 'function bridgeMark(name){return {name:name,at:Date.now(),sinceBridge:Date.now()-bridgeStart};}'
                 . 'function origin(){'
                 . 'try{if(document.referrer){const u=new URL(document.referrer);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
                 . 'try{const a=window.location.ancestorOrigins;if(a&&a.length){const u=new URL(a[0]);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
@@ -1055,8 +1057,8 @@ class Energiefluss extends IPSModuleStrict
                 . 'else if(probe&&probe[0]==="#"&&probe.length>=7){const r=parseInt(probe.substr(1,2),16),g=parseInt(probe.substr(3,2),16),b=parseInt(probe.substr(5,2),16);dark=(0.299*r+0.587*g+0.114*b)/255>0.5;}'
                 . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
                 . 'return {dark:dark};}'
-                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
-                . 'frame.addEventListener("load",function(){ready=true;send(last);});'
+                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme(),bridgeTiming:{bridgeStarted:{name:"Bridge-Kachel gestartet",at:bridgeStart,sinceBridge:0},iframeLoaded:window.__EF_IFRAME_LOAD_MARK__||null,payloadSent:bridgeMark("Payload an iframe gesendet")}},"*");}'
+                . 'frame.addEventListener("load",function(){window.__EF_IFRAME_LOAD_MARK__=bridgeMark("iframe load");ready=true;send(last);});'
                 . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
                 . '})();</script>';
         } catch (Throwable $e) {
@@ -8213,6 +8215,21 @@ window.addEventListener('message', function (event) {
     }
 
     if (typeof window.__efDiagMark === 'function') {
+        const bt = message.bridgeTiming || null;
+        if (bt && !window.__EF_BRIDGE_TIMING_SHOWN__) {
+            window.__EF_BRIDGE_TIMING_SHOWN__ = true;
+            if (bt.bridgeStarted) {
+                window.__efDiagMark('BRIDGE: Kachel gestartet', '+' + String(bt.bridgeStarted.sinceBridge) + ' ms');
+            }
+            if (bt.iframeLoaded) {
+                window.__efDiagMark('BRIDGE: iframe load', '+' + String(bt.iframeLoaded.sinceBridge) + ' ms');
+            }
+            if (bt.payloadSent) {
+                window.__efDiagMark('BRIDGE: Payload gesendet', '+' + String(bt.payloadSent.sinceBridge) + ' ms');
+                const transport = Date.now() - Number(bt.payloadSent.at || Date.now());
+                window.__efDiagMark('BRIDGE: postMessage Transport', String(transport) + ' ms');
+            }
+        }
         window.__efDiagMark(
             'Bridge-Payload empfangen',
             'pvs=' + String(Array.isArray(payload.pvs) ? payload.pvs.length : 0)
