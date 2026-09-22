@@ -12,6 +12,7 @@
 
 declare(strict_types=1);
 
+// v39: v38 JavaScript-Klammerfehler behoben; IPS-WebHook-Sofortstart bleibt unverändert.
 class Energiefluss extends IPSModuleStrict
 {
 
@@ -1039,7 +1040,9 @@ class Energiefluss extends IPSModuleStrict
                 . 'const initial=' . $payload . ';'
                 . 'const grid=' . $gridPayload . ';'
                 . 'const frame=document.getElementById("ef-bridge-frame");'
+                
                 . 'let ready=false,last=initial;'
+                
                 . 'function origin(){'
                 . 'try{if(document.referrer){const u=new URL(document.referrer);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
                 . 'try{const a=window.location.ancestorOrigins;if(a&&a.length){const u=new URL(a[0]);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
@@ -1056,7 +1059,7 @@ class Energiefluss extends IPSModuleStrict
                 . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
                 . 'return {dark:dark};}'
                 . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
-                . 'frame.addEventListener("load",function(){ready=true;send(last);});'
+                . 'frame.addEventListener("load",function(){ready=true;send(initial);});'
                 . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
                 . '})();</script>';
         } catch (Throwable $e) {
@@ -6866,6 +6869,10 @@ class Energiefluss extends IPSModuleStrict
     let browserViewStateInitialized = false;
 
     function initializeBrowserViewState() {
+        if (window.__EF_BROWSER_VIEW_INITIALIZED__ === true) {
+            return;
+        }
+        window.__EF_BROWSER_VIEW_INITIALIZED__ = true;
         /*
          * Einheitliche Speicherung in Browser UND Symcon-App:
          * Eine Energiefluss-Instanz = ein eigener gespeicherter Zustand.
@@ -6935,7 +6942,14 @@ class Energiefluss extends IPSModuleStrict
 
         updateTechnicalLayoutButtons();
         updateDisplayModeButton();
-    }
+    
+        // Erst jetzt ist die instanzspezifisch gespeicherte Ansicht bekannt.
+        // Den Startschutz entfernen, damit niemals kurz die falsche Grundansicht erscheint.
+        const initialViewGuard = document.getElementById('ef-initial-view-guard');
+        if (initialViewGuard) {
+            initialViewGuard.remove();
+        }
+}
 
 
     /*
@@ -8081,9 +8095,14 @@ HTML;
                 $html = '<script>window.__EF_INSTANCE_ID__='
                     . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
                     . ';</script>'
+                    . '<style id="ef-initial-view-guard">'
+                    . '#flow-view,#house-view{visibility:hidden!important;}'
+                    . '</style>'
                     . $this->GetVisualizationHtml('flow');
                 $html .= <<<'HTML'
 <script>
+
+
 window.addEventListener('message', function (event) {
     const message = event.data;
     if (!message || message.__energieflussBridge !== true) {
