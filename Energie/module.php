@@ -3682,6 +3682,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     async function loadOriginalSunsynkModule() {
+        if (typeof window.__efDiagMark === 'function') window.__efDiagMark('Sunsynk-Modul Laden START');
         ensureHaCompatibility();
 
         if (customElements.get('sunsynk-power-flow-card')) {
@@ -6756,6 +6757,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
+        if (typeof window.__efDiagMark === 'function') window.__efDiagMark('ensureSunsynkCard START');
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
         sunsynkInitPromise = (async () => {
@@ -6806,6 +6808,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function renderTechnicalView(d, grid, haus, pvs, batteries, wallbox, groups) {
+        if (typeof window.__efDiagMark === 'function') window.__efDiagMark('renderTechnicalView START');
         updateTechnicalLayoutButtons();
         if (!sunsynkCard) {
             sunsynkPending = [d, grid, haus, pvs, batteries, wallbox, groups];
@@ -6866,6 +6869,7 @@ class Energiefluss extends IPSModuleStrict
     let browserViewStateInitialized = false;
 
     function initializeBrowserViewState() {
+        if (typeof window.__efDiagMark === 'function') window.__efDiagMark('Ansicht initialisieren START');
         /*
          * Einheitliche Speicherung in Browser UND Symcon-App:
          * Eine Energiefluss-Instanz = ein eigener gespeicherter Zustand.
@@ -8094,6 +8098,65 @@ HTML;
                     . $this->GetVisualizationHtml('flow');
                 $html .= <<<'HTML'
 <script>
+(function () {
+    const t0 = performance.now();
+    const marks = [];
+    window.__EF_DIAG_T0__ = t0;
+    window.__EF_DIAG_MARKS__ = marks;
+
+    function ensureBox() {
+        let box = document.getElementById('ef-load-diagnostic');
+        if (box || !document.body) return box;
+        box = document.createElement('div');
+        box.id = 'ef-load-diagnostic';
+        box.style.cssText = 'position:fixed;left:8px;right:8px;bottom:4px;z-index:2147483647;max-height:42vh;overflow:auto;padding:7px 9px;border-radius:7px;background:rgba(0,0,0,.82);color:#fff;font:11px/1.35 ui-monospace,SFMono-Regular,Consolas,monospace;white-space:pre-wrap;pointer-events:auto';
+        const pre = document.createElement('pre');
+        pre.style.cssText = 'margin:0;white-space:pre-wrap';
+        const btn = document.createElement('button');
+        btn.type = 'button';
+        btn.textContent = 'Diagnose kopieren';
+        btn.style.cssText = 'margin-top:5px;font:inherit';
+        btn.addEventListener('click', async function () {
+            const value = pre.textContent || '';
+            try {
+                await navigator.clipboard.writeText(value);
+                btn.textContent = 'Kopiert';
+            } catch (_) {
+                const range = document.createRange();
+                range.selectNodeContents(pre);
+                const sel = window.getSelection();
+                sel.removeAllRanges();
+                sel.addRange(range);
+                btn.textContent = 'Text markiert';
+            }
+        });
+        box.appendChild(pre);
+        box.appendChild(btn);
+        document.body.appendChild(box);
+        return box;
+    }
+
+    window.__efDiagMark = function (name, detail) {
+        marks.push({ms: performance.now() - t0, name: name, detail: detail || ''});
+        const box = ensureBox();
+        if (box) {
+            const pre = box.querySelector('pre');
+            pre.textContent = marks.map(function (m) {
+                return m.ms.toFixed(1).padStart(7) + ' ms  ' + m.name + (m.detail ? '  |  ' + m.detail : '');
+            }).join('\n');
+        }
+    };
+
+    window.__efDiagMark('HTTP-WebHook-Host gestartet');
+    document.addEventListener('DOMContentLoaded', function () {
+        ensureBox();
+        window.__efDiagMark('DOMContentLoaded');
+    }, {once:true});
+    window.addEventListener('load', function () {
+        window.__efDiagMark('window.load');
+    }, {once:true});
+})();
+
 window.addEventListener('message', function (event) {
     const message = event.data;
     if (!message || message.__energieflussBridge !== true) {
@@ -8113,8 +8176,20 @@ window.addEventListener('message', function (event) {
         return;
     }
 
+    if (typeof window.__efDiagMark === 'function') {
+        window.__efDiagMark(
+            'Bridge-Payload empfangen',
+            'pvs=' + String(Array.isArray(payload.pvs) ? payload.pvs.length : 0)
+            + ', batteries=' + String(Array.isArray(payload.batteries) ? payload.batteries.length : 0)
+            + ', groups=' + String(Array.isArray(payload.groups) ? payload.groups.length : 0)
+        );
+    }
+
     if (typeof handleMessage === 'function') {
         handleMessage(payload);
+        if (typeof window.__efDiagMark === 'function') {
+            window.__efDiagMark('handleMessage beendet');
+        }
     }
 });
 
