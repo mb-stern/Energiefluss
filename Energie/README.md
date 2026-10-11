@@ -257,11 +257,13 @@ mit automatischer Skalierung der Visualisierung.
 
 ## IPSView-App
 
-Die Darstellung nutzt im Browser den instanzspezifischen WebHook. Wenn die IPSView-App dem HTML keine Serveradresse bereitstellt, lädt das Modul die Visualisierung und ihre JavaScript-Dateien über den vorhandenen HTML-SDK-Datenkanal (`requestAction` / `handleMessage`). Eine zusätzliche Serveradresse muss nicht konfiguriert werden. Die App muss dafür die HTML-SDK-Funktion `requestAction` unterstützen; fehlt sie, zeigt die Darstellung eine entsprechende Meldung.
+Die Darstellung lädt ihre Dateien direkt über den instanzspezifischen WebHook. Im Browser verwendet sie die vorhandene Serveradresse. Wenn IPSView diese Adresse nicht an das HTML weitergibt, stellt das Modul die IPv4-Adressen seiner Netzwerkadapter und die Ports aktiver WebServer bereit. Die App prüft diese Adressen mit kleinen WebHook-Aufrufen und verwendet die erste erreichbare Adresse. Der Standardport ist 3777. Eine zusätzliche Serveradresse muss nicht konfiguriert werden; die großen JavaScript-Dateien werden nicht über den HTML-SDK-Datenkanal übertragen. Für diesen automatischen App-Zugriff muss der Symcon-Server im lokalen Netzwerk erreichbar sein.
+
+Während des Starts bleibt die Darstellung bis zur fertig angepassten Card verborgen. Die JavaScript-Dateien werden frühzeitig vorgeladen und im Browser zwischengespeichert; bei unverändertem Inhalt bestätigt der Server den vorhandenen Cache. Beide Original-Cards bleiben unverändert. Anpassungen für Symcon, einschließlich eines Ersatzspeichers bei gesperrtem `localStorage`, liegen in `module.php`. Fehlt die Symcon-Icon-Bibliothek, stehen in der App lokale SVG-Symbole für Ladesäule, Waschmaschine und Trockner bereit; andere nicht verfügbare Symbole erhalten einen Stecker als Ersatz.
 
 Ansicht und Techniklayout bleiben pro Modulinstanz getrennt. Im Browser werden sie weiterhin lokal gespeichert. Im App-Modus ohne Serveradresse speichert Symcon sie pro Instanz, sodass sie auch ohne `localStorage` nach dem erneuten Öffnen erhalten bleiben. Mehrere Instanzen können somit unterschiedliche Ansichten behalten; im App-Modus gilt die gespeicherte Ansicht einer Instanz für alle Clients, die diesen Modus verwenden.
 
-Die transportbezogenen PHP-Regressionstests lassen sich mit `php tests/ipsview.php` ausführen. Sie verwenden einen begrenzten Symcon-Teststub und ersetzen keinen Test in der nativen IPSView-App.
+Die PHP-Regressionstests für Serveradressen und gespeicherte Ansichten lassen sich mit `php tests/ipsview.php` ausführen. Sie verwenden einen begrenzten Symcon-Teststub und ersetzen keinen Test in der nativen IPSView-App.
 
 ---
 

@@ -823,12 +823,7 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        if ($Ident === 'LoadAppVisualization') {
-            if (!is_string($Value) || preg_match('/^[a-zA-Z0-9-]{1,64}$/D', $Value) !== 1) {
-                throw new InvalidArgumentException('Ungültige Visualisierungsanfrage');
-            }
-            $this->SendAppVisualization($Value);
-        } elseif ($Ident === 'SaveAppViewState') {
+        if ($Ident === 'SaveAppViewState') {
             $state = is_string($Value) ? json_decode($Value, true, 8, JSON_THROW_ON_ERROR) : $Value;
             if (!is_array($state)
                 || !in_array($state['view'] ?? null, ['flow', 'house'], true)
@@ -853,34 +848,6 @@ class Energiefluss extends IPSModuleStrict
         ];
     }
 
-    private function SendAppVisualization(string $requestID): void
-    {
-        $bundle = [
-            'html' => $this->GetVisualizationHostHtml(),
-            'viewState' => $this->GetAppViewState(),
-            'assets' => [],
-        ];
-        foreach (['lit-core.min.js', 'power-flow-card.js', 'sunsynk-power-flow-card.js'] as $asset) {
-            $source = file_get_contents(__DIR__ . '/assets/vendor/' . $asset);
-            if ($source === false) {
-                throw new RuntimeException('Visualisierungsdatei konnte nicht gelesen werden: ' . $asset);
-            }
-            $bundle['assets'][$asset] = $source;
-        }
-        $chunks = str_split(base64_encode(json_encode($bundle, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)), 24000);
-        foreach ($chunks as $index => $chunk) {
-            $sent = $this->UpdateVisualizationValue(json_encode([
-                'command' => 'visualizationBundle',
-                'requestId' => $requestID,
-                'index' => $index,
-                'total' => count($chunks),
-                'chunk' => $chunk,
-            ], JSON_THROW_ON_ERROR));
-            if (!$sent) {
-                throw new RuntimeException('Visualisierungsdateien konnten nicht an die App gesendet werden');
-            }
-        }
-    }
 
     public function ExportHouseColors(): string
     {
@@ -1038,6 +1005,8 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
             );
 
+            $serverOrigins = json_encode($this->GetVisualizationServerOrigins(), JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
+            $instanceID = json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR);
             $hostUrl = $this->GetVisualizationModuleWebHookUrl('visualization-host');
             $hostUrlJson = json_encode(
                 $hostUrl,
@@ -1045,18 +1014,23 @@ class Energiefluss extends IPSModuleStrict
             );
 
             $html = <<<'HTML'
-<style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}#ef-load-status{padding:1em}</style>
+<meta charset="utf-8">
+<style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}#ef-load-status{padding:1em}#ef-load-retry{margin:0 1em}</style>
 <div id="ef-load-status" hidden></div>
+<button id="ef-load-retry" type="button" hidden>Erneut laden</button>
 <iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write"></iframe>
 <script>
 (function () {
     const raw = __HOST_URL_JSON__;
     const initial = __INITIAL_JSON__;
     const grid = __GRID_JSON__;
+    const serverOrigins = __SERVER_ORIGINS_JSON__;
+    const instanceID = __INSTANCE_ID_JSON__;
     const frame = document.getElementById('ef-bridge-frame');
     const status = document.getElementById('ef-load-status');
-    let ready = false, last = initial, requestId = '', parts = [], total = 0, timer = null;
-    let assetUrls = [];
+    const retryButton = document.getElementById('ef-load-retry');
+    let ready = false, last = initial, timer = null;
+    let probes = [];
 
     function origin() {
         const candidates = [document.baseURI, document.referrer];
@@ -1071,16 +1045,22 @@ class Energiefluss extends IPSModuleStrict
         }
         return '';
     }
-    const base = origin();
+    const browserOrigin = origin();
+    const appMode = !browserOrigin;
 
     function showStatus(message) {
         status.textContent = message;
         status.hidden = false;
     }
-    function failRequest(message) {
+    function clearProbes() {
+        probes.forEach(probe => probe.element.remove());
+        probes = [];
+    }
+    function fail(message) {
         clearTimeout(timer);
-        requestId = '';
+        clearProbes();
         showStatus(message);
+        retryButton.hidden = false;
     }
     function theme() {
         let probe = '';
@@ -1094,101 +1074,124 @@ class Energiefluss extends IPSModuleStrict
         if (!data || data.command !== 'reloadHtml') last = data;
         if (ready && frame.contentWindow) frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()}, '*');
     }
-    function requestBundle() {
-        ready = false;
-        parts = [];
-        total = 0;
-        requestId = Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
-        const current = requestId;
+    function loadHost(base) {
         clearTimeout(timer);
-        showStatus('Energiefluss wird über die Symcon-Verbindung geladen …');
-        timer = setTimeout(() => {
-            if (requestId === current) {
-                requestId = '';
-                showStatus('Die Visualisierungsdateien konnten nicht über die Symcon-Verbindung geladen werden.');
-            }
-        }, 20000);
-        const invoke = (attempt) => {
-            if (requestId !== current) return;
-            if (typeof requestAction === 'function') {
-                try {
-                    Promise.resolve(requestAction('LoadAppVisualization', current)).catch(() => {
-                        if (requestId === current) failRequest('Die IPSView-App konnte die Visualisierungsanfrage nicht an Symcon senden.');
-                    });
-                } catch (_) {
-                    failRequest('Die IPSView-App konnte die Visualisierungsanfrage nicht an Symcon senden.');
-                }
-            } else if (attempt < 100) {
-                setTimeout(() => invoke(attempt + 1), 50);
-            } else {
-                clearTimeout(timer);
-                requestId = '';
-                showStatus('Die IPSView-App stellt die HTML-SDK-Funktion requestAction nicht bereit.');
-            }
-        };
-        setTimeout(() => invoke(0), 0);
+        clearProbes();
+        const url = new URL(raw, base);
+        if (appMode) url.searchParams.set('app', '1');
+        timer = setTimeout(() => fail('Die Energiefluss-Ansicht konnte unter '+url.origin+' nicht geladen werden.'), 15000);
+        frame.src = url.href;
     }
-    function acceptBundle(message) {
-        if (!requestId || message.requestId !== requestId) return;
-        if (!Number.isInteger(message.total) || message.total < 1 || message.total > 128 || !Number.isInteger(message.index) || message.index < 0 || message.index >= message.total || typeof message.chunk !== 'string' || message.chunk.length > 24000) return;
-        if (total && total !== message.total) return;
-        total = message.total;
-        parts[message.index] = message.chunk;
-        if (parts.filter(p => typeof p === 'string').length !== total) return;
-        try {
-            const bytes = Uint8Array.from(atob(parts.join('')), c => c.charCodeAt(0));
-            const bundle = JSON.parse(new TextDecoder().decode(bytes));
-            const urls = [];
-            const makeUrl = text => {const url = URL.createObjectURL(new Blob([text], {type:'text/javascript'})); urls.push(url); return url;};
-            const litUrl = makeUrl(bundle.assets['lit-core.min.js']);
-            const powerUrl = makeUrl(bundle.assets['power-flow-card.js'].replaceAll('./lit-core.min.js', litUrl));
-            const sunsynkUrl = makeUrl(bundle.assets['sunsynk-power-flow-card.js'].replaceAll('./lit-core.min.js', litUrl));
-            const assetUrl = name => raw.replace(/asset=visualization-host$/, 'asset='+name);
-            const html = bundle.html.replaceAll(assetUrl('power-flow-card.js'), powerUrl).replaceAll(assetUrl('sunsynk-power-flow-card.js'), sunsynkUrl).replace('<script src="/icons.js"><'+'/script>', '');
-            const state = JSON.stringify(bundle.viewState).replace(/</g, '\\u003c');
-            const prefix = '<script>window.__EF_APP_MODE__=true;window.__EF_APP_VIEW_STATE__='+state+';<\/script>';
-            frame.srcdoc = prefix+html;
-            assetUrls.forEach(url => URL.revokeObjectURL(url));
-            assetUrls = urls;
-            requestId = '';
-            parts = [];
-            clearTimeout(timer);
-            status.hidden = true;
-        } catch (_) {
-            clearTimeout(timer);
-            requestId = '';
-            showStatus('Die empfangenen Visualisierungsdateien konnten nicht geladen werden.');
+    function startLoad() {
+        ready = false;
+        clearTimeout(timer);
+        clearProbes();
+        retryButton.hidden = true;
+        showStatus('Energiefluss wird geladen …');
+        if (browserOrigin) {loadHost(browserOrigin); return;}
+        if (!serverOrigins.length) {fail('Symcon konnte keine erreichbare Serveradresse bereitstellen.'); return;}
+        timer = setTimeout(() => fail('Die von Symcon bereitgestellten Serveradressen sind aus IPSView nicht erreichbar.'), 8000);
+        for (const base of serverOrigins) {
+            const element = document.createElement('iframe');
+            element.hidden = true;
+            element.setAttribute('aria-hidden', 'true');
+            const url = new URL(raw, base);
+            url.searchParams.set('asset', 'server-probe');
+            probes.push({element, base});
+            document.body.appendChild(element);
+            element.src = url.href;
         }
     }
-    frame.addEventListener('load', () => {ready = true; send(last);});
     window.addEventListener('message', event => {
-        if (event.source !== frame.contentWindow || !event.data) return;
-        if (event.data.__energieflussHostReady === true) {ready = true; send(last);}
-        if (!base && event.data.__energieflussViewState && typeof requestAction === 'function') {
+        if (!event.data) return;
+        const probe = probes.find(probe => event.source === probe.element.contentWindow && event.origin === new URL(probe.base).origin);
+        if (probe && event.data.__energieflussServerProbe === true && event.data.instanceID === instanceID) {
+            loadHost(probe.base);
+            return;
+        }
+        if (event.source !== frame.contentWindow) return;
+        if (event.data.__energieflussHostReady === true) {
+            ready = true;
+            clearTimeout(timer);
+            status.hidden = true;
+            retryButton.hidden = true;
+            send(last);
+        }
+        if (appMode && event.data.__energieflussViewState && typeof requestAction === 'function') {
             try {Promise.resolve(requestAction('SaveAppViewState', JSON.stringify(event.data.__energieflussViewState))).catch(() => showStatus('Die App-Ansicht konnte nicht gespeichert werden.'));} catch (_) {showStatus('Die App-Ansicht konnte nicht gespeichert werden.');}
         }
     });
     window.handleMessage = function (value) {
         const data = typeof value === 'string' ? JSON.parse(value) : value;
-        if (data && data.command === 'visualizationBundle') {if (!base) acceptBundle(data); return;}
-        if (!base && data && data.command === 'reloadHtml') {requestBundle(); return;}
+        if (data && data.command === 'visualizationBundle') return;
+        if (data && data.command === 'reloadHtml') {startLoad(); return;}
         send(data);
     };
-    window.addEventListener('unload', () => assetUrls.forEach(url => URL.revokeObjectURL(url)));
-    if (base) frame.src = new URL(raw, base).href;
-    else requestBundle();
+    retryButton.addEventListener('click', startLoad);
+    startLoad();
 })();
 </script>
-
 HTML;
             return str_replace(
-                ['__HOST_URL_JSON__', '__INITIAL_JSON__', '__GRID_JSON__'],
-                [$hostUrlJson, $payload, $gridPayload],
+                ['__HOST_URL_JSON__', '__INITIAL_JSON__', '__GRID_JSON__', '__SERVER_ORIGINS_JSON__', '__INSTANCE_ID_JSON__'],
+                [$hostUrlJson, $payload, $gridPayload, $serverOrigins, $instanceID],
                 $html
             );
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
+    }
+
+    private function GetVisualizationServerOrigins(): array
+    {
+        $origins = [];
+        $addresses = [];
+        if (function_exists('Sys_GetNetworkInfo')) {
+            try {
+                foreach (Sys_GetNetworkInfo() as $adapter) {
+                    $ip = (string) ($adapter['IP'] ?? '');
+                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
+                        && !str_starts_with($ip, '127.') && !str_starts_with($ip, '169.254.')
+                        && $ip !== '0.0.0.0' && (int) explode('.', $ip)[0] < 224
+                    ) {
+                        $addresses[] = $ip;
+                    }
+                }
+            } catch (Throwable $e) {
+            }
+        }
+        $addresses = array_values(array_unique($addresses));
+        foreach ($addresses as $ip) {
+            $origins[] = 'http://' . $ip . ':3777';
+        }
+        if (function_exists('IPS_GetInstanceListByModuleType') && function_exists('IPS_GetInstance') && function_exists('IPS_GetConfiguration')) {
+            try {
+                $instances = IPS_GetInstanceListByModuleType(0);
+            } catch (Throwable $e) {
+                $instances = [];
+            }
+            foreach ($instances as $id) {
+                try {
+                    if ((IPS_GetInstance($id)['ModuleInfo']['ModuleName'] ?? '') !== 'WebServer') {
+                        continue;
+                    }
+                    $config = json_decode(IPS_GetConfiguration($id), true, 512, JSON_THROW_ON_ERROR);
+                    $port = (int) ($config['Port'] ?? 0);
+                    if (!($config['Active'] ?? false) || $port < 1 || $port > 65535) {
+                        continue;
+                    }
+                    $bind = (string) ($config['Server'] ?? '0.0.0.0');
+                    $hosts = in_array($bind, ['0.0.0.0', '::', ''], true) ? $addresses : [$bind];
+                    foreach ($hosts as $ip) {
+                        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && !str_starts_with($ip, '127.')) {
+                            $origins[] = (($config['EnableSSL'] ?? false) ? 'https://' : 'http://') . $ip . ':' . $port;
+                        }
+                    }
+                } catch (Throwable $e) {
+                }
+            }
+        }
+        return array_values(array_unique($origins));
     }
 
     private function GetVisualizationGridPayload(): ?array
@@ -1298,6 +1301,8 @@ HTML;
         $sunsynkModuleUrl = $this->GetVisualizationModuleWebHookUrl('sunsynk-power-flow-card.js');
 
         $html = <<<'HTML'
+<link rel="modulepreload" href="__POWER_FLOW_MODULE_URL__">
+<link rel="modulepreload" href="__SUNSYNK_MODULE_URL__">
 <style>
     body {
         margin: 0;
@@ -1918,7 +1923,6 @@ HTML;
 
     window.customCards = window.customCards || [];
 </script>
-<script type="module" src="__POWER_FLOW_MODULE_URL__"></script>
 
 <div id="eflow">
     <div id="scale-host">
@@ -2725,10 +2729,14 @@ HTML;
         pfcInitPromise = (async () => {
             try {
 
-                await customElements.whenDefined('power-flow-card');
+                await import('__POWER_FLOW_MODULE_URL__');
+                if (!customElements.get('power-flow-card')) {
+                    throw new Error('Die JS-Datei hat power-flow-card nicht registriert.');
+                }
 
                 const card = document.createElement('power-flow-card');
 
+                card.style.opacity = '0';
                 card.setConfig(createPfcConfig());
 
                 card.hass = {
@@ -2768,6 +2776,9 @@ HTML;
                     updatePowerFlowCard(...pending);
                 }
 
+                await card.updateComplete;
+                await new Promise(resolve => requestAnimationFrame(resolve));
+                finishInitialCard('house', card);
                 return card;
             } catch (err) {
                 console.error('Power Flow Card konnte nicht initialisiert werden:', err);
@@ -2782,6 +2793,7 @@ HTML;
                         'Prüfe assets/vendor/ im Modulbaum und das Symcon-Log.';
                 }
 
+                finishInitialCard('house');
                 throw err;
             }
         })();
@@ -3380,6 +3392,11 @@ HTML;
                     'important'
                 );
 
+                if (window.__EF_APP_MODE__ === true && typeof window.FontAwesome?.dom?.i2svg !== 'function') {
+                    this.renderLocalSvg(iconName);
+                    return;
+                }
+
                 let icon = this.querySelector(':scope > i');
 
                 if (!icon) {
@@ -3417,6 +3434,37 @@ HTML;
                 );
 
                 this.renderFontAwesomeSvg();
+            }
+
+            renderLocalSvg(iconName) {
+                const plug = ['M8 2h2v5h4V2h2v5h2v4a6 6 0 0 1-5 5.92V22h-2v-5.08A6 6 0 0 1 6 11V7h2zm0 7v2a4 4 0 0 0 8 0V9z'];
+                const appliance = ['M5 2h14a2 2 0 0 1 2 2v16a2 2 0 0 1-2 2H5a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2zm0 2v16h14V4z', 'M6 5h3v2H6zm9 0h3v2h-3z', 'M12 9a5 5 0 1 1 0 10 5 5 0 0 1 0-10zm0 2a3 3 0 1 0 0 6 3 3 0 0 0 0-6z'];
+                const charger = ['M5 2h8a2 2 0 0 1 2 2v16h1v2H2v-2h1V4a2 2 0 0 1 2-2zm0 2v16h8V4z', 'M9 5 6 10h3l-1 5 4-7H9z', 'M15 12h2a2 2 0 0 1 2 2v3a1 1 0 0 0 2 0v-6h-1a1 1 0 0 1-1-1V6h1V3h1v3h1V3h1v3h1v4a1 1 0 0 1-1 1v6a3 3 0 0 1-6 0v-3h-2z'];
+                const paths = {
+                    'charging-station': charger,
+                    'ev-station': charger,
+                    'wallbox': charger,
+                    'washing-machine': [...appliance, 'M8 14q2-2 4 0t4 0v2q-2 2-4 0t-4 0z'],
+                    'washer': appliance,
+                    'dryer': [...appliance, 'M9 13h2v2H9zm4 0h2v2h-2z'],
+                    'tumble-dryer': appliance,
+                    'plug': plug
+                }[iconName] || plug;
+                const svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg');
+                svg.setAttribute('viewBox', '0 0 24 24');
+                svg.setAttribute('width', '100%');
+                svg.setAttribute('height', '100%');
+                svg.setAttribute('aria-hidden', 'true');
+                svg.style.display = 'block';
+                for (const d of paths) {
+                    const path = document.createElementNS(svg.namespaceURI, 'path');
+                    path.setAttribute('d', d);
+                    path.setAttribute('fill-rule', 'evenodd');
+                    svg.appendChild(path);
+                }
+                this.replaceChildren(svg);
+                this.applyConsumerColourToSvg();
+                this.moveIconIntoNativeSvg();
             }
 
             applyConsumerColourToSvg() {
@@ -3565,6 +3613,7 @@ HTML;
                     `translate(${translateX} ${translateY}) ` +
                     `scale(${scale})`
                 );
+                group.setAttribute('data-symcon-icon', normalizeSymconIcon(this.icon));
                 group.setAttribute('pointer-events', 'none');
                 group.setAttribute('fill', AC.room);
                 group.setAttribute('color', AC.room);
@@ -6460,6 +6509,7 @@ HTML;
             await loadOriginalSunsynkModule();
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
+            card.style.opacity = '0';
 
             window.__symconHasWallbox = !!d.hasWallbox;
             card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
@@ -6489,6 +6539,9 @@ HTML;
             if (sunsynkPending) {
                 const args = sunsynkPending; sunsynkPending = null; renderTechnicalView(...args);
             }
+            await applySunsynkViewOverrides(card, card.__symconLastData);
+            await new Promise(resolve => requestAnimationFrame(resolve));
+            finishInitialCard('flow', card);
             return card;
         })().catch(err => {
             console.error('Sunsynk-Karte:', err);
@@ -6496,6 +6549,7 @@ HTML;
             const error = document.getElementById('sunsynk-error');
             if (loading) loading.style.display = 'none';
             if (error) { error.style.display = 'flex'; error.textContent = 'Sunsynk-Karte konnte nicht geladen werden: ' + err.message; }
+            finishInitialCard('flow');
             throw err;
         });
         return sunsynkInitPromise;
@@ -6543,6 +6597,19 @@ HTML;
     let currentDisplayMode = 'flow';
     let currentTechnicalLayout = 'lite';
     let browserViewStateInitialized = false;
+    const initialCardsReady = new Set();
+
+    function finishInitialCard(mode, card = null) {
+        if (card) card.style.removeProperty('opacity');
+        initialCardsReady.add(mode);
+        revealInitialView();
+    }
+
+    function revealInitialView() {
+        if (!initialCardsReady.has(currentDisplayMode)) return;
+        document.getElementById('ef-initial-view-guard')?.remove();
+        document.getElementById('ef-initial-load-status')?.remove();
+    }
 
     function initializeBrowserViewState() {
         if (window.__EF_BROWSER_VIEW_INITIALIZED__ === true) {
@@ -6615,11 +6682,6 @@ HTML;
         } catch (_) {
             updateTechnicalLayoutButtons();
             updateDisplayModeButton();
-        } finally {
-            const initialViewGuard = document.getElementById('ef-initial-view-guard');
-            if (initialViewGuard) {
-                initialViewGuard.remove();
-            }
         }
     }
 
@@ -7064,6 +7126,7 @@ HTML;
 
         updateTechnicalLayoutButtons();
         updateDisplayModeButton();
+        revealInitialView();
 
         const eflow = document.getElementById('eflow');
         if (eflow) {
@@ -7599,6 +7662,7 @@ HTML;
     {
         return [
             'visualization-host',
+            'server-probe',
             'lit-core.min.js',
             'power-flow-card.js',
             'sunsynk-power-flow-card.js',
@@ -7622,14 +7686,42 @@ HTML;
             . rawurlencode($asset);
     }
 
-    private function GetVisualizationHostHtml(): string
+    private function GetVisualizationStorageAdapter(): string
     {
-        $html = '<script>window.__EF_INSTANCE_ID__='
+        return <<<'HTML'
+<script>
+try {
+    window.localStorage.getItem('symcon-energiefluss-storage-check');
+} catch (_) {
+    const values = new Map();
+    Object.defineProperty(window, 'localStorage', {
+        configurable: true,
+        value: {
+            getItem: key => values.has(String(key)) ? values.get(String(key)) : null,
+            setItem: (key, value) => values.set(String(key), String(value)),
+            removeItem: key => values.delete(String(key)),
+            clear: () => values.clear(),
+            key: index => Array.from(values.keys())[index] ?? null,
+            get length() {return values.size;}
+        }
+    });
+}
+</script>
+HTML;
+    }
+
+    private function GetVisualizationHostHtml(bool $appMode = false): string
+    {
+        $html = '<meta charset="utf-8"><script>window.__EF_INSTANCE_ID__='
             . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
+            . ';window.__EF_APP_MODE__=' . ($appMode ? 'true' : 'false')
+            . ';window.__EF_APP_VIEW_STATE__=' . json_encode($appMode ? $this->GetAppViewState() : null, JSON_THROW_ON_ERROR)
             . ';</script>'
+            . $this->GetVisualizationStorageAdapter()
             . '<style id="ef-initial-view-guard">'
-            . '#flow-view,#house-view{visibility:hidden!important;}'
+            . '#eflow{opacity:0!important;pointer-events:none!important;}'
             . '</style>'
+            . '<div id="ef-initial-load-status" role="status" style="position:absolute;inset:0;display:grid;place-items:center;font-family:sans-serif">Energiefluss wird geladen …</div>'
             . $this->GetVisualizationHtml('flow');
         $html .= <<<'HTML'
 <script>
@@ -7697,9 +7789,19 @@ HTML;
                 return;
             }
 
+            if ($asset === 'server-probe') {
+                header('Content-Type: text/html; charset=utf-8');
+                header('Cache-Control: no-store');
+                header('X-Content-Type-Options: nosniff');
+                echo '<script>window.parent.postMessage({__energieflussServerProbe:true,instanceID:'
+                    . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
+                    . '}, "*");</script>';
+                return;
+            }
+
             if ($asset === 'visualization-host') {
 
-                $html = $this->GetVisualizationHostHtml();
+                $html = $this->GetVisualizationHostHtml(($_GET['app'] ?? '') === '1');
                 header('Content-Type: text/html; charset=utf-8');
                 header('X-Content-Type-Options: nosniff');
                 header('Cache-Control: no-cache, no-store, must-revalidate');
@@ -7736,8 +7838,16 @@ HTML;
 
             header('Content-Type: text/javascript; charset=utf-8');
             header('X-Content-Type-Options: nosniff');
-            header('Cache-Control: no-cache, no-store, must-revalidate');
-            header('Pragma: no-cache');
+            $etag = '"' . hash('sha256', $source) . '"';
+            header('Cache-Control: private, no-cache');
+            header('ETag: ' . $etag);
+            foreach (explode(',', (string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) as $candidate) {
+                $candidate = trim($candidate);
+                if ($candidate === '*' || preg_replace('/^W\//', '', $candidate) === $etag) {
+                    http_response_code(304);
+                    return;
+                }
+            }
             header('Content-Length: ' . strlen($source));
             echo $source;
         } catch (Throwable $e) {
