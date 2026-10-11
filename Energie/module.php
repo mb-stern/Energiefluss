@@ -19,7 +19,7 @@ class Energiefluss extends IPSModuleStrict
     {
         parent::Create();
 
-        $this->RegisterHook($this->GetVisualizationWebHookBaseAddress());
+        $this->UnregisterHook('energiefluss-assets-' . $this->InstanceID);
         $this->RegisterAttributeString('AppViewState', '{}');
 
         $this->RegisterPropertyString('Producers', '[]');
@@ -823,6 +823,23 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
+        if ($Ident === 'InitializeVisualization') {
+            if (!is_string($Value) || preg_match('/^[a-zA-Z0-9_-]{1,96}$/D', $Value) !== 1) {
+                throw new InvalidArgumentException('Ungültige Visualisierungsanfrage');
+            }
+            if (!$this->UpdateVisualizationValue(json_encode(
+                [
+                    'command' => 'initializeVisualization',
+                    'requestId' => $Value,
+                    'payload' => $this->BuildPayload(),
+                    'viewState' => $this->GetAppViewState(),
+                ],
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            ))) {
+                throw new RuntimeException('Die Startdaten konnten nicht an die Visualisierung gesendet werden.');
+            }
+            return;
+        }
         if ($Ident === 'SaveAppViewState') {
             $state = is_string($Value) ? json_decode($Value, true, 8, JSON_THROW_ON_ERROR) : $Value;
             if (!is_array($state)
@@ -995,67 +1012,41 @@ class Energiefluss extends IPSModuleStrict
     public function GetVisualizationTile(): string
     {
         try {
-            $gridPayload = json_encode(
-                $this->GetVisualizationGridPayload(),
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-            );
-
-            $serverOrigins = json_encode($this->GetVisualizationServerOrigins(), JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
-            $instanceID = json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR);
-            $hostUrl = $this->GetVisualizationModuleWebHookUrl('visualization-host');
-            $hostUrlJson = json_encode(
-                $hostUrl,
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-            );
+            $assets = [];
+            foreach (['lit-core.min.js', 'power-flow-card.js', 'sunsynk-power-flow-card.js'] as $name) {
+                $source = file_get_contents(__DIR__ . '/assets/vendor/' . $name);
+                if ($source === false) {
+                    throw new RuntimeException('Visualisierungsdatei konnte nicht gelesen werden: ' . $name);
+                }
+                $assets[$name] = $source;
+            }
+            $compressed = gzencode(json_encode(
+                ['html' => $this->GetVisualizationHostHtml(), 'assets' => $assets],
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+            ), 9);
+            if ($compressed === false) {
+                throw new RuntimeException('Die Darstellung konnte nicht komprimiert werden.');
+            }
+            $bundle = json_encode(base64_encode($compressed), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+            $grid = json_encode($this->GetVisualizationGridPayload(), JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 
             $html = <<<'HTML'
 <meta charset="utf-8">
 <style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}#ef-load-status{padding:1em}#ef-load-retry{margin:0 1em}</style>
-<div id="ef-load-status" hidden></div>
+<div id="ef-load-status" role="status">Energiefluss wird geladen …</div>
 <button id="ef-load-retry" type="button" hidden>Erneut laden</button>
-<iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write"></iframe>
+<iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write" hidden></iframe>
 <script>
 (function () {
-    const raw = __HOST_URL_JSON__;
+    const packed = __BUNDLE_JSON__;
     const grid = __GRID_JSON__;
-    const serverOrigins = __SERVER_ORIGINS_JSON__;
-    const instanceID = __INSTANCE_ID_JSON__;
     const frame = document.getElementById('ef-bridge-frame');
     const status = document.getElementById('ef-load-status');
     const retryButton = document.getElementById('ef-load-retry');
-    let ready = false, last = null, timer = null;
-    let probes = [];
+    const ancestors = Array.from(window.location.ancestorOrigins || []);
+    const appMode = ![document.baseURI, document.referrer, ...ancestors, window.location.href].some(value => /^https?:\/\//i.test(value || ''));
+    let bundlePromise = null, requestId = '', ready = false, initialized = false, last = null, timer = null;
 
-    function origin() {
-        const candidates = [document.baseURI, document.referrer];
-        const ancestors = window.location.ancestorOrigins;
-        for (let i = 0; ancestors && i < ancestors.length; i++) candidates.push(ancestors[i]);
-        candidates.push(window.location.href);
-        for (const value of candidates) {
-            try {
-                const u = new URL(value);
-                if (u.protocol === 'http:' || u.protocol === 'https:') return u.origin;
-            } catch (_) {}
-        }
-        return '';
-    }
-    const browserOrigin = origin();
-    const appMode = !browserOrigin;
-
-    function showStatus(message) {
-        status.textContent = message;
-        status.hidden = false;
-    }
-    function clearProbes() {
-        probes.forEach(probe => probe.element.remove());
-        probes = [];
-    }
-    function fail(message) {
-        clearTimeout(timer);
-        clearProbes();
-        showStatus(message);
-        retryButton.hidden = false;
-    }
     function theme() {
         let probe = '';
         try {probe = getComputedStyle(document.documentElement).getPropertyValue('--content-color').trim() || getComputedStyle(document.body).color;} catch (_) {}
@@ -1064,134 +1055,116 @@ class Energiefluss extends IPSModuleStrict
         if (probe && /^#[0-9a-f]{6}$/i.test(probe)) return {dark: (0.299*parseInt(probe.slice(1,3),16)+0.587*parseInt(probe.slice(3,5),16)+0.114*parseInt(probe.slice(5,7),16))/255 > 0.5};
         return {dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)};
     }
+    function fail(message) {
+        clearTimeout(timer);
+        ready = false;
+        status.textContent = message;
+        status.hidden = false;
+        retryButton.hidden = false;
+    }
+    function valid(data) {
+        return data && Number.isSafeInteger(data.stateVersion) && data.stateVersion > 0
+            && Array.isArray(data.pvs) && Array.isArray(data.batteries) && Array.isArray(data.groups);
+    }
+    function sync() {
+        if (ready) frame.contentWindow.postMessage({__energieflussBridge:true,requestId,payload:last,grid,theme:theme()}, '*');
+    }
     function send(data) {
-        if (!data || !Number.isSafeInteger(data.stateVersion) || data.stateVersion <= 0
-            || !Array.isArray(data.pvs) || !Array.isArray(data.batteries) || !Array.isArray(data.groups)) return;
-        if (last && data.stateVersion < last.stateVersion) return;
+        if (!valid(data) || (last && data.stateVersion < last.stateVersion)) return;
         last = data;
         sync();
     }
-    function sync() {
-        if (ready && frame.contentWindow) frame.contentWindow.postMessage({__energieflussBridge:true,payload:last,grid:grid,theme:theme()}, '*');
+    async function unpack() {
+        if (typeof DecompressionStream !== 'function') throw new Error('Bitte die Browser-/WebView-Laufzeit aktualisieren: gzip-Dekomprimierung wird benötigt.');
+        const bytes = Uint8Array.from(atob(packed), c => c.charCodeAt(0));
+        const bundle = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).json();
+        const urls = [];
+        const assetUrl = source => {
+            const url = URL.createObjectURL(new Blob([source], {type:'text/javascript'}));
+            urls.push(url);
+            return url;
+        };
+        const lit = assetUrl(bundle.assets['lit-core.min.js']);
+        let html = bundle.html;
+        for (const [name, token] of [['power-flow-card.js','__EF_POWER_FLOW_ASSET__'],['sunsynk-power-flow-card.js','__EF_SUNSYNK_ASSET__']]) {
+            html = html.replaceAll(token, assetUrl(bundle.assets[name].replaceAll('./lit-core.min.js', lit)));
+        }
+        window.addEventListener('pagehide', () => urls.forEach(url => URL.revokeObjectURL(url)), {once:true});
+        return html;
     }
-    function loadHost(base) {
-        clearTimeout(timer);
-        clearProbes();
-        const url = new URL(raw, base);
-        if (appMode) url.searchParams.set('app', '1');
-        timer = setTimeout(() => fail('Die Energiefluss-Ansicht konnte unter '+url.origin+' nicht geladen werden.'), 15000);
-        frame.src = url.href;
+    function getBundle() {
+        if (!bundlePromise) bundlePromise = unpack().catch(error => {bundlePromise = null; throw error;});
+        return bundlePromise;
+    }
+    async function initialize(data) {
+        if (initialized || data.requestId !== requestId || !valid(data.payload)) return;
+        initialized = true;
+        const current = requestId;
+        send(data.payload);
+        try {
+            const template = await getBundle();
+            if (current !== requestId) return;
+            const boot = {requestId:current,appMode,viewState:appMode ? data.viewState : null,payload:last,theme:theme(),grid};
+            const json = JSON.stringify(boot).replaceAll('<', '\\u003c');
+            frame.srcdoc = template.replace('__EF_BOOT_JSON__', () => json);
+        } catch (error) {
+            if (current === requestId) fail('Energiefluss konnte nicht geladen werden: '+error.message);
+        }
     }
     function startLoad() {
-        ready = false;
         clearTimeout(timer);
-        clearProbes();
+        requestId = Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
+        const current = requestId;
+        ready = initialized = false;
+        last = null;
+        frame.hidden = true;
+        frame.srcdoc = '';
+        status.textContent = 'Energiefluss wird geladen …';
+        status.hidden = false;
         retryButton.hidden = true;
-        showStatus('Energiefluss wird geladen …');
-        if (browserOrigin) {loadHost(browserOrigin); return;}
-        if (!serverOrigins.length) {fail('Symcon konnte keine erreichbare Serveradresse bereitstellen.'); return;}
-        timer = setTimeout(() => fail('Die von Symcon bereitgestellten Serveradressen sind aus IPSView nicht erreichbar.'), 8000);
-        for (const base of serverOrigins) {
-            const element = document.createElement('iframe');
-            element.hidden = true;
-            element.setAttribute('aria-hidden', 'true');
-            const url = new URL(raw, base);
-            url.searchParams.set('asset', 'server-probe');
-            probes.push({element, base});
-            document.body.appendChild(element);
-            element.src = url.href;
-        }
+        timer = setTimeout(() => fail('Die Energiefluss-Startdaten wurden nicht über die Symcon-Verbindung empfangen.'), 15000);
+        if (typeof requestAction !== 'function') {fail('Die Symcon-HTML-SDK-Verbindung steht nicht zur Verfügung.'); return;}
+        getBundle().catch(error => {if (current === requestId) fail(error.message);});
+        try {
+            Promise.resolve(requestAction('InitializeVisualization', current)).catch(error => {if (current === requestId) fail('Die Startdaten konnten nicht angefordert werden: '+error.message);});
+        } catch (error) {fail('Die Startdaten konnten nicht angefordert werden: '+error.message);}
     }
     window.addEventListener('message', event => {
-        if (!event.data) return;
-        const probe = probes.find(probe => event.source === probe.element.contentWindow && event.origin === new URL(probe.base).origin);
-        if (probe && event.data.__energieflussServerProbe === true && event.data.instanceID === instanceID) {
-            loadHost(probe.base);
-            return;
-        }
-        if (event.source !== frame.contentWindow) return;
+        if (event.source !== frame.contentWindow || event.data?.requestId !== requestId) return;
         if (event.data.__energieflussHostReady === true) {
             ready = true;
             clearTimeout(timer);
+            frame.hidden = false;
             status.hidden = true;
             retryButton.hidden = true;
             sync();
         }
-        if (appMode && event.data.__energieflussViewState && typeof requestAction === 'function') {
-            try {Promise.resolve(requestAction('SaveAppViewState', JSON.stringify(event.data.__energieflussViewState))).catch(() => showStatus('Die App-Ansicht konnte nicht gespeichert werden.'));} catch (_) {showStatus('Die App-Ansicht konnte nicht gespeichert werden.');}
-        }
+        if (event.data.__energieflussViewState) window.__energieflussSaveViewState(requestId, event.data.__energieflussViewState);
     });
+    window.__energieflussSaveViewState = function (token, state) {
+        if (!appMode || token !== requestId || typeof requestAction !== 'function') return;
+        try {Promise.resolve(requestAction('SaveAppViewState', JSON.stringify(state))).catch(() => fail('Die App-Ansicht konnte nicht gespeichert werden.'));} catch (_) {fail('Die App-Ansicht konnte nicht gespeichert werden.');}
+    };
     window.handleMessage = function (value) {
         const data = typeof value === 'string' ? JSON.parse(value) : value;
-        if (data && data.command === 'visualizationBundle') return;
-        if (data && data.command === 'reloadHtml') {startLoad(); return;}
+        if (data?.command === 'initializeVisualization') {initialize(data); return;}
+        if (data?.command === 'reloadHtml') {startLoad(); return;}
         send(data);
     };
     retryButton.addEventListener('click', startLoad);
+    setInterval(sync, 2000);
     startLoad();
 })();
 </script>
 HTML;
-            return str_replace(
-                ['__HOST_URL_JSON__', '__GRID_JSON__', '__SERVER_ORIGINS_JSON__', '__INSTANCE_ID_JSON__'],
-                [$hostUrlJson, $gridPayload, $serverOrigins, $instanceID],
-                $html
-            );
+            $html = str_replace(['__BUNDLE_JSON__', '__GRID_JSON__'], [$bundle, $grid], $html);
+            if (strlen($html) > 900000) {
+                throw new RuntimeException('Die komprimierte Darstellung ist für den Symcon-Output-Buffer zu groß (' . strlen($html) . ' Bytes).');
+            }
+            return $html;
         } catch (Throwable $e) {
-            return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
+            return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</div>';
         }
-    }
-
-    private function GetVisualizationServerOrigins(): array
-    {
-        $origins = [];
-        $addresses = [];
-        if (function_exists('Sys_GetNetworkInfo')) {
-            try {
-                foreach (Sys_GetNetworkInfo() as $adapter) {
-                    $ip = (string) ($adapter['IP'] ?? '');
-                    if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4)
-                        && !str_starts_with($ip, '127.') && !str_starts_with($ip, '169.254.')
-                        && $ip !== '0.0.0.0' && (int) explode('.', $ip)[0] < 224
-                    ) {
-                        $addresses[] = $ip;
-                    }
-                }
-            } catch (Throwable $e) {
-            }
-        }
-        $addresses = array_values(array_unique($addresses));
-        foreach ($addresses as $ip) {
-            $origins[] = 'http://' . $ip . ':3777';
-        }
-        if (function_exists('IPS_GetInstanceListByModuleType') && function_exists('IPS_GetInstance') && function_exists('IPS_GetConfiguration')) {
-            try {
-                $instances = IPS_GetInstanceListByModuleType(0);
-            } catch (Throwable $e) {
-                $instances = [];
-            }
-            foreach ($instances as $id) {
-                try {
-                    if ((IPS_GetInstance($id)['ModuleInfo']['ModuleName'] ?? '') !== 'WebServer') {
-                        continue;
-                    }
-                    $config = json_decode(IPS_GetConfiguration($id), true, 512, JSON_THROW_ON_ERROR);
-                    $port = (int) ($config['Port'] ?? 0);
-                    if (!($config['Active'] ?? false) || $port < 1 || $port > 65535) {
-                        continue;
-                    }
-                    $bind = (string) ($config['Server'] ?? '0.0.0.0');
-                    $hosts = in_array($bind, ['0.0.0.0', '::', ''], true) ? $addresses : [$bind];
-                    foreach ($hosts as $ip) {
-                        if (filter_var($ip, FILTER_VALIDATE_IP, FILTER_FLAG_IPV4) && !str_starts_with($ip, '127.')) {
-                            $origins[] = (($config['EnableSSL'] ?? false) ? 'https://' : 'http://') . $ip . ':' . $port;
-                        }
-                    }
-                } catch (Throwable $e) {
-                }
-            }
-        }
-        return array_values(array_unique($origins));
     }
 
     private function GetVisualizationGridPayload(): ?array
@@ -1297,8 +1270,8 @@ HTML;
         $flowDisplay = $showHouse ? 'none' : 'block';
         $houseDisplay = $showHouse ? 'block' : 'none';
 
-        $powerFlowModuleUrl = $this->GetVisualizationModuleWebHookUrl('power-flow-card.js');
-        $sunsynkModuleUrl = $this->GetVisualizationModuleWebHookUrl('sunsynk-power-flow-card.js');
+        $powerFlowModuleUrl = '__EF_POWER_FLOW_ASSET__';
+        $sunsynkModuleUrl = '__EF_SUNSYNK_ASSET__';
 
         $html = <<<'HTML'
 <link rel="modulepreload" href="__POWER_FLOW_MODULE_URL__">
@@ -7664,34 +7637,6 @@ HTML;
         );
     }
 
-    private function GetVisualizationWebHookAssets(): array
-    {
-        return [
-            'visualization-host',
-            'server-probe',
-            'lit-core.min.js',
-            'power-flow-card.js',
-            'sunsynk-power-flow-card.js',
-        ];
-    }
-
-    private function GetVisualizationWebHookBaseAddress(): string
-    {
-        return 'energiefluss-assets-' . $this->InstanceID;
-    }
-
-    private function GetVisualizationModuleWebHookUrl(string $asset): string
-    {
-        if (!in_array($asset, $this->GetVisualizationWebHookAssets(), true)) {
-            throw new InvalidArgumentException('Unbekanntes Visualisierungs-Asset: ' . $asset);
-        }
-
-        return '/hook/'
-            . $this->GetVisualizationWebHookBaseAddress()
-            . '?asset='
-            . rawurlencode($asset);
-    }
-
     private function GetVisualizationStorageAdapter(): string
     {
         return <<<'HTML'
@@ -7716,13 +7661,14 @@ try {
 HTML;
     }
 
-    private function GetVisualizationHostHtml(bool $appMode = false): string
+    private function GetVisualizationHostHtml(): string
     {
-        $html = '<meta charset="utf-8"><script>window.__EF_INSTANCE_ID__='
+        $html = '<meta charset="utf-8"><script>window.__EF_BOOT__=__EF_BOOT_JSON__;window.__EF_INSTANCE_ID__='
             . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
-            . ';window.__EF_APP_MODE__=' . ($appMode ? 'true' : 'false')
-            . ';window.__EF_APP_VIEW_STATE__=' . json_encode($appMode ? $this->GetAppViewState() : null, JSON_THROW_ON_ERROR)
-            . ';</script>'
+            . ';window.__EF_APP_MODE__=window.__EF_BOOT__.appMode;'
+            . 'window.__EF_APP_VIEW_STATE__=window.__EF_BOOT__.viewState;'
+            . 'window.__EF_BRIDGE_THEME__=window.__EF_BOOT__.theme;'
+            . 'window.__EF_SERVER_GRID__=window.__EF_BOOT__.grid;</script>'
             . $this->GetVisualizationStorageAdapter()
             . '<style id="ef-initial-view-guard">'
             . '#eflow{opacity:0!important;pointer-events:none!important;}'
@@ -7734,7 +7680,7 @@ HTML;
 
 window.addEventListener('message', function (event) {
     const message = event.data;
-    if (event.source !== window.parent || !message || message.__energieflussBridge !== true) {
+    if (event.source !== window.parent || !message || message.__energieflussBridge !== true || message.requestId !== window.__EF_BOOT__.requestId) {
         return;
     }
 
@@ -7756,117 +7702,30 @@ window.addEventListener('message', function (event) {
 });
 
 if (window.__EF_APP_MODE__ === true) {
-    const saveViewState = () => window.parent.postMessage({
-        __energieflussViewState: {view: currentDisplayMode, layout: currentTechnicalLayout}
-    }, '*');
+    const saveViewState = () => {
+        const state = {view: currentDisplayMode, layout: currentTechnicalLayout};
+        try {
+            if (typeof window.parent.__energieflussSaveViewState === 'function') {
+                window.parent.__energieflussSaveViewState(window.__EF_BOOT__.requestId, state);
+                return;
+            }
+        } catch (_) {}
+        window.parent.postMessage({requestId: window.__EF_BOOT__.requestId, __energieflussViewState: state}, '*');
+    };
     for (const id of ['display-mode-button', 'technical-layout-button', 'technical-wide-button']) {
         document.getElementById(id)?.addEventListener('click', saveViewState);
     }
 }
 
-handleMessage(__CURRENT_STATE_JSON__);
+handleMessage(window.__EF_BOOT__.payload);
 
 try {
-    window.parent.postMessage({__energieflussHostReady: true}, '*');
+    window.parent.postMessage({__energieflussHostReady: true, requestId: window.__EF_BOOT__.requestId}, '*');
 } catch (_) {}
 </script>
 HTML;
 
-        return str_replace('__CURRENT_STATE_JSON__', json_encode(
-            $this->BuildPayload(),
-            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-        ), $html);
-    }
-
-    protected function ProcessHookData(): void
-    {
-        try {
-            $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
-            $requestPath = (string) (parse_url($requestUri, PHP_URL_PATH) ?? '');
-            $hookPath = '/hook/' . $this->GetVisualizationWebHookBaseAddress();
-
-            if ($requestPath !== $hookPath) {
-                http_response_code(404);
-                header('Content-Type: text/plain; charset=utf-8');
-                echo 'Not found';
-                return;
-            }
-
-            $asset = isset($_GET['asset']) ? (string) $_GET['asset'] : '';
-            if (!in_array($asset, $this->GetVisualizationWebHookAssets(), true)) {
-                http_response_code(404);
-                header('Content-Type: text/plain; charset=utf-8');
-                echo 'Not found';
-                return;
-            }
-
-            if ($asset === 'server-probe') {
-                header('Content-Type: text/html; charset=utf-8');
-                header('Cache-Control: no-store');
-                header('X-Content-Type-Options: nosniff');
-                echo '<script>window.parent.postMessage({__energieflussServerProbe:true,instanceID:'
-                    . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
-                    . '}, "*");</script>';
-                return;
-            }
-
-            if ($asset === 'visualization-host') {
-
-                $html = $this->GetVisualizationHostHtml(($_GET['app'] ?? '') === '1');
-                header('Content-Type: text/html; charset=utf-8');
-                header('X-Content-Type-Options: nosniff');
-                header('Cache-Control: no-cache, no-store, must-revalidate');
-                header('Pragma: no-cache');
-                header('Content-Length: ' . strlen($html));
-                echo $html;
-                return;
-            }
-
-            $path = __DIR__
-                . DIRECTORY_SEPARATOR
-                . 'assets'
-                . DIRECTORY_SEPARATOR
-                . 'vendor'
-                . DIRECTORY_SEPARATOR
-                . $asset;
-
-            if (!is_file($path)) {
-                http_response_code(404);
-                header('Content-Type: text/plain; charset=utf-8');
-                echo 'Asset not found';
-                return;
-            }
-
-            $source = file_get_contents($path);
-            if ($source === false) {
-                throw new RuntimeException('Visualisierungsdatei konnte nicht gelesen werden: ' . $asset);
-            }
-
-            if ($asset !== 'lit-core.min.js') {
-                $litUrl = $this->GetVisualizationModuleWebHookUrl('lit-core.min.js');
-                $source = str_replace('./lit-core.min.js', $litUrl, $source);
-            }
-
-            header('Content-Type: text/javascript; charset=utf-8');
-            header('X-Content-Type-Options: nosniff');
-            $etag = '"' . hash('sha256', $source) . '"';
-            header('Cache-Control: private, no-cache');
-            header('ETag: ' . $etag);
-            foreach (explode(',', (string) ($_SERVER['HTTP_IF_NONE_MATCH'] ?? '')) as $candidate) {
-                $candidate = trim($candidate);
-                if ($candidate === '*' || preg_replace('/^W\//', '', $candidate) === $etag) {
-                    http_response_code(304);
-                    return;
-                }
-            }
-            header('Content-Length: ' . strlen($source));
-            echo $source;
-        } catch (Throwable $e) {
-            $this->LogMessage('ProcessHookData: ' . $e->getMessage(), KL_ERROR);
-            http_response_code(500);
-            header('Content-Type: text/plain; charset=utf-8');
-            echo 'Internal server error';
-        }
+        return $html;
     }
 
     private function ConfigureCalculatedVariables(): void
