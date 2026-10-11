@@ -257,9 +257,11 @@ mit automatischer Skalierung der Visualisierung.
 
 ## IPSView-App
 
-Die Darstellung ermittelt die Serveradresse automatisch über die Basisadresse des HTML-Dokuments, den Referrer, das übergeordnete Browserfenster oder die Browseradresse. Eine zusätzliche Serveradresse muss im Modul nicht konfiguriert werden. Stellt die App keine dieser Adressen bereit, zeigt die Darstellung eine Fehlermeldung.
+Die Darstellung nutzt im Browser den instanzspezifischen WebHook. Wenn die IPSView-App dem HTML keine Serveradresse bereitstellt, lädt das Modul die Visualisierung und ihre JavaScript-Dateien über den vorhandenen HTML-SDK-Datenkanal (`requestAction` / `handleMessage`). Eine zusätzliche Serveradresse muss nicht konfiguriert werden. Die App muss dafür die HTML-SDK-Funktion `requestAction` unterstützen; fehlt sie, zeigt die Darstellung eine entsprechende Meldung.
 
-Ansicht und Techniklayout werden weiterhin pro Modulinstanz gespeichert. Mehrere Instanzen können somit unterschiedliche Ansichten behalten. Verweigert die App den Browserspeicher, funktioniert die Anzeige mit den Standardwerten; die Ansicht kann dann nicht dauerhaft gespeichert werden.
+Ansicht und Techniklayout bleiben pro Modulinstanz getrennt. Im Browser werden sie weiterhin lokal gespeichert. Im App-Modus ohne Serveradresse speichert Symcon sie pro Instanz, sodass sie auch ohne `localStorage` nach dem erneuten Öffnen erhalten bleiben. Mehrere Instanzen können somit unterschiedliche Ansichten behalten; im App-Modus gilt die gespeicherte Ansicht einer Instanz für alle Clients, die diesen Modus verwenden.
+
+Die transportbezogenen PHP-Regressionstests lassen sich mit `php tests/ipsview.php` ausführen. Sie verwenden einen begrenzten Symcon-Teststub und ersetzen keinen Test in der nativen IPSView-App.
 
 ---
 

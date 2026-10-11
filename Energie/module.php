@@ -20,6 +20,7 @@ class Energiefluss extends IPSModuleStrict
         parent::Create();
 
         $this->RegisterHook($this->GetVisualizationWebHookBaseAddress());
+        $this->RegisterAttributeString('AppViewState', '{}');
 
         $this->RegisterPropertyString('Producers', '[]');
         $this->RegisterPropertyString('Batteries', '[]');
@@ -822,6 +823,63 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
+        if ($Ident === 'LoadAppVisualization') {
+            if (!is_string($Value) || preg_match('/^[a-zA-Z0-9-]{1,64}$/D', $Value) !== 1) {
+                throw new InvalidArgumentException('Ungültige Visualisierungsanfrage');
+            }
+            $this->SendAppVisualization($Value);
+        } elseif ($Ident === 'SaveAppViewState') {
+            $state = is_string($Value) ? json_decode($Value, true, 8, JSON_THROW_ON_ERROR) : $Value;
+            if (!is_array($state)
+                || !in_array($state['view'] ?? null, ['flow', 'house'], true)
+                || !in_array($state['layout'] ?? null, ['lite', 'lite-wide', 'compact', 'compact-wide', 'full', 'full-wide'], true)
+            ) {
+                throw new InvalidArgumentException('Ungültige App-Ansicht');
+            }
+            $this->WriteAttributeString('AppViewState', json_encode(
+                ['view' => $state['view'], 'layout' => $state['layout']],
+                JSON_THROW_ON_ERROR
+            ));
+        }
+    }
+
+    private function GetAppViewState(): array
+    {
+        $state = json_decode($this->ReadAttributeString('AppViewState'), true);
+        return [
+            'view' => in_array($state['view'] ?? null, ['flow', 'house'], true) ? $state['view'] : 'flow',
+            'layout' => in_array($state['layout'] ?? null, ['lite', 'lite-wide', 'compact', 'compact-wide', 'full', 'full-wide'], true)
+                ? $state['layout'] : 'lite',
+        ];
+    }
+
+    private function SendAppVisualization(string $requestID): void
+    {
+        $bundle = [
+            'html' => $this->GetVisualizationHostHtml(),
+            'viewState' => $this->GetAppViewState(),
+            'assets' => [],
+        ];
+        foreach (['lit-core.min.js', 'power-flow-card.js', 'sunsynk-power-flow-card.js'] as $asset) {
+            $source = file_get_contents(__DIR__ . '/assets/vendor/' . $asset);
+            if ($source === false) {
+                throw new RuntimeException('Visualisierungsdatei konnte nicht gelesen werden: ' . $asset);
+            }
+            $bundle['assets'][$asset] = $source;
+        }
+        $chunks = str_split(base64_encode(json_encode($bundle, JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES)), 24000);
+        foreach ($chunks as $index => $chunk) {
+            $sent = $this->UpdateVisualizationValue(json_encode([
+                'command' => 'visualizationBundle',
+                'requestId' => $requestID,
+                'index' => $index,
+                'total' => count($chunks),
+                'chunk' => $chunk,
+            ], JSON_THROW_ON_ERROR));
+            if (!$sent) {
+                throw new RuntimeException('Visualisierungsdateien konnten nicht an die App gesendet werden');
+            }
+        }
     }
 
     public function ExportHouseColors(): string
@@ -972,53 +1030,162 @@ class Energiefluss extends IPSModuleStrict
         try {
             $payload = json_encode(
                 $this->BuildPayload(),
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
             );
 
             $gridPayload = json_encode(
                 $this->GetVisualizationGridPayload(),
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
             );
 
             $hostUrl = $this->GetVisualizationModuleWebHookUrl('visualization-host');
             $hostUrlJson = json_encode(
                 $hostUrl,
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
+                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
             );
 
-            return '<style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}</style>'
-                . '<iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write"></iframe>'
-                . '<script>(function(){'
-                . 'const raw=' . $hostUrlJson . ';'
-                . 'const initial=' . $payload . ';'
-                . 'const grid=' . $gridPayload . ';'
-                . 'const frame=document.getElementById("ef-bridge-frame");'
+            $html = <<<'HTML'
+<style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}#ef-load-status{padding:1em}</style>
+<div id="ef-load-status" hidden></div>
+<iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write"></iframe>
+<script>
+(function () {
+    const raw = __HOST_URL_JSON__;
+    const initial = __INITIAL_JSON__;
+    const grid = __GRID_JSON__;
+    const frame = document.getElementById('ef-bridge-frame');
+    const status = document.getElementById('ef-load-status');
+    let ready = false, last = initial, requestId = '', parts = [], total = 0, timer = null;
+    let assetUrls = [];
 
-                . 'let ready=false,last=initial;'
+    function origin() {
+        const candidates = [document.baseURI, document.referrer];
+        const ancestors = window.location.ancestorOrigins;
+        for (let i = 0; ancestors && i < ancestors.length; i++) candidates.push(ancestors[i]);
+        candidates.push(window.location.href);
+        for (const value of candidates) {
+            try {
+                const u = new URL(value);
+                if (u.protocol === 'http:' || u.protocol === 'https:') return u.origin;
+            } catch (_) {}
+        }
+        return '';
+    }
+    const base = origin();
 
-                . 'function origin(){'
-                . 'try{const u=new URL(document.baseURI);if(u.protocol==="http:"||u.protocol==="https:")return u.origin;}catch(e){}'
-                . 'try{if(document.referrer){const u=new URL(document.referrer);if(u.protocol==="http:"||u.protocol==="https:")return u.origin;}}catch(e){}'
-                . 'try{const a=window.location.ancestorOrigins;if(a&&a.length){const u=new URL(a[0]);if(u.protocol==="http:"||u.protocol==="https:")return u.origin;}}catch(e){}'
-                . 'try{const u=new URL(window.location.href);if(u.protocol==="http:"||u.protocol==="https:")return u.origin;}catch(e){}'
-                . 'return "";'
-                . '}'
-                . 'const base=origin();'
-                . 'try{if(!base)throw new Error("missing origin");frame.src=new URL(raw,base).href;}catch(e){'
-                . 'const error=document.createElement("div");error.textContent="Die IP-Symcon-Serveradresse konnte nicht automatisch ermittelt werden.";frame.replaceWith(error);return;}'
-                . 'function theme(){'
-                . 'let probe="";try{probe=getComputedStyle(document.documentElement).getPropertyValue("--content-color").trim();}catch(e){}'
-                . 'if(!probe){try{probe=getComputedStyle(document.body).color||"";}catch(e){}}'
-                . 'let dark=null;const m=probe&&probe.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);'
-                . 'if(m){dark=(0.299*m[1]+0.587*m[2]+0.114*m[3])/255>0.5;}'
-                . 'else if(probe&&probe[0]==="#"&&probe.length>=7){const r=parseInt(probe.substr(1,2),16),g=parseInt(probe.substr(3,2),16),b=parseInt(probe.substr(5,2),16);dark=(0.299*r+0.587*g+0.114*b)/255>0.5;}'
-                . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
-                . 'return {dark:dark};}'
-                . 'function send(data){if(!data||data.command!=="reloadHtml")last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
-                . 'frame.addEventListener("load",function(){ready=true;send(last);});'
-                . 'window.addEventListener("message",function(event){if(event.source!==frame.contentWindow||!event.data||event.data.__energieflussHostReady!==true)return;ready=true;send(last);});'
-                . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
-                . '})();</script>';
+    function showStatus(message) {
+        status.textContent = message;
+        status.hidden = false;
+    }
+    function failRequest(message) {
+        clearTimeout(timer);
+        requestId = '';
+        showStatus(message);
+    }
+    function theme() {
+        let probe = '';
+        try {probe = getComputedStyle(document.documentElement).getPropertyValue('--content-color').trim() || getComputedStyle(document.body).color;} catch (_) {}
+        const m = probe && probe.match(/rgba?\((\d+)[,\s]+(\d+)[,\s]+(\d+)/);
+        if (m) return {dark: (0.299*m[1]+0.587*m[2]+0.114*m[3])/255 > 0.5};
+        if (probe && /^#[0-9a-f]{6}$/i.test(probe)) return {dark: (0.299*parseInt(probe.slice(1,3),16)+0.587*parseInt(probe.slice(3,5),16)+0.114*parseInt(probe.slice(5,7),16))/255 > 0.5};
+        return {dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)};
+    }
+    function send(data) {
+        if (!data || data.command !== 'reloadHtml') last = data;
+        if (ready && frame.contentWindow) frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()}, '*');
+    }
+    function requestBundle() {
+        ready = false;
+        parts = [];
+        total = 0;
+        requestId = Date.now().toString(36)+'-'+Math.random().toString(36).slice(2);
+        const current = requestId;
+        clearTimeout(timer);
+        showStatus('Energiefluss wird über die Symcon-Verbindung geladen …');
+        timer = setTimeout(() => {
+            if (requestId === current) {
+                requestId = '';
+                showStatus('Die Visualisierungsdateien konnten nicht über die Symcon-Verbindung geladen werden.');
+            }
+        }, 20000);
+        const invoke = (attempt) => {
+            if (requestId !== current) return;
+            if (typeof requestAction === 'function') {
+                try {
+                    Promise.resolve(requestAction('LoadAppVisualization', current)).catch(() => {
+                        if (requestId === current) failRequest('Die IPSView-App konnte die Visualisierungsanfrage nicht an Symcon senden.');
+                    });
+                } catch (_) {
+                    failRequest('Die IPSView-App konnte die Visualisierungsanfrage nicht an Symcon senden.');
+                }
+            } else if (attempt < 100) {
+                setTimeout(() => invoke(attempt + 1), 50);
+            } else {
+                clearTimeout(timer);
+                requestId = '';
+                showStatus('Die IPSView-App stellt die HTML-SDK-Funktion requestAction nicht bereit.');
+            }
+        };
+        setTimeout(() => invoke(0), 0);
+    }
+    function acceptBundle(message) {
+        if (!requestId || message.requestId !== requestId) return;
+        if (!Number.isInteger(message.total) || message.total < 1 || message.total > 128 || !Number.isInteger(message.index) || message.index < 0 || message.index >= message.total || typeof message.chunk !== 'string' || message.chunk.length > 24000) return;
+        if (total && total !== message.total) return;
+        total = message.total;
+        parts[message.index] = message.chunk;
+        if (parts.filter(p => typeof p === 'string').length !== total) return;
+        try {
+            const bytes = Uint8Array.from(atob(parts.join('')), c => c.charCodeAt(0));
+            const bundle = JSON.parse(new TextDecoder().decode(bytes));
+            const urls = [];
+            const makeUrl = text => {const url = URL.createObjectURL(new Blob([text], {type:'text/javascript'})); urls.push(url); return url;};
+            const litUrl = makeUrl(bundle.assets['lit-core.min.js']);
+            const powerUrl = makeUrl(bundle.assets['power-flow-card.js'].replaceAll('./lit-core.min.js', litUrl));
+            const sunsynkUrl = makeUrl(bundle.assets['sunsynk-power-flow-card.js'].replaceAll('./lit-core.min.js', litUrl));
+            const assetUrl = name => raw.replace(/asset=visualization-host$/, 'asset='+name);
+            const html = bundle.html.replaceAll(assetUrl('power-flow-card.js'), powerUrl).replaceAll(assetUrl('sunsynk-power-flow-card.js'), sunsynkUrl).replace('<script src="/icons.js"><'+'/script>', '');
+            const state = JSON.stringify(bundle.viewState).replace(/</g, '\\u003c');
+            const prefix = '<script>window.__EF_APP_MODE__=true;window.__EF_APP_VIEW_STATE__='+state+';<\/script>';
+            frame.srcdoc = prefix+html;
+            assetUrls.forEach(url => URL.revokeObjectURL(url));
+            assetUrls = urls;
+            requestId = '';
+            parts = [];
+            clearTimeout(timer);
+            status.hidden = true;
+        } catch (_) {
+            clearTimeout(timer);
+            requestId = '';
+            showStatus('Die empfangenen Visualisierungsdateien konnten nicht geladen werden.');
+        }
+    }
+    frame.addEventListener('load', () => {ready = true; send(last);});
+    window.addEventListener('message', event => {
+        if (event.source !== frame.contentWindow || !event.data) return;
+        if (event.data.__energieflussHostReady === true) {ready = true; send(last);}
+        if (!base && event.data.__energieflussViewState && typeof requestAction === 'function') {
+            try {Promise.resolve(requestAction('SaveAppViewState', JSON.stringify(event.data.__energieflussViewState))).catch(() => showStatus('Die App-Ansicht konnte nicht gespeichert werden.'));} catch (_) {showStatus('Die App-Ansicht konnte nicht gespeichert werden.');}
+        }
+    });
+    window.handleMessage = function (value) {
+        const data = typeof value === 'string' ? JSON.parse(value) : value;
+        if (data && data.command === 'visualizationBundle') {if (!base) acceptBundle(data); return;}
+        if (!base && data && data.command === 'reloadHtml') {requestBundle(); return;}
+        send(data);
+    };
+    window.addEventListener('unload', () => assetUrls.forEach(url => URL.revokeObjectURL(url)));
+    if (base) frame.src = new URL(raw, base).href;
+    else requestBundle();
+})();
+</script>
+
+HTML;
+            return str_replace(
+                ['__HOST_URL_JSON__', '__INITIAL_JSON__', '__GRID_JSON__'],
+                [$hostUrlJson, $payload, $gridPayload],
+                $html
+            );
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage()) . '</div>';
         }
@@ -6392,8 +6559,8 @@ class Energiefluss extends IPSModuleStrict
                 const instanceLayoutKey =
                     `symcon-energiefluss-${instanceScope}-technical-layout`;
 
-                const storedView = window.localStorage.getItem(instanceViewKey);
-                const storedLayout = window.localStorage.getItem(instanceLayoutKey);
+                const storedView = window.__EF_APP_VIEW_STATE__?.view ?? window.localStorage.getItem(instanceViewKey);
+                const storedLayout = window.__EF_APP_VIEW_STATE__?.layout ?? window.localStorage.getItem(instanceLayoutKey);
 
                 if (storedView === 'flow' || storedView === 'house') {
                     currentDisplayMode = storedView;
@@ -7455,38 +7622,16 @@ HTML;
             . rawurlencode($asset);
     }
 
-    protected function ProcessHookData(): void
+    private function GetVisualizationHostHtml(): string
     {
-        try {
-            $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
-            $requestPath = (string) (parse_url($requestUri, PHP_URL_PATH) ?? '');
-            $hookPath = '/hook/' . $this->GetVisualizationWebHookBaseAddress();
-
-            if ($requestPath !== $hookPath) {
-                http_response_code(404);
-                header('Content-Type: text/plain; charset=utf-8');
-                echo 'Not found';
-                return;
-            }
-
-            $asset = isset($_GET['asset']) ? (string) $_GET['asset'] : '';
-            if (!in_array($asset, $this->GetVisualizationWebHookAssets(), true)) {
-                http_response_code(404);
-                header('Content-Type: text/plain; charset=utf-8');
-                echo 'Not found';
-                return;
-            }
-
-            if ($asset === 'visualization-host') {
-
-                $html = '<script>window.__EF_INSTANCE_ID__='
-                    . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
-                    . ';</script>'
-                    . '<style id="ef-initial-view-guard">'
-                    . '#flow-view,#house-view{visibility:hidden!important;}'
-                    . '</style>'
-                    . $this->GetVisualizationHtml('flow');
-                $html .= <<<'HTML'
+        $html = '<script>window.__EF_INSTANCE_ID__='
+            . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
+            . ';</script>'
+            . '<style id="ef-initial-view-guard">'
+            . '#flow-view,#house-view{visibility:hidden!important;}'
+            . '</style>'
+            . $this->GetVisualizationHtml('flow');
+        $html .= <<<'HTML'
 <script>
 
 window.addEventListener('message', function (event) {
@@ -7512,12 +7657,49 @@ window.addEventListener('message', function (event) {
     }
 });
 
+if (window.__EF_APP_MODE__ === true) {
+    const saveViewState = () => window.parent.postMessage({
+        __energieflussViewState: {view: currentDisplayMode, layout: currentTechnicalLayout}
+    }, '*');
+    for (const id of ['display-mode-button', 'technical-layout-button', 'technical-wide-button']) {
+        document.getElementById(id)?.addEventListener('click', saveViewState);
+    }
+}
+
 try {
     window.parent.postMessage({__energieflussHostReady: true}, '*');
 } catch (_) {}
 </script>
 HTML;
 
+        return $html;
+    }
+
+    protected function ProcessHookData(): void
+    {
+        try {
+            $requestUri = (string) ($_SERVER['REQUEST_URI'] ?? '');
+            $requestPath = (string) (parse_url($requestUri, PHP_URL_PATH) ?? '');
+            $hookPath = '/hook/' . $this->GetVisualizationWebHookBaseAddress();
+
+            if ($requestPath !== $hookPath) {
+                http_response_code(404);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'Not found';
+                return;
+            }
+
+            $asset = isset($_GET['asset']) ? (string) $_GET['asset'] : '';
+            if (!in_array($asset, $this->GetVisualizationWebHookAssets(), true)) {
+                http_response_code(404);
+                header('Content-Type: text/plain; charset=utf-8');
+                echo 'Not found';
+                return;
+            }
+
+            if ($asset === 'visualization-host') {
+
+                $html = $this->GetVisualizationHostHtml();
                 header('Content-Type: text/html; charset=utf-8');
                 header('X-Content-Type-Options: nosniff');
                 header('Cache-Control: no-cache, no-store, must-revalidate');
