@@ -285,8 +285,8 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ### Version 1.13 (11.10.2026)
 
-- Die Visu läuft nun auch unter IPS-View
-- Es wird nun kein Webhook mehr für die Auslieferung der Sunsynk-Card verwendet
+- Die Visu läuft nun auch unter IPS-View.
+- Es wird nun kein Webhook mehr für die Auslieferung der Sunsynk-Card verwendet.
 
 ### Version 1.12 (22.09.2026)
 - Paralleles laufen lassen von mehreren Instanzen und individueller Ansicht funtkioniert wieder. 
