@@ -31,5 +31,8 @@ $module->setProperty('Producers', json_encode([
 $module->setProperty('Batteries', '[{"Name":"Speicher","VariableID":204,"SoCVariableID":205,"CapacityKWh":10}]');
 $module->setProperty('Inverters', '[{"Name":"WR","PowerVariableID":206}]');
 $module->setProperty('Groups', '[{"Name":"openWB","VariableID":207,"Icon":"charging-station","IsAux":true,"IsWallbox":true},{"Name":"Tumbler","VariableID":208,"Icon":"dryer"},{"Name":"Drucker","VariableID":209,"Icon":"print"}]');
-$module->RequestAction('InitializeVisualization', $argv[2] ?? 'fixture');
-echo $module->messages[count($module->messages) - 1];
+if ($mode === 'fresh-tile') {
+    echo $module->GetVisualizationTile();
+    exit;
+}
+echo json_encode((new ReflectionMethod($module, 'BuildPayload'))->invoke($module), JSON_THROW_ON_ERROR);

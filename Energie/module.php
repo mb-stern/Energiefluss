@@ -823,23 +823,6 @@ class Energiefluss extends IPSModuleStrict
 
     public function RequestAction(string $Ident, mixed $Value): void
     {
-        if ($Ident === 'InitializeVisualization') {
-            if (!is_string($Value) || preg_match('/^[a-zA-Z0-9_-]{1,96}$/D', $Value) !== 1) {
-                throw new InvalidArgumentException('Ungültige Visualisierungsanfrage');
-            }
-            if (!$this->UpdateVisualizationValue(json_encode(
-                [
-                    'command' => 'initializeVisualization',
-                    'requestId' => $Value,
-                    'payload' => $this->BuildPayload(),
-                    'viewState' => $this->GetAppViewState(),
-                ],
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
-            ))) {
-                throw new RuntimeException('Die Startdaten konnten nicht an die Visualisierung gesendet werden.');
-            }
-            return;
-        }
         if ($Ident === 'SaveAppViewState') {
             $state = is_string($Value) ? json_decode($Value, true, 8, JSON_THROW_ON_ERROR) : $Value;
             if (!is_array($state)
@@ -1021,13 +1004,13 @@ class Energiefluss extends IPSModuleStrict
                 $assets[$name] = $source;
             }
             $compressed = gzencode(json_encode(
-                ['html' => $this->GetVisualizationHostHtml(), 'assets' => $assets],
+                ['html' => $this->GetVisualizationHostHtml(), 'assets' => $assets, 'payload' => $this->BuildPayload(), 'viewState' => $this->GetAppViewState()],
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             ), 9);
             if ($compressed === false) {
                 throw new RuntimeException('Die Darstellung konnte nicht komprimiert werden.');
             }
-            $bundle = json_encode(base64_encode($compressed), JSON_THROW_ON_ERROR | JSON_UNESCAPED_SLASHES);
+            $bundle = chunk_split(base64_encode($compressed), 4096, "\n");
             $grid = json_encode($this->GetVisualizationGridPayload(), JSON_THROW_ON_ERROR | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT);
 
             $html = <<<'HTML'
@@ -1036,16 +1019,28 @@ class Energiefluss extends IPSModuleStrict
 <div id="ef-load-status" role="status">Energiefluss wird geladen …</div>
 <button id="ef-load-retry" type="button" hidden>Erneut laden</button>
 <iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write" hidden></iframe>
+<div id="ef-bundle-data" hidden>__BUNDLE_TEXT__</div>
+<script>
+window.__energieflussStartError = function (error) {
+    const status = document.getElementById('ef-load-status');
+    if (!status) return;
+    status.textContent = 'Die Energiefluss-Darstellung konnte nicht gestartet werden: '+(error?.message || String(error));
+    status.hidden = false;
+};
+window.addEventListener('error', event => window.__energieflussStartError(event.error || event.message));
+window.addEventListener('unhandledrejection', event => window.__energieflussStartError(event.reason));
+</script>
 <script>
 (function () {
-    const packed = __BUNDLE_JSON__;
+    try {
+    const packed = document.getElementById('ef-bundle-data').textContent.replace(/\s+/g, '');
     const grid = __GRID_JSON__;
     const frame = document.getElementById('ef-bridge-frame');
     const status = document.getElementById('ef-load-status');
     const retryButton = document.getElementById('ef-load-retry');
     const ancestors = Array.from(window.location.ancestorOrigins || []);
     const appMode = ![document.baseURI, document.referrer, ...ancestors, window.location.href].some(value => /^https?:\/\//i.test(value || ''));
-    let bundlePromise = null, requestId = '', ready = false, initialized = false, last = null, timer = null;
+    let bundlePromise = null, requestId = '', ready = false, last = null, viewState = null, viewEdited = false, timer = null;
 
     function theme() {
         let probe = '';
@@ -1067,11 +1062,12 @@ class Energiefluss extends IPSModuleStrict
             && Array.isArray(data.pvs) && Array.isArray(data.batteries) && Array.isArray(data.groups);
     }
     function sync() {
-        if (ready) frame.contentWindow.postMessage({__energieflussBridge:true,requestId,payload:last,grid,theme:theme()}, '*');
+        if (ready) frame.contentWindow.postMessage({__energieflussBridge:true,requestId,payload:last,grid,theme:theme(),viewState:appMode ? viewState : null}, '*');
     }
     function send(data) {
         if (!valid(data) || (last && data.stateVersion < last.stateVersion)) return;
         last = data;
+        if (!viewEdited && data.viewState) viewState = data.viewState;
         sync();
     }
     async function unpack() {
@@ -1090,47 +1086,37 @@ class Energiefluss extends IPSModuleStrict
             html = html.replaceAll(token, assetUrl(bundle.assets[name].replaceAll('./lit-core.min.js', lit)));
         }
         window.addEventListener('pagehide', () => urls.forEach(url => URL.revokeObjectURL(url)), {once:true});
-        return html;
+        return {html,payload:bundle.payload,viewState:bundle.viewState};
     }
     function getBundle() {
         if (!bundlePromise) bundlePromise = unpack().catch(error => {bundlePromise = null; throw error;});
         return bundlePromise;
     }
-    async function initialize(data) {
-        if (initialized || data.requestId !== requestId || !valid(data.payload)) return;
-        initialized = true;
-        const current = requestId;
-        send(data.payload);
-        try {
-            const template = await getBundle();
-            if (current !== requestId) return;
-            const boot = {requestId:current,appMode,viewState:appMode ? data.viewState : null,payload:last,theme:theme(),grid};
-            const json = JSON.stringify(boot).replaceAll('<', '\\u003c');
-            frame.srcdoc = template.replace('__EF_BOOT_JSON__', () => json);
-        } catch (error) {
-            if (current === requestId) fail('Energiefluss konnte nicht geladen werden: '+error.message);
-        }
-    }
-    function startLoad() {
+    async function startLoad() {
         clearTimeout(timer);
         requestId = Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
         const current = requestId;
-        ready = initialized = false;
-        last = null;
+        ready = viewEdited = false;
         frame.hidden = true;
         frame.srcdoc = '';
         status.textContent = 'Energiefluss wird geladen …';
         status.hidden = false;
         retryButton.hidden = true;
-        timer = setTimeout(() => fail('Die Energiefluss-Startdaten wurden nicht über die Symcon-Verbindung empfangen.'), 15000);
-        if (typeof requestAction !== 'function') {fail('Die Symcon-HTML-SDK-Verbindung steht nicht zur Verfügung.'); return;}
-        getBundle().catch(error => {if (current === requestId) fail(error.message);});
+        timer = setTimeout(() => fail('Die Energiefluss-Darstellung konnte nicht gestartet werden.'), 15000);
         try {
-            Promise.resolve(requestAction('InitializeVisualization', current)).catch(error => {if (current === requestId) fail('Die Startdaten konnten nicht angefordert werden: '+error.message);});
-        } catch (error) {fail('Die Startdaten konnten nicht angefordert werden: '+error.message);}
+            const bundle = await getBundle();
+            if (current !== requestId) return;
+            if (!last) send(bundle.payload);
+            const boot = {requestId:current,appMode,viewState:appMode ? (viewState || bundle.viewState) : null,payload:last,theme:theme(),grid};
+            const json = JSON.stringify(boot).replaceAll('<', '\\u003c');
+            frame.srcdoc = bundle.html.replace('__EF_BOOT_JSON__', () => json);
+        } catch (error) {
+            if (current === requestId) fail('Energiefluss konnte nicht geladen werden: '+error.message);
+        }
     }
     window.addEventListener('message', event => {
         if (event.source !== frame.contentWindow || event.data?.requestId !== requestId) return;
+        if (event.data.__energieflussHostError) {fail(event.data.__energieflussHostError); return;}
         if (event.data.__energieflussHostReady === true) {
             ready = true;
             clearTimeout(timer);
@@ -1142,22 +1128,25 @@ class Energiefluss extends IPSModuleStrict
         if (event.data.__energieflussViewState) window.__energieflussSaveViewState(requestId, event.data.__energieflussViewState);
     });
     window.__energieflussSaveViewState = function (token, state) {
-        if (!appMode || token !== requestId || typeof requestAction !== 'function') return;
+        if (!appMode || token !== requestId) return;
+        viewState = state;
+        viewEdited = true;
+        if (typeof requestAction !== 'function') return;
         try {Promise.resolve(requestAction('SaveAppViewState', JSON.stringify(state))).catch(() => fail('Die App-Ansicht konnte nicht gespeichert werden.'));} catch (_) {fail('Die App-Ansicht konnte nicht gespeichert werden.');}
     };
     window.handleMessage = function (value) {
         const data = typeof value === 'string' ? JSON.parse(value) : value;
-        if (data?.command === 'initializeVisualization') {initialize(data); return;}
         if (data?.command === 'reloadHtml') {startLoad(); return;}
         send(data);
     };
     retryButton.addEventListener('click', startLoad);
     setInterval(sync, 2000);
     startLoad();
+    } catch (error) {window.__energieflussStartError(error);}
 })();
 </script>
 HTML;
-            $html = str_replace(['__BUNDLE_JSON__', '__GRID_JSON__'], [$bundle, $grid], $html);
+            $html = str_replace(['__BUNDLE_TEXT__', '__GRID_JSON__'], [$bundle, $grid], $html);
             return $html;
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</div>';
@@ -7662,7 +7651,8 @@ HTML;
     {
         $html = '<meta charset="utf-8"><script>window.__EF_BOOT__=__EF_BOOT_JSON__;window.__EF_INSTANCE_ID__='
             . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
-            . ';window.__EF_APP_MODE__=window.__EF_BOOT__.appMode;'
+            . ';window.addEventListener("error",event=>window.parent.postMessage({requestId:window.__EF_BOOT__.requestId,__energieflussHostError:"Energiefluss: "+(event.error?.message || event.message)},"*"));'
+            . 'window.__EF_APP_MODE__=window.__EF_BOOT__.appMode;'
             . 'window.__EF_APP_VIEW_STATE__=window.__EF_BOOT__.viewState;'
             . 'window.__EF_BRIDGE_THEME__=window.__EF_BOOT__.theme;'
             . 'window.__EF_SERVER_GRID__=window.__EF_BOOT__.grid;</script>'
@@ -7686,6 +7676,14 @@ window.addEventListener('message', function (event) {
     if (message.theme && typeof message.theme.dark === 'boolean') {
         window.__EF_BRIDGE_THEME__ = { dark: message.theme.dark };
         document.documentElement.setAttribute('data-theme', message.theme.dark ? 'dark' : 'light');
+    }
+
+    if (window.__EF_APP_MODE__ && message.viewState
+        && (message.viewState.view !== window.__EF_APP_VIEW_STATE__?.view || message.viewState.layout !== window.__EF_APP_VIEW_STATE__?.layout)) {
+        window.__EF_APP_VIEW_STATE__ = message.viewState;
+        window.__EF_BROWSER_VIEW_INITIALIZED__ = false;
+        initializeBrowserViewState();
+        if (lastStateData) setState(lastStateData);
     }
 
     const payload = message.payload;
@@ -9067,6 +9065,7 @@ HTML;
 
         return [
             'stateVersion' => (int) (microtime(true) * 1000000),
+            'viewState' => $this->GetAppViewState(),
             'pvs'              => $pvs,
             'housePvs'         => $housePvs,
             'batteries'        => $batteries,

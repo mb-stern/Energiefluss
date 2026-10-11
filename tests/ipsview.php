@@ -23,12 +23,18 @@ $second = new Energiefluss(12346);
 $first->Create();
 $second->Create();
 $tile = $first->GetVisualizationTile();
-check(preg_match('/const packed = ("[^\r\n]+");/', $tile, $match) === 1, 'Compressed bundle not embedded');
-$bundle = json_decode(gzdecode(base64_decode(json_decode($match[1], true, 512, JSON_THROW_ON_ERROR), true)), true, 512, JSON_THROW_ON_ERROR);
+function tileBundle(string $tile): array
+{
+    check(preg_match('/<div id="ef-bundle-data" hidden>([^<]+)<\/div>/', $tile, $match) === 1, 'Compressed bundle not embedded');
+    return json_decode(gzdecode(base64_decode(preg_replace('/\s+/', '', $match[1]), true)), true, 512, JSON_THROW_ON_ERROR);
+}
+$bundle = tileBundle($tile);
 foreach (['lit-core.min.js', 'power-flow-card.js', 'sunsynk-power-flow-card.js'] as $asset) {
     check($bundle['assets'][$asset] === file_get_contents(dirname(__DIR__) . '/Energie/assets/vendor/' . $asset), 'Original card source changed during bundling');
 }
 check($first->removedHooks === ['energiefluss-assets-12345'], 'Old instance hook not removed');
+check($bundle['viewState'] === ['view' => 'flow', 'layout' => 'lite'], 'Initial view not available without an SDK response');
+check(isset($bundle['payload']['stateVersion']), 'Initial data not embedded');
 check(!str_contains($bundle['html'], '/hook/'), 'Host still needs the WebHook');
 check(!str_contains($tile, '192.168.'), 'Local IP search reintroduced');
 check(!str_contains($tile, 'private-test-password'), 'WebServer credentials leaked into HTML');
@@ -50,16 +56,14 @@ foreach (['{}', '{"view":"other","layout":"lite"}', '{"view":"house","layout":"o
     } catch (InvalidArgumentException $expected) {}
 }
 check(appState($first) === ['view' => 'house', 'layout' => 'compact-wide'], 'Invalid state overwrote the saved view');
-check(str_contains($tile, 'viewState:appMode ? data.viewState : null'), 'App state overrides browser preferences');
+check(str_contains($tile, 'viewState:appMode ? (viewState || bundle.viewState) : null'), 'App state overrides browser preferences');
 echo "PASS: separate persistent instance views, restored app state and independent browser preferences\n";
 
 function currentHostState(Energiefluss $module): array
 {
-    $module->RequestAction('InitializeVisualization', 'test-request');
-    $message = json_decode($module->messages[count($module->messages) - 1], true, 512, JSON_THROW_ON_ERROR);
-    check($message['command'] === 'initializeVisualization' && $message['requestId'] === 'test-request', 'Response cannot be assigned to its requesting client');
-    check($message['viewState'] === appState($module), 'Fresh saved instance view not sent');
-    return $message['payload'];
+    $state = json_decode(json_encode((new ReflectionMethod($module, 'BuildPayload'))->invoke($module), JSON_THROW_ON_ERROR), true, 512, JSON_THROW_ON_ERROR);
+    check($state['viewState'] === appState($module), 'Saved view is not sent with live state');
+    return $state;
 }
 
 $cachedTile = $first->GetVisualizationTile();
@@ -74,12 +78,15 @@ $testVariables[1001] = 2400;
 $updatedSnapshot = currentHostState($first);
 check($updatedSnapshot['pvs'][0]['value'] === 2400, 'Host reused stale data');
 check($updatedSnapshot['stateVersion'] > $snapshot['stateVersion'], 'Host snapshots cannot be ordered by freshness');
-check($cachedTile === $first->GetVisualizationTile(), 'Tile HTML still contains a cached initial data snapshot');
+$freshTile = tileBundle($first->GetVisualizationTile());
+check($freshTile['payload']['pvs'][0]['value'] === 2400, 'Fresh tile does not embed current readings');
+check($freshTile['viewState'] === appState($first), 'Fresh tile does not embed saved instance view');
+check(tileBundle($cachedTile)['payload']['pvs'] === [], 'Cached tile fixture was not generated before devices were configured');
 $testVariables[1001] = $testVariables[1002] = $testVariables[1003] = 0;
 $zeroSnapshot = currentHostState($first);
 check(count($zeroSnapshot['pvs']) === 2 && count($zeroSnapshot['batteries']) === 1, 'Zero power hides configured devices');
 check(array_column($zeroSnapshot['pvs'], 'value') === [0, 0], 'Legitimate zero values were discarded');
-echo "PASS: fresh SDK data independent of cached tile HTML, ordered snapshots and legitimate zero readings\n";
+echo "PASS: complete tile start data, fresh SDK refresh, ordered snapshots and legitimate zero readings\n";
 
 $label = '</script><script>throw new Error("injected")</script>';
 $first->setProperty('Producers', json_encode([['Name' => $label, 'VariableID' => 1001]], JSON_THROW_ON_ERROR));
@@ -87,15 +94,4 @@ check(currentHostState($first)['pvs'][0]['name'] === $label, 'Escaping changed t
 $tile = $first->GetVisualizationTile();
 check(!str_contains($tile, '<script>throw new Error("injected")'), 'Label enters the cached tile script context');
 check(!str_contains($first->GetConfigurationForm(), 'VisualizationBaseUrl'), 'Manual address field reintroduced');
-foreach (['', '../bad', str_repeat('x', 97), ['not-a-string']] as $invalid) {
-    try {
-        $first->RequestAction('InitializeVisualization', $invalid);
-        throw new RuntimeException('Invalid request accepted');
-    } catch (InvalidArgumentException $expected) {}
-}
-$first->sendSucceeds = false;
-try {
-    $first->RequestAction('InitializeVisualization', 'failed-request');
-    throw new LogicException('Failed SDK send ignored');
-} catch (RuntimeException $expected) {}
-echo "PASS: labels kept as data, validated request IDs, failed SDK send reported and no manual address setting\n";
+echo "PASS: labels kept as data and no manual address setting\n";
