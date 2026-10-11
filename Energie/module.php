@@ -1015,10 +1015,10 @@ class Energiefluss extends IPSModuleStrict
 
             $html = <<<'HTML'
 <meta charset="utf-8">
-<style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}#ef-load-status{padding:1em}#ef-load-retry{margin:0 1em}</style>
+<style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}#ef-bridge-frame{position:absolute;inset:0}#ef-bridge-frame.ef-starting{opacity:0;pointer-events:none}#ef-load-status{padding:1em}#ef-load-retry{margin:0 1em}</style>
 <div id="ef-load-status" role="status">Energiefluss wird geladen …</div>
 <button id="ef-load-retry" type="button" hidden>Erneut laden</button>
-<iframe id="ef-bridge-frame" title="Energiefluss" allow="clipboard-write" hidden></iframe>
+<iframe id="ef-bridge-frame" class="ef-starting" title="Energiefluss" allow="clipboard-write"></iframe>
 <div id="ef-bundle-data" hidden>__BUNDLE_TEXT__</div>
 <script>
 window.__energieflussStartError = function (error) {
@@ -1074,10 +1074,8 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
         if (typeof DecompressionStream !== 'function') throw new Error('Bitte die Browser-/WebView-Laufzeit aktualisieren: gzip-Dekomprimierung wird benötigt.');
         const bytes = Uint8Array.from(atob(packed), c => c.charCodeAt(0));
         const bundle = await new Response(new Blob([bytes]).stream().pipeThrough(new DecompressionStream('gzip'))).json();
-        const urls = [];
         const assetUrl = source => {
             const url = URL.createObjectURL(new Blob([source], {type:'text/javascript'}));
-            urls.push(url);
             return url;
         };
         const lit = assetUrl(bundle.assets['lit-core.min.js']);
@@ -1085,7 +1083,6 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
         for (const [name, token] of [['power-flow-card.js','__EF_POWER_FLOW_ASSET__'],['sunsynk-power-flow-card.js','__EF_SUNSYNK_ASSET__']]) {
             html = html.replaceAll(token, assetUrl(bundle.assets[name].replaceAll('./lit-core.min.js', lit)));
         }
-        window.addEventListener('pagehide', () => urls.forEach(url => URL.revokeObjectURL(url)), {once:true});
         return {html,payload:bundle.payload,viewState:bundle.viewState};
     }
     function getBundle() {
@@ -1097,7 +1094,7 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
         requestId = Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
         const current = requestId;
         ready = viewEdited = false;
-        frame.hidden = true;
+        frame.classList.add('ef-starting');
         frame.srcdoc = '';
         status.textContent = 'Energiefluss wird geladen …';
         status.hidden = false;
@@ -1120,7 +1117,7 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
         if (event.data.__energieflussHostReady === true) {
             ready = true;
             clearTimeout(timer);
-            frame.hidden = false;
+            frame.classList.remove('ef-starting');
             status.hidden = true;
             retryButton.hidden = true;
             sync();

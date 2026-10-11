@@ -9,12 +9,23 @@ const fixture = (mode, token = '', id = 32101, state = {view:'flow',layout:'full
 (async () => {
     const browser = await chromium.launch({executablePath:process.env.CHROMIUM_BINARY || '/usr/bin/chromium',headless:true,args:['--no-sandbox']});
     try {
-        for (const transport of ['native','browser','connect']) {
-            const context = await browser.newContext({viewport:{width:1250,height:750}});
+        for (const transport of ['native','mobile','browser','connect']) {
+            const native = transport==='native' || transport==='mobile';
+            const context = await browser.newContext(transport==='mobile' ? {viewport:{width:390,height:844},isMobile:true,hasTouch:true,deviceScaleFactor:3} : {viewport:{width:1250,height:750}});
             const saved = new Map([[32101,{view:'flow',layout:'full'}],[32102,{view:'house',layout:'compact-wide'}]]);
             const pages = new Map(), requests = [], errors = [];
             let responseMode = 'fresh';
             await context.addInitScript(({native}) => {
+                if (window === window.parent) {
+                    window.frameStartupSamples = [];
+                    new MutationObserver(records => {
+                        for (const {target} of records) {
+                            if (target.id !== 'ef-bridge-frame' || !target.srcdoc) continue;
+                            const style = getComputedStyle(target), rect = target.getBoundingClientRect();
+                            window.frameStartupSamples.push({display:style.display,opacity:style.opacity,width:rect.width,height:rect.height});
+                        }
+                    }).observe(document,{subtree:true,attributes:true,attributeFilter:['srcdoc']});
+                }
                 if (window !== window.parent) {
                     if (native) Object.defineProperty(window,'localStorage',{configurable:true,get(){throw new DOMException('blocked','SecurityError');}});
                     document.addEventListener('DOMContentLoaded', () => {
@@ -35,7 +46,7 @@ const fixture = (mode, token = '', id = 32101, state = {view:'flow',layout:'full
                     localStorage.setItem('symcon-energiefluss-instance-32102-view','house');
                     localStorage.setItem('symcon-energiefluss-instance-32102-technical-layout','compact-wide');
                 }
-            }, {native:transport==='native'});
+            }, {native});
             await context.route(/^https?:/, route => {
                 const url = new URL(route.request().url());
                 requests.push(url.href);
@@ -61,12 +72,12 @@ const fixture = (mode, token = '', id = 32101, state = {view:'flow',layout:'full
                     if (action === 'SaveAppViewState') {saved.set(instance,JSON.parse(value)); return;}
                     throw new Error('Startup must not require a requestAction: '+action);
                 });
-                if (transport==='native') await page.setContent('<style>:root{--content-color:#eeeeee}</style>'+fixture('fresh-tile','',id,saved.get(id)));
+                if (native) await page.setContent('<style>:root{--content-color:#eeeeee}</style>'+fixture('fresh-tile','',id,saved.get(id)));
                 else await page.goto((transport==='connect'?'https://example.ipmagic.de':'http://symcon-test.invalid')+'/view/'+id);
                 return page;
             }
             async function rendered(page) {
-                await page.waitForFunction(() => !document.getElementById('ef-bridge-frame').hidden);
+                await page.waitForFunction(() => !document.getElementById('ef-bridge-frame').classList.contains('ef-starting'));
                 const frame = page.frames().find(frame => frame !== page.mainFrame() && frame.url()==='about:srcdoc');
                 await frame.waitForFunction(() => !!document.getElementById('eflow') && !document.getElementById('ef-initial-view-guard'));
                 return frame;
@@ -80,9 +91,22 @@ const fixture = (mode, token = '', id = 32101, state = {view:'flow',layout:'full
             assert.deepEqual(actual,{view:'flow',layout:'full',pvs:[2398,1971],battery:2457,theme:'dark',injected:undefined});
             await frame.waitForFunction(() => visibleSamples.length > 0);
             for (const sample of await frame.evaluate(() => visibleSamples)) {assert.equal(sample.pvs,2);assert.equal(sample.batteries,1);assert.equal(sample.layout,'full');assert.equal(Number(sample.pv1),2398);}
-            if (transport==='native') assert.ok(await frame.locator('[data-symcon-icon="charging-station"]').count());
+            if (native) assert.ok(await frame.locator('[data-symcon-icon="charging-station"]').count());
             await first.evaluate(data=>handleMessage(data),{stateVersion:1,pvs:[],batteries:[],groups:[],viewState:{view:'house',layout:'lite'}});
             assert.equal(await frame.evaluate(()=>lastStateData.pvs.length),2);
+            const startupSamples = await first.evaluate(()=>frameStartupSamples);
+            assert.ok(startupSamples.length>0);
+            for (const sample of startupSamples) {
+                assert.notEqual(sample.display,'none','WebView must be able to initialize the frame while loading');
+                assert.ok(sample.width>0 && sample.height>0);
+                assert.equal(sample.opacity,'0','Unconfigured card must remain invisible while loading');
+            }
+            await first.evaluate(()=>dispatchEvent(new PageTransitionEvent('pagehide',{persisted:true})));
+            await first.evaluate(()=>dispatchEvent(new PageTransitionEvent('pageshow',{persisted:true})));
+            await first.evaluate(()=>handleMessage({command:'reloadHtml'}));
+            frame = await rendered(first);
+            assert.equal(await frame.locator('sunsynk-power-flow-card').count(),1,'Returning to cached tile must retain local modules');
+            assert.equal(await frame.evaluate(()=>Number(document.querySelector('sunsynk-power-flow-card').hass.states['sensor.symcon_pv1'].state)),2398);
             const second = await open(32102);
             const secondFrame = await rendered(second);
             assert.deepEqual(await secondFrame.evaluate(()=>({view:currentDisplayMode,layout:currentTechnicalLayout})),{view:'house',layout:'compact-wide'});
@@ -113,16 +137,16 @@ const fixture = (mode, token = '', id = 32101, state = {view:'flow',layout:'full
             assert.equal(await frame.evaluate(()=>currentDisplayMode),'house');
             responseMode='fresh';
             await first.evaluate(()=>handleMessage({command:'reloadHtml'}));await rendered(first);
-            if(transport==='native') assert.equal(requests.length,0);
+            if(native) assert.equal(requests.length,0);
             assert.ok(requests.every(url=>/\/view\/|\/icons\.js$/.test(url)));
             assert.deepEqual(errors,[]);
-            if (transport==='native') {
+            if (native) {
                 await context.addInitScript(()=>{window.DecompressionStream=undefined;});
                 const legacy = await open(32101);
                 await legacy.waitForFunction(()=>!document.getElementById('ef-load-retry').hidden);
                 assert.match(await legacy.locator('#ef-load-status').innerText(),/gzip/);
             }
-            console.log('PASS: '+transport+' without WebHook, immediate embedded state without startup requestAction, both original cards, isolated views, reloads, zeros, escaped labels and live SDK updates');
+            console.log('PASS: '+transport+' without WebHook, immediate embedded state without startup requestAction, both original cards, isolated views, reloads after page return, zeros, escaped labels and live SDK updates');
             await context.close();
         }
     } finally {await browser.close();}
