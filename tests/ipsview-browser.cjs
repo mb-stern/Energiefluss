@@ -77,7 +77,7 @@ const fixture = (mode, token = '', id = 32101, state = {view:'flow',layout:'full
                 return page;
             }
             async function rendered(page) {
-                await page.waitForFunction(() => !document.getElementById('ef-bridge-frame').classList.contains('ef-starting'));
+                await page.waitForFunction(() => {const frame=document.getElementById('ef-bridge-frame');return frame && !frame.classList.contains('ef-starting');});
                 const frame = page.frames().find(frame => frame !== page.mainFrame() && frame.url()==='about:srcdoc');
                 await frame.waitForFunction(() => !!document.getElementById('eflow') && !document.getElementById('ef-initial-view-guard'));
                 return frame;

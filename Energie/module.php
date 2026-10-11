@@ -1018,7 +1018,6 @@ class Energiefluss extends IPSModuleStrict
 <style>html,body,#ef-bridge-frame{margin:0;width:100%;height:100%;border:0;overflow:hidden;background:transparent}html,body{position:absolute;inset:0}#ef-bridge-frame{position:absolute;inset:0}#ef-bridge-frame.ef-starting{opacity:0;pointer-events:none}#ef-load-status{padding:1em}#ef-load-retry{margin:0 1em}</style>
 <div id="ef-load-status" role="status">Energiefluss wird geladen …</div>
 <button id="ef-load-retry" type="button" hidden>Erneut laden</button>
-<iframe id="ef-bridge-frame" class="ef-starting" title="Energiefluss" allow="clipboard-write"></iframe>
 <div id="ef-bundle-data" hidden>__BUNDLE_TEXT__</div>
 <script>
 window.__energieflussStartError = function (error) {
@@ -1035,7 +1034,10 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
     try {
     const packed = document.getElementById('ef-bundle-data').textContent.replace(/\s+/g, '');
     const grid = __GRID_JSON__;
-    const frame = document.getElementById('ef-bridge-frame');
+    const frame = document.createElement('iframe');
+    frame.id = 'ef-bridge-frame';
+    frame.title = 'Energiefluss';
+    frame.allow = 'clipboard-write';
     const status = document.getElementById('ef-load-status');
     const retryButton = document.getElementById('ef-load-retry');
     const ancestors = Array.from(window.location.ancestorOrigins || []);
@@ -1089,24 +1091,45 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
         if (!bundlePromise) bundlePromise = unpack().catch(error => {bundlePromise = null; throw error;});
         return bundlePromise;
     }
+    async function waitForTile() {
+        if (document.readyState !== 'complete') {
+            await new Promise(resolve => window.addEventListener('load', resolve, {once:true}));
+        }
+        await new Promise(resolve => requestAnimationFrame(resolve));
+        if (!frame.isConnected) document.body.appendChild(frame);
+        const sized = () => {
+            const bounds = frame.getBoundingClientRect();
+            return bounds.width > 0 && bounds.height > 0;
+        };
+        if (sized()) return;
+        await new Promise(resolve => {
+            const observer = new ResizeObserver(() => {
+                if (sized()) {observer.disconnect(); resolve();}
+            });
+            observer.observe(frame);
+        });
+    }
     async function startLoad() {
         clearTimeout(timer);
         requestId = Date.now().toString(36)+'_'+Math.random().toString(36).slice(2);
         const current = requestId;
         ready = viewEdited = false;
         frame.classList.add('ef-starting');
-        frame.srcdoc = '';
         status.textContent = 'Energiefluss wird geladen …';
         status.hidden = false;
         retryButton.hidden = true;
-        timer = setTimeout(() => fail('Die Energiefluss-Darstellung konnte nicht gestartet werden.'), 15000);
         try {
+            await waitForTile();
+            if (current !== requestId) return;
             const bundle = await getBundle();
             if (current !== requestId) return;
             if (!last) send(bundle.payload);
             const boot = {requestId:current,appMode,viewState:appMode ? (viewState || bundle.viewState) : null,payload:last,theme:theme(),grid};
             const json = JSON.stringify(boot).replaceAll('<', '\\u003c');
             frame.srcdoc = bundle.html.replace('__EF_BOOT_JSON__', () => json);
+            timer = setTimeout(() => {
+                if (current === requestId && !ready) fail('Die Energiefluss-Darstellung konnte nicht gestartet werden.');
+            }, 15000);
         } catch (error) {
             if (current === requestId) fail('Energiefluss konnte nicht geladen werden: '+error.message);
         }
