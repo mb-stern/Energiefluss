@@ -27,8 +27,11 @@ class IPSModuleStrict
     public function setProperty(string $name, mixed $value): void { $this->properties[$name] = $value; }
 }
 
-function IPS_VariableExists(int $id): bool { return false; }
+$testVariables = [];
+function IPS_VariableExists(int $id): bool { return array_key_exists($id, $GLOBALS['testVariables']); }
 function IPS_ObjectExists(int $id): bool { return false; }
+function GetValue(int $id): mixed { return $GLOBALS['testVariables'][$id]; }
+function GetValueFormatted(int $id): string { return (string) GetValue($id); }
 
 require dirname(__DIR__) . '/Energie/module.php';
 
@@ -96,9 +99,38 @@ check(str_contains($appHost, 'window.__EF_APP_VIEW_STATE__={"view":"house","layo
 check(str_contains($browserHost, 'window.__EF_APP_VIEW_STATE__=null'), 'App state overrides browser preferences');
 echo "PASS: separate persistent instance views, restored app state and independent browser preferences\n";
 
-$first->setProperty('WallboxName', '</script><script>throw new Error("injected")</script>');
+function currentHostState(Energiefluss $module): array
+{
+    $html = (new ReflectionMethod($module, 'GetVisualizationHostHtml'))->invoke($module, true);
+    check(preg_match('/handleMessage\((\{[^\r\n]+\})\);/', $html, $match) === 1, 'Host does not initialize its own state');
+    return json_decode($match[1], true, 512, JSON_THROW_ON_ERROR);
+}
+
+$cachedTile = $first->GetVisualizationTile();
+$first->setProperty('Producers', '[{"Name":"Ost","VariableID":1001,"MaxPower":5000},{"Name":"West","VariableID":1002,"MaxPower":5000}]');
+$first->setProperty('Batteries', '[{"Name":"Speicher","VariableID":1003,"SoCVariableID":1004}]');
+$testVariables = [1001 => 2398, 1002 => 1971, 1003 => 2457, 1004 => 46];
+$snapshot = currentHostState($first);
+check(array_column($snapshot['pvs'], 'value') === [2398, 1971], 'Current PV values missing from first host state');
+check($snapshot['batteries'][0]['value'] === 2457 && $snapshot['batteries'][0]['soc'] === 46, 'Current battery state missing');
+check(is_int($snapshot['stateVersion']) && $snapshot['stateVersion'] > 0, 'Missing state version');
+$testVariables[1001] = 2400;
+$updatedSnapshot = currentHostState($first);
+check($updatedSnapshot['pvs'][0]['value'] === 2400, 'Host reused stale data');
+check($updatedSnapshot['stateVersion'] > $snapshot['stateVersion'], 'Host snapshots cannot be ordered by freshness');
+check($cachedTile === $first->GetVisualizationTile(), 'Tile HTML still contains a cached initial data snapshot');
+$testVariables[1001] = $testVariables[1002] = $testVariables[1003] = 0;
+$zeroSnapshot = currentHostState($first);
+check(count($zeroSnapshot['pvs']) === 2 && count($zeroSnapshot['batteries']) === 1, 'Zero power hides configured devices');
+check(array_column($zeroSnapshot['pvs'], 'value') === [0, 0], 'Legitimate zero values were discarded');
+echo "PASS: fresh host data independent of cached tile HTML, ordered snapshots and legitimate zero readings\n";
+
+$label = '</script><script>throw new Error("injected")</script>';
+$first->setProperty('Producers', json_encode([['Name' => $label, 'VariableID' => 1001]], JSON_THROW_ON_ERROR));
+$safeHost = (new ReflectionMethod($first, 'GetVisualizationHostHtml'))->invoke($first, true);
+check(!str_contains($safeHost, '<script>throw new Error("injected")'), 'Label escapes the host script context');
+check(currentHostState($first)['pvs'][0]['name'] === $label, 'Escaping changed the configured label');
 $tile = $first->GetVisualizationTile();
 check(strlen($tile) < 32768, 'Initial HTML embeds a large asset bundle');
-check(!str_contains($tile, '<script>throw new Error("injected")'), 'Label escapes the script context');
 check(!str_contains($first->GetConfigurationForm(), 'VisualizationBaseUrl'), 'Manual address field reintroduced');
 echo "PASS: small initial tile, script-safe labels and no manual address setting\n";

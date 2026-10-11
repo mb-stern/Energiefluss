@@ -995,11 +995,6 @@ class Energiefluss extends IPSModuleStrict
     public function GetVisualizationTile(): string
     {
         try {
-            $payload = json_encode(
-                $this->BuildPayload(),
-                JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
-            );
-
             $gridPayload = json_encode(
                 $this->GetVisualizationGridPayload(),
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
@@ -1022,14 +1017,13 @@ class Energiefluss extends IPSModuleStrict
 <script>
 (function () {
     const raw = __HOST_URL_JSON__;
-    const initial = __INITIAL_JSON__;
     const grid = __GRID_JSON__;
     const serverOrigins = __SERVER_ORIGINS_JSON__;
     const instanceID = __INSTANCE_ID_JSON__;
     const frame = document.getElementById('ef-bridge-frame');
     const status = document.getElementById('ef-load-status');
     const retryButton = document.getElementById('ef-load-retry');
-    let ready = false, last = initial, timer = null;
+    let ready = false, last = null, timer = null;
     let probes = [];
 
     function origin() {
@@ -1071,8 +1065,14 @@ class Energiefluss extends IPSModuleStrict
         return {dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)};
     }
     function send(data) {
-        if (!data || data.command !== 'reloadHtml') last = data;
-        if (ready && frame.contentWindow) frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()}, '*');
+        if (!data || !Number.isSafeInteger(data.stateVersion) || data.stateVersion <= 0
+            || !Array.isArray(data.pvs) || !Array.isArray(data.batteries) || !Array.isArray(data.groups)) return;
+        if (last && data.stateVersion < last.stateVersion) return;
+        last = data;
+        sync();
+    }
+    function sync() {
+        if (ready && frame.contentWindow) frame.contentWindow.postMessage({__energieflussBridge:true,payload:last,grid:grid,theme:theme()}, '*');
     }
     function loadHost(base) {
         clearTimeout(timer);
@@ -1115,7 +1115,7 @@ class Energiefluss extends IPSModuleStrict
             clearTimeout(timer);
             status.hidden = true;
             retryButton.hidden = true;
-            send(last);
+            sync();
         }
         if (appMode && event.data.__energieflussViewState && typeof requestAction === 'function') {
             try {Promise.resolve(requestAction('SaveAppViewState', JSON.stringify(event.data.__energieflussViewState))).catch(() => showStatus('Die App-Ansicht konnte nicht gespeichert werden.'));} catch (_) {showStatus('Die App-Ansicht konnte nicht gespeichert werden.');}
@@ -1133,8 +1133,8 @@ class Energiefluss extends IPSModuleStrict
 </script>
 HTML;
             return str_replace(
-                ['__HOST_URL_JSON__', '__INITIAL_JSON__', '__GRID_JSON__', '__SERVER_ORIGINS_JSON__', '__INSTANCE_ID_JSON__'],
-                [$hostUrlJson, $payload, $gridPayload, $serverOrigins, $instanceID],
+                ['__HOST_URL_JSON__', '__GRID_JSON__', '__SERVER_ORIGINS_JSON__', '__INSTANCE_ID_JSON__'],
+                [$hostUrlJson, $gridPayload, $serverOrigins, $instanceID],
                 $html
             );
         } catch (Throwable $e) {
@@ -7503,6 +7503,7 @@ HTML;
     }
 
     let lastStateData = null;
+    let lastStateVersion = 0;
     let lastCompactLayout = window.matchMedia('(max-width: 600px)').matches;
 
     function handleMessage(data) {
@@ -7513,6 +7514,11 @@ HTML;
             return;
         }
 
+        if (!d || !Number.isSafeInteger(d.stateVersion) || d.stateVersion <= lastStateVersion
+            || !Array.isArray(d.pvs) || !Array.isArray(d.batteries) || !Array.isArray(d.groups)) {
+            return;
+        }
+        lastStateVersion = d.stateVersion;
         initializeBrowserViewState();
 
         startWidgetDetection();
@@ -7758,13 +7764,18 @@ if (window.__EF_APP_MODE__ === true) {
     }
 }
 
+handleMessage(__CURRENT_STATE_JSON__);
+
 try {
     window.parent.postMessage({__energieflussHostReady: true}, '*');
 } catch (_) {}
 </script>
 HTML;
 
-        return $html;
+        return str_replace('__CURRENT_STATE_JSON__', json_encode(
+            $this->BuildPayload(),
+            JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_HEX_TAG | JSON_HEX_AMP | JSON_HEX_APOS | JSON_HEX_QUOT
+        ), $html);
     }
 
     protected function ProcessHookData(): void
@@ -9199,6 +9210,7 @@ HTML;
         $gridConnectedStatus = ((float) $gridConnectedRaw) != 0.0 ? 'on-grid' : 'off-grid';
 
         return [
+            'stateVersion' => (int) (microtime(true) * 1000000),
             'pvs'              => $pvs,
             'housePvs'         => $housePvs,
             'batteries'        => $batteries,
