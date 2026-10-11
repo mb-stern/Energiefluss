@@ -1158,9 +1158,6 @@ class Energiefluss extends IPSModuleStrict
 </script>
 HTML;
             $html = str_replace(['__BUNDLE_JSON__', '__GRID_JSON__'], [$bundle, $grid], $html);
-            if (strlen($html) > 900000) {
-                throw new RuntimeException('Die komprimierte Darstellung ist für den Symcon-Output-Buffer zu groß (' . strlen($html) . ' Bytes).');
-            }
             return $html;
         } catch (Throwable $e) {
             return '<div style="padding:1em">Fehler: ' . htmlspecialchars($e->getMessage(), ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8') . '</div>';

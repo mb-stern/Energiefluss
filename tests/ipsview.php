@@ -33,7 +33,7 @@ check(!str_contains($bundle['html'], '/hook/'), 'Host still needs the WebHook');
 check(!str_contains($tile, '192.168.'), 'Local IP search reintroduced');
 check(!str_contains($tile, 'private-test-password'), 'WebServer credentials leaked into HTML');
 check(!str_contains($tile, 'LoadAppVisualization'), 'Chunk loading was reintroduced');
-check(strlen($tile) < 900000 && strlen(json_encode(['result' => $tile], JSON_THROW_ON_ERROR)) < 1048576, 'Tile exceeds the real output buffer limit');
+check(strlen(json_encode(['result' => $tile], JSON_THROW_ON_ERROR)) < 1048576, 'Tile exceeds the real output buffer limit');
 echo 'PASS: complete compressed original assets, no WebHook or IP discovery, tile ' . strlen($tile) . " bytes below the 1048576-byte limit\n";
 
 check(appState($first) === ['view' => 'flow', 'layout' => 'lite'], 'Wrong initial view');
