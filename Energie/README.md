@@ -255,6 +255,12 @@ mit automatischer Skalierung der Visualisierung.
 9. Darstellung anpassen
 10. Fertig
 
+## IPSView-App
+
+Die Darstellung ermittelt die Serveradresse automatisch über die Basisadresse des HTML-Dokuments, den Referrer, das übergeordnete Browserfenster oder die Browseradresse. Eine zusätzliche Serveradresse muss im Modul nicht konfiguriert werden. Stellt die App keine dieser Adressen bereit, zeigt die Darstellung eine Fehlermeldung.
+
+Ansicht und Techniklayout werden weiterhin pro Modulinstanz gespeichert. Mehrere Instanzen können somit unterschiedliche Ansichten behalten. Verweigert die App den Browserspeicher, funktioniert die Anzeige mit den Standardwerten; die Ansicht kann dann nicht dauerhaft gespeichert werden.
+
 ---
 
 # ❤️ Credits

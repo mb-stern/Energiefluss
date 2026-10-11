@@ -12,7 +12,6 @@
 
 declare(strict_types=1);
 
-// v39: v38 JavaScript-Klammerfehler behoben; IPS-WebHook-Sofortstart bleibt unverändert.
 class Energiefluss extends IPSModuleStrict
 {
 
@@ -20,20 +19,14 @@ class Energiefluss extends IPSModuleStrict
     {
         parent::Create();
 
-        // Alle Vendor-Assets der Visualisierung über genau einen
-        // instanzspezifischen IPSModuleStrict-WebHook ausliefern. Das gewünschte
-        // Asset wird per Query-Parameter ausgewählt. Dadurch bleiben die Dateien
-        // im Modulverzeichnis und große Base64-data:-URLs entfallen vollständig.
         $this->RegisterHook($this->GetVisualizationWebHookBaseAddress());
 
-        // Dynamische Anlagen.
         $this->RegisterPropertyString('Producers', '[]');
         $this->RegisterPropertyString('Batteries', '[]');
         $this->RegisterPropertyString('Inverters', '[]');
         $this->RegisterPropertyInteger('OutsideTemperature', 0);
         $this->RegisterPropertyInteger('SolarForecastRemaining', 0);
 
-        // Netz.
         $this->RegisterPropertyInteger('L1', 0);
         $this->RegisterPropertyInteger('GridExportPower', 0);
         $this->RegisterPropertyBoolean('InvertGridPower', false);
@@ -48,7 +41,6 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('GridVoltageL3', 0);
         $this->RegisterPropertyInteger('GridConnectedStatus', 0);
 
-        // Wechselrichter-Messwerte für die originale Sunsynk-Anzeige.
         $this->RegisterPropertyInteger('InverterPower', 0);
         $this->RegisterPropertyInteger('InverterCurrentL1', 0);
         $this->RegisterPropertyInteger('InverterCurrentL2', 0);
@@ -58,33 +50,23 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('AutarkyVariable', 0);
         $this->RegisterPropertyInteger('SelfConsumptionVariable', 0);
 
-        // Interne Berechnungsart für die aktuelle Hausleistung (W),
-        // falls keine gültige Hausleistungsvariable verknüpft ist:
-        // balance: PV + Batterie + Netzsaldo
-        // inverter-grid: Wechselrichterleistung + Netzsaldo
-        //
-        // Eine gültige HousePower-Variable hat immer Vorrang.
         $this->RegisterPropertyString('HouseCalculationMode', 'balance');
-        // energy = Tagesenergien, power = aktuelle Leistungen, no = ausblenden.
+
         $this->RegisterPropertyString('AutarkyCalculationMode', 'energy');
-        // Alte Eigenschaften bleiben zur Abwärtskompatibilität registriert,
-        // werden in der neuen Sunsynk-Konfiguration aber nicht mehr angezeigt.
+
         $this->RegisterPropertyInteger('InverterVoltage', 0);
         $this->RegisterPropertyInteger('InverterCurrent', 0);
         $this->RegisterPropertyInteger('InverterFrequency', 0);
         $this->RegisterPropertyInteger('InverterTemperature', 0);
         $this->RegisterPropertyInteger('InverterDCTemperature', 0);
 
-        // Wallbox.
         $this->RegisterPropertyString('WallboxName', 'Wallbox');
         $this->RegisterPropertyInteger('WallboxPower', 0);
         $this->RegisterPropertyInteger('WallboxEnergy', 0);
         $this->RegisterPropertyInteger('WallboxSoC', 0);
 
-        // Weitere Darstellung.
         $this->RegisterPropertyString('Groups', '[]');
 
-        // Optional erzeugte Modulvariablen.
         $this->RegisterPropertyBoolean('CreateVariableHousePower', false);
         $this->RegisterPropertyBoolean('CreateVariableHouseEnergy', false);
         $this->RegisterPropertyBoolean('CreateVariableAutarky', false);
@@ -101,7 +83,6 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyBoolean('CreateVariableWallboxPower', false);
         $this->RegisterPropertyBoolean('CreateVariableWallboxEnergy', false);
 
-        // Farben der Visualisierung.
         $this->RegisterPropertyInteger('ColorSolar', 16766287);
         $this->RegisterPropertyInteger('ColorGridImport', 15684432);
         $this->RegisterPropertyInteger('ColorGridExport', 6732650);
@@ -110,23 +91,19 @@ class Energiefluss extends IPSModuleStrict
         $this->RegisterPropertyInteger('ColorConsumers', 3123599);
         $this->RegisterPropertyInteger('ColorInverter', 11776947);
 
-        // Farben der Haus-Visualisierung.
-        // Vorgaben entsprechen den Originalfarben der eingebetteten home.svg.
-        $this->RegisterPropertyInteger('HouseColorFacade', 2107187);       // #202733
-        $this->RegisterPropertyInteger('HouseColorRoof', 1646636);         // #19202c
-        $this->RegisterPropertyInteger('HouseColorRoofSecondary', 1712685);// #1a222d
-        $this->RegisterPropertyInteger('HouseColorWindows', 16772536);     // #ffedb8
-        $this->RegisterPropertyInteger('HouseColorSolarPanels', 10393218); // #9e9682
-        $this->RegisterPropertyInteger('HouseColorInverter', 857372);      // #0d151c
-        $this->RegisterPropertyInteger('HouseColorCar', 790808);           // #0c1118
-        $this->RegisterPropertyInteger('HouseColorCarDetails', 1448741);   // #161b25
-        $this->RegisterPropertyInteger('HouseColorBattery', 858148);       // #0d1824
-        $this->RegisterPropertyInteger('HouseColorBatteryAccent', 6868216);// #68ccf8
+        $this->RegisterPropertyInteger('HouseColorFacade', 2107187);
+        $this->RegisterPropertyInteger('HouseColorRoof', 1646636);
+        $this->RegisterPropertyInteger('HouseColorRoofSecondary', 1712685);
+        $this->RegisterPropertyInteger('HouseColorWindows', 16772536);
+        $this->RegisterPropertyInteger('HouseColorSolarPanels', 10393218);
+        $this->RegisterPropertyInteger('HouseColorInverter', 857372);
+        $this->RegisterPropertyInteger('HouseColorCar', 790808);
+        $this->RegisterPropertyInteger('HouseColorCarDetails', 1448741);
+        $this->RegisterPropertyInteger('HouseColorBattery', 858148);
+        $this->RegisterPropertyInteger('HouseColorBatteryAccent', 6868216);
 
-        // JSON-Austauschfeld für Hausfarben-Presets.
         $this->RegisterPropertyString('HouseColorJson', '');
 
-        // Animationsgeschwindigkeit: 100 % entspricht dem bisherigen Verhalten.
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
         $this->SetVisualizationType(1);
@@ -161,10 +138,6 @@ class Energiefluss extends IPSModuleStrict
             if (IPS_GetKernelRunlevel() === KR_READY) {
                 $this->PushState();
 
-                // Änderungen an Listen, AUX-Zuordnung, Icons oder Layout
-                // benötigen einen vollständigen Neuaufbau der Web-Komponente.
-                // ApplyChanges wird bei jeder übernommenen Änderung im
-                // Konfigurationsformular ausgeführt.
                 $this->ReloadHtml();
             }
         } catch (Throwable $e) {
@@ -871,9 +844,6 @@ class Energiefluss extends IPSModuleStrict
                 | JSON_PRETTY_PRINT
             );
 
-            // Das Export-JSON nur als Dialoginhalt zurückgeben.
-            // Dadurch wird das Eingabefeld nicht verändert und IP-Symcon
-            // erkennt keine ungespeicherte Konfigurationsänderung.
             return $json;
         } catch (Throwable $e) {
             $this->LogMessage('ExportHouseColors: ' . $e->getMessage(), KL_ERROR);
@@ -894,8 +864,6 @@ class Energiefluss extends IPSModuleStrict
                 return 'Die JSON-Farbkonfiguration ist ungültig.';
             }
 
-            // Unterstützt das dokumentierte Format mit "colors" sowie
-            // einfache JSON-Objekte, die die Farbnamen direkt enthalten.
             $source = isset($decoded['colors']) && is_array($decoded['colors'])
                 ? $decoded['colors']
                 : $decoded;
@@ -913,9 +881,6 @@ class Energiefluss extends IPSModuleStrict
                     );
                 }
 
-                // Nur das geöffnete Konfigurationsformular aktualisieren.
-                // Der Benutzer kann die importierten Werte prüfen und anschließend
-                // selbst über "Änderungen übernehmen" in die Instanz schreiben.
                 $this->UpdateFormField($property, 'value', $color);
                 $imported++;
             }
@@ -924,8 +889,6 @@ class Energiefluss extends IPSModuleStrict
                 return 'Im JSON wurden keine bekannten Hausfarben gefunden.';
             }
 
-            // Das Importfeld ist nur eine temporäre Eingabe. Auch diese Änderung
-            // bleibt zunächst im geöffneten Formular und wird nicht direkt gespeichert.
             $this->UpdateFormField('HouseColorJson', 'value', '');
 
             return sprintf(
@@ -975,20 +938,18 @@ class Energiefluss extends IPSModuleStrict
 
     public function ResetHouseColors(): void
     {
-        // Originalfarben der eingebetteten Haus-SVG in das geöffnete
-        // Konfigurationsformular eintragen. Gespeichert werden sie erst, wenn
-        // der Benutzer "Änderungen übernehmen" auswählt.
+
         $defaults = [
-            'HouseColorFacade'        => 2107187,  // #202733
-            'HouseColorRoof'          => 1646636,  // #19202c
-            'HouseColorRoofSecondary' => 1712685,  // #1a222d
-            'HouseColorWindows'       => 16772536, // #ffedb8
-            'HouseColorSolarPanels'   => 10393218, // #9e9682
-            'HouseColorInverter'      => 857372,   // #0d151c
-            'HouseColorCar'           => 790808,   // #0c1118
-            'HouseColorCarDetails'    => 1448741,  // #161b25
-            'HouseColorBattery'       => 858148,   // #0d1824
-            'HouseColorBatteryAccent' => 6868216,  // #68ccf8
+            'HouseColorFacade'        => 2107187,
+            'HouseColorRoof'          => 1646636,
+            'HouseColorRoofSecondary' => 1712685,
+            'HouseColorWindows'       => 16772536,
+            'HouseColorSolarPanels'   => 10393218,
+            'HouseColorInverter'      => 857372,
+            'HouseColorCar'           => 790808,
+            'HouseColorCarDetails'    => 1448741,
+            'HouseColorBattery'       => 858148,
+            'HouseColorBatteryAccent' => 6868216,
         ];
 
         foreach ($defaults as $property => $value) {
@@ -1019,14 +980,6 @@ class Energiefluss extends IPSModuleStrict
                 JSON_THROW_ON_ERROR | JSON_UNESCAPED_UNICODE | JSON_UNESCAPED_SLASHES
             );
 
-            // Die eigentliche Visualisierung läuft in einer normalen HTTP-Seite
-            // des instanzspezifischen WebHooks. IP-Symcon/IPS-View liefert die
-            // Kachel selbst als data:text/html aus; dort stehen u. a. localStorage
-            // und normale Modul-Imports nicht zuverlässig zur Verfügung.
-            //
-            // Die kleine data:-Kachel ist deshalb nur noch die Bridge. Sie lädt
-            // den unveränderten Visualisierungs-Host per iframe und reicht alle
-            // Symcon-Payloads per postMessage weiter.
             $hostUrl = $this->GetVisualizationModuleWebHookUrl('visualization-host');
             $hostUrlJson = json_encode(
                 $hostUrl,
@@ -1040,16 +993,19 @@ class Energiefluss extends IPSModuleStrict
                 . 'const initial=' . $payload . ';'
                 . 'const grid=' . $gridPayload . ';'
                 . 'const frame=document.getElementById("ef-bridge-frame");'
-                
+
                 . 'let ready=false,last=initial;'
-                
+
                 . 'function origin(){'
-                . 'try{if(document.referrer){const u=new URL(document.referrer);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
-                . 'try{const a=window.location.ancestorOrigins;if(a&&a.length){const u=new URL(a[0]);if(u.origin&&u.origin!=="null")return u.origin;}}catch(e){}'
+                . 'try{const u=new URL(document.baseURI);if(u.protocol==="http:"||u.protocol==="https:")return u.origin;}catch(e){}'
+                . 'try{if(document.referrer){const u=new URL(document.referrer);if(u.protocol==="http:"||u.protocol==="https:")return u.origin;}}catch(e){}'
+                . 'try{const a=window.location.ancestorOrigins;if(a&&a.length){const u=new URL(a[0]);if(u.protocol==="http:"||u.protocol==="https:")return u.origin;}}catch(e){}'
+                . 'try{const u=new URL(window.location.href);if(u.protocol==="http:"||u.protocol==="https:")return u.origin;}catch(e){}'
                 . 'return "";'
                 . '}'
                 . 'const base=origin();'
-                . 'frame.src=base ? new URL(raw,base).href : raw;'
+                . 'try{if(!base)throw new Error("missing origin");frame.src=new URL(raw,base).href;}catch(e){'
+                . 'const error=document.createElement("div");error.textContent="Die IP-Symcon-Serveradresse konnte nicht automatisch ermittelt werden.";frame.replaceWith(error);return;}'
                 . 'function theme(){'
                 . 'let probe="";try{probe=getComputedStyle(document.documentElement).getPropertyValue("--content-color").trim();}catch(e){}'
                 . 'if(!probe){try{probe=getComputedStyle(document.body).color||"";}catch(e){}}'
@@ -1058,8 +1014,9 @@ class Energiefluss extends IPSModuleStrict
                 . 'else if(probe&&probe[0]==="#"&&probe.length>=7){const r=parseInt(probe.substr(1,2),16),g=parseInt(probe.substr(3,2),16),b=parseInt(probe.substr(5,2),16);dark=(0.299*r+0.587*g+0.114*b)/255>0.5;}'
                 . 'if(dark===null){dark=!!(window.matchMedia&&matchMedia("(prefers-color-scheme: dark)").matches);}'
                 . 'return {dark:dark};}'
-                . 'function send(data){last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
-                . 'frame.addEventListener("load",function(){ready=true;send(initial);});'
+                . 'function send(data){if(!data||data.command!=="reloadHtml")last=data;if(!ready||!frame.contentWindow)return;frame.contentWindow.postMessage({__energieflussBridge:true,payload:data,grid:grid,theme:theme()},"*");}'
+                . 'frame.addEventListener("load",function(){ready=true;send(last);});'
+                . 'window.addEventListener("message",function(event){if(event.source!==frame.contentWindow||!event.data||event.data.__energieflussHostReady!==true)return;ready=true;send(last);});'
                 . 'window.handleMessage=function(data){send(typeof data==="string"?JSON.parse(data):data);};'
                 . '})();</script>';
         } catch (Throwable $e) {
@@ -1098,9 +1055,6 @@ class Energiefluss extends IPSModuleStrict
                 return null;
             }
 
-            // Die Grid-Widget-IDs sind echte Symcon-Objekt-/Link-IDs. Für
-            // Links lösen wir das Zielobjekt auf. Damit kann JavaScript später
-            // /visu/36446/ direkt gegen die zugehörigen Link-Widgets filtern.
             $widgetTargets = [];
             foreach ($this->CollectVisualizationWidgetIDs($grid) as $widgetID) {
                 $targetID = $this->ResolveVisualizationWidgetTarget($widgetID);
@@ -1119,10 +1073,6 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-    /**
-     * Sammelt alle Widget-IDs aus sämtlichen individualPositions-Blöcken der
-     * GridConfiguration, unabhängig von Profil (~Desktop/~Phone) und Ausrichtung.
-     */
     private function CollectVisualizationWidgetIDs(array $node): array
     {
         $ids = [];
@@ -1152,11 +1102,6 @@ class Energiefluss extends IPSModuleStrict
         return array_keys($ids);
     }
 
-    /**
-     * Liefert für eine Kachel-ID das eigentliche Zielobjekt. Ist die Kachel ein
-     * Link, wird dessen TargetID verwendet; ansonsten ist die Widget-ID selbst
-     * das Zielobjekt.
-     */
     private function ResolveVisualizationWidgetTarget(int $widgetID): int
     {
         if ($widgetID <= 0 || !IPS_ObjectExists($widgetID)) {
@@ -1164,7 +1109,7 @@ class Energiefluss extends IPSModuleStrict
         }
         try {
             $object = IPS_GetObject($widgetID);
-            // ObjectType 6 = Link
+
             if ((int) ($object['ObjectType'] ?? -1) === 6 && function_exists('IPS_GetLink')) {
                 $link = IPS_GetLink($widgetID);
                 $targetID = (int) ($link['TargetID'] ?? 0);
@@ -1182,9 +1127,6 @@ class Energiefluss extends IPSModuleStrict
         $flowDisplay = $showHouse ? 'none' : 'block';
         $houseDisplay = $showHouse ? 'block' : 'none';
 
-        // Die Vendor-Dateien bleiben vollständig im Modulverzeichnis und werden
-        // über instanzspezifische WebHooks ausgeliefert. Damit bleibt die HTML-
-        // Ausgabe klein und läuft nicht mehr in das Output-Buffer-Limit.
         $powerFlowModuleUrl = $this->GetVisualizationModuleWebHookUrl('power-flow-card.js');
         $sunsynkModuleUrl = $this->GetVisualizationModuleWebHookUrl('sunsynk-power-flow-card.js');
 
@@ -1223,8 +1165,6 @@ class Energiefluss extends IPSModuleStrict
         background: transparent;
         overflow: hidden;
 
-        /* Grafik und Bedienung bewusst trennen:
-           oben nur die Visualisierung, unten der klickbare Umschalter. */
         display: flex;
         flex-direction: column;
         min-height: 0;
@@ -1335,7 +1275,6 @@ class Energiefluss extends IPSModuleStrict
         position: relative;
     }
 
-    /* Klassische Ansicht */
     #stage {
         position: relative;
         width: 1080px;
@@ -1360,29 +1299,23 @@ class Energiefluss extends IPSModuleStrict
     .node .val { color: #ffffff !important; font-weight: 500; }
     .node .sub { color: #ffffff !important; }
 
-    /* Energiefluss: Leistungswerte bewusst deutlich größer als Zusatzwerte. */
     #stage .node .val {
         font-size: 23px !important;
         line-height: 1.05;
         white-space: nowrap;
     }
 
-    /* Hauswert minimal größer als die übrigen Hauptwerte. */
     #n-haus .val {
         font-size: 25px !important;
         line-height: 1.05;
         white-space: nowrap;
     }
 
-    /* Icons/Werte innerhalb der Kreise sollen unabhängig vom Symcon-Theme
-       immer gut lesbar sein. */
     .node .body,
     .node .body * {
         color: #ffffff !important;
     }
 
-    /* Klassischer Energiefluss: alle Energie-/kWh-Zeilen exakt gleich groß.
-       SOC und andere Zusatzwerte bleiben davon unabhängig. */
     .node .energy-sub {
         font-size: 13px !important;
         line-height: 1.15 !important;
@@ -1421,8 +1354,6 @@ class Energiefluss extends IPSModuleStrict
         padding-top: 16px;
     }
 
-    /* Neue technische Energieflussansicht. Die Hauptwerte bleiben groß;
-       zusätzliche Informationen stehen in dynamischen Technikfeldern. */
     #technical-dashboard {
         position: absolute;
         inset: 0;
@@ -1576,7 +1507,6 @@ class Energiefluss extends IPSModuleStrict
         .tech-summary-value { font-size: 21px; }
     }
 
-/* Hausansicht – LordGuenni/power-flow-card */
     #house-stage {
         position: relative;
         width: 900px;
@@ -1585,7 +1515,6 @@ class Energiefluss extends IPSModuleStrict
         overflow: hidden;
         box-sizing: border-box;
 
-        /* Hausansicht freigestellt: der Hintergrund kommt von Symcon. */
         border: none;
         border-radius: 0;
         background: transparent;
@@ -1644,8 +1573,6 @@ class Energiefluss extends IPSModuleStrict
         pointer-events: none;
     }
 
-
-
     .pfc-info {
         position: absolute;
         min-width: 118px;
@@ -1654,8 +1581,6 @@ class Energiefluss extends IPSModuleStrict
         box-sizing: border-box;
         border-radius: 9px;
 
-        /* Nur die Infobox selbst bleibt leicht abgesetzt. Die Fläche rund
-           um Haus und Leitungen bleibt vollständig transparent. */
         background: var(--w-surface);
         background: color-mix(in srgb, var(--w-surface) 88%, transparent);
         border: 1px solid var(--w-border);
@@ -1713,7 +1638,6 @@ class Energiefluss extends IPSModuleStrict
         border-color: var(--ef-consumer, #2fa98f);
     }
 
-    /* Netz sitzt unten direkt bei den beiden Import-/Export-Leitungen. */
     #pfc-info-grid {
         right: 4%;
         bottom: 1%;
@@ -1749,13 +1673,6 @@ class Energiefluss extends IPSModuleStrict
         color: var(--ef-consumer, #2fa98f);
     }
 
-    /* Responsive Infokacheln:
-       Die eigentliche Hausgrafik wird weiterhin ausschließlich über fit()
-       proportional skaliert. Nur die Schrift der Infokacheln wird je nach
-       verfügbarer Breite größer dargestellt. */
-
-    /* Ab 601 px überall dieselbe etwas größere Standardschrift.
-       Positionen und vollständige Detailinfos bleiben unverändert. */
     @media (min-width: 601px) {
         .pfc-info .title {
             font-size: 12px;
@@ -1770,7 +1687,6 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-    /* Kompakte Handyansicht */
     @media (max-width: 600px) {
         #eflow {
             padding: 2px 1px;
@@ -1782,7 +1698,6 @@ class Energiefluss extends IPSModuleStrict
             min-height: 28px;
         }
 
-        /* Nur auf dem Handy gelten die speziellen Kachelpositionen. */
         #pfc-info-solar {
             left: 45%;
             top: 1%;
@@ -1830,12 +1745,10 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-
 </style>
 <script src="/icons.js"></script>
 <script>
-    // Muss VOR dem Import der originalen Sunsynk-Datei existieren.
-    // Die Original-Card registriert sich beim Laden über window.customCards.push(...).
+
     window.customCards = window.customCards || [];
 </script>
 <script type="module" src="__POWER_FLOW_MODULE_URL__"></script>
@@ -1846,7 +1759,6 @@ class Energiefluss extends IPSModuleStrict
             <div id="wrap">
                 <div id="fit">
 
-                    <!-- Klassische Energieflussansicht -->
                     <div id="stage">
                         <div id="technical-dashboard" class="full">
                             <div id="sunsynk-host">
@@ -1861,7 +1773,6 @@ class Energiefluss extends IPSModuleStrict
                         </svg>
                     </div>
 
-                    <!-- Hausansicht: originale LordGuenni Power Flow Card -->
                     <div id="house-stage">
                         <div id="pfc-host"></div>
                         <div id="pfc-loading">Power Flow Card wird geladen …</div>
@@ -1918,7 +1829,7 @@ class Energiefluss extends IPSModuleStrict
 
 <script>
     function detectTheme() {
-        // Im WebHook-Host das vom IPS/Symcon-Tile übermittelte Theme verwenden.
+
         if (window.__EF_BRIDGE_THEME__ && typeof window.__EF_BRIDGE_THEME__.dark === 'boolean') {
             document.documentElement.setAttribute('data-theme', window.__EF_BRIDGE_THEME__.dark ? 'dark' : 'light');
             return;
@@ -1950,8 +1861,6 @@ class Energiefluss extends IPSModuleStrict
     window.addEventListener('load', detectTheme);
     setInterval(detectTheme, 2000);
 
-    // Zentrale Farbdefinition – entspricht der ursprünglichen
-    // power-flow-card YAML-Konfiguration.
     const AC = {
         solar: '#ffd54f',
         grid: '#ef5350',
@@ -1973,7 +1882,6 @@ class Energiefluss extends IPSModuleStrict
     const COL0 = 530;
     const COLW = 120;
 
-    // ---------- klassische Ansicht ----------
     const MAIN = {
         netz: { x: 110, y: 350, r: 51, ic: 'bolt', icc: AC.grid, lab: 'Netz', lp: 'bot' },
         haus: { x: 360, y: 350, r: 58, ic: 'house', icc: 'var(--w-text)', lab: 'Haus', lp: 'bot', ring: true }
@@ -2172,8 +2080,6 @@ class Energiefluss extends IPSModuleStrict
 
         const withConsumers = groupCount > 0;
 
-        // Mit Verbrauchern ist die Wallbox einfach Verbraucher Nr. 1:
-        // erste normale Position oben. Nur alleine sitzt sie mittig.
         const p = withConsumers
             ? gpos(0)
             : { x: 532, y: 350, lp: 'bot' };
@@ -2240,8 +2146,6 @@ class Energiefluss extends IPSModuleStrict
                 delete dotEl[k];
             });
 
-        // Wallbox ist Verbraucher Nr. 1. Der erste konfigurierte
-        // Verbraucher kommt dadurch direkt auf Position 2 (unten).
         const offset = hasWallbox && list.length > 0 ? 1 : 0;
 
         list.forEach((g, i) => {
@@ -2279,8 +2183,6 @@ class Energiefluss extends IPSModuleStrict
 
         const raw = String(wallbox.socText).replace(',', '.');
 
-        // Für den Ring nur eine Prozentzahl bestimmen.
-        // Die Textanzeige selbst bleibt unverändert.
         const percentMatch = raw.match(/([-+]?\d+(?:\.\d+)?)\s*%/);
         if (percentMatch) {
             return Math.max(0, Math.min(100, Number(percentMatch[1])));
@@ -2366,7 +2268,6 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-    // ---------- Hausansicht: Adapter für LordGuenni/power-flow-card ----------
     const houseStage = document.getElementById('house-stage');
     const pfcHost = document.getElementById('pfc-host');
     const pfcLoading = document.getElementById('pfc-loading');
@@ -2394,14 +2295,11 @@ class Energiefluss extends IPSModuleStrict
         const p = Math.max(100, Math.min(10000, Math.abs(power || 0)));
         const ratio = (p - 100) / (10000 - 100);
 
-        // Wie im Originalprojekt: hohe Leistung = kürzere Animationsdauer.
         return 5 - (ratio * 4);
     }
 
     function createPfcConfig() {
-        // Vollständige Konfiguration der unveränderten Original-Card.
-        // Entspricht der früheren Home-Assistant-YAML, nur mit den
-        // virtuellen Symcon-Sensoren aus updatePowerFlowCard().
+
         return {
             name: 'Home Energy Flow',
             threshold: 10,
@@ -2519,7 +2417,6 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-
     function applyPfcBatteryFlowColor(batteryTotal) {
         if (!pfcCard || !pfcCard.shadowRoot) {
             return;
@@ -2532,9 +2429,6 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        // Modulkonvention:
-        // positiv = Entladen Richtung Haus
-        // negativ = Laden Richtung Batterie
         const isDischarge = batteryTotal > 0;
         const isCharge = batteryTotal < 0;
 
@@ -2542,9 +2436,6 @@ class Energiefluss extends IPSModuleStrict
             ? AC.discharge
             : (isCharge ? AC.charge : AC.charge);
 
-        // Die Upstream-Card verwendet für den Batteriepfad intern nicht
-        // zuverlässig unterschiedliche Klassen. Deshalb setzen wir Klasse
-        // und Farbe passend zur tatsächlichen Flussrichtung explizit.
         batteryContainer
             .querySelectorAll('.anim-line')
             .forEach(line => {
@@ -2586,10 +2477,8 @@ class Energiefluss extends IPSModuleStrict
             });
         };
 
-        // Haus/Fassade
         setFill('#house path', c.facade);
 
-        // Das Original-SVG besitzt zwei unterschiedlich gefärbte Dachpfade.
         const roofPaths = bgSvg.querySelectorAll('#roof path');
         if (roofPaths[0] && c.roof) {
             roofPaths[0].style.setProperty('fill', c.roof, 'important');
@@ -2598,12 +2487,10 @@ class Energiefluss extends IPSModuleStrict
             roofPaths[1].style.setProperty('fill', c.roofSecondary, 'important');
         }
 
-        // Fenster, PV-Module und Wechselrichter
         setFill('#windows path', c.windows);
         setFill('#solar path', c.solarPanels);
         setFill('#inverter path', c.inverter);
 
-        // Fahrzeug: erster Pfad = Grundkörper, restliche Pfade = Details.
         const carPaths = bgSvg.querySelectorAll('#car path');
         if (carPaths[0] && c.car) {
             carPaths[0].style.setProperty('fill', c.car, 'important');
@@ -2614,7 +2501,6 @@ class Energiefluss extends IPSModuleStrict
             }
         });
 
-        // Batteriespeicher: Gehäuse + farbiger Akzent.
         const batteryPaths = bgSvg.querySelectorAll('#battery path');
         if (batteryPaths[0] && c.battery) {
             batteryPaths[0].style.setProperty('fill', c.battery, 'important');
@@ -2623,7 +2509,6 @@ class Energiefluss extends IPSModuleStrict
             batteryPaths[1].style.setProperty('fill', c.batteryAccent, 'important');
         }
     }
-
 
     function applyPfcOptionalLayers(d, batteries, wallbox) {
         if (!pfcCard || !pfcCard.shadowRoot) {
@@ -2636,9 +2521,6 @@ class Energiefluss extends IPSModuleStrict
         const batteryContainer =
             pfcCard.shadowRoot.getElementById('svg-container-battery');
 
-        // Wallbox: den echten EV-Container verwenden.
-        // Nur dieser Container wird vom Upstream updateFlow() über
-        // entities.ev_charge_power / sensor.symcon_ev angesteuert.
         const wallboxContainer =
             pfcCard.shadowRoot.getElementById('svg-container-ev');
 
@@ -2650,7 +2532,6 @@ class Energiefluss extends IPSModuleStrict
             wallboxContainer.style.display = hasWallbox ? '' : 'none';
         }
 
-        // Die Descriptor-Gruppen befinden sich im SVG-Overlay.
         const batteryDescriptor =
             pfcCard.shadowRoot.querySelector('.descriptor-battery');
         const evDescriptor =
@@ -2665,7 +2546,6 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-
     async function ensurePowerFlowCard() {
         if (pfcCard) {
             return pfcCard;
@@ -2677,16 +2557,13 @@ class Energiefluss extends IPSModuleStrict
 
         pfcInitPromise = (async () => {
             try {
-                // Das externe Modul registriert das Custom Element.
+
                 await customElements.whenDefined('power-flow-card');
 
                 const card = document.createElement('power-flow-card');
 
-                // Wichtig: Konfiguration VOR dem Einhängen setzen,
-                // weil render() im Upstream-Projekt this.config verwendet.
                 card.setConfig(createPfcConfig());
 
-                // Initiale Dummy-Zustände.
                 card.hass = {
                     states: {
                         'sensor.symcon_solar': pfcState(0),
@@ -2704,15 +2581,12 @@ class Energiefluss extends IPSModuleStrict
                 pfcHost.replaceChildren(card);
                 pfcCard = card;
 
-                // Lit benötigt einen Render-Zyklus, bevor Shadow-DOM vorhanden ist.
                 await new Promise(resolve => requestAnimationFrame(() =>
                     requestAnimationFrame(resolve)
                 ));
 
                 installPfcShadowOverrides(card);
 
-                // Die Hintergrund-SVG wird vom Upstream-Code asynchron geladen.
-                // Falls bereits Daten vorhanden sind, Farben sofort anwenden.
                 if (pfcPendingData && pfcPendingData[0]) {
                     applyPfcBackgroundColors(pfcPendingData[0]);
                 }
@@ -2754,7 +2628,6 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        // Die Sonderposition gilt ausschließlich für die Handyansicht.
         if (!window.matchMedia('(max-width: 600px)').matches) {
             homeInfo.style.top = '';
             return;
@@ -2803,7 +2676,6 @@ class Energiefluss extends IPSModuleStrict
 
         const capacity = Number(bat.capacityKWh || 0);
 
-        // Ohne konfigurierte Kapazität keinerlei Restzeitanzeige.
         if (!Number.isFinite(capacity) || capacity <= 0) {
             return '';
         }
@@ -2821,9 +2693,6 @@ class Energiefluss extends IPSModuleStrict
 
         const powerKW = Math.abs(powerW) / 1000;
 
-        // Modulkonvention:
-        // positiv = Batterie entlädt
-        // negativ = Batterie lädt
         if (powerW > 0) {
             const shutdownSoc = Math.max(
                 0,
@@ -2879,7 +2748,6 @@ class Energiefluss extends IPSModuleStrict
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
 
-        // PV: bei mehreren Anlagen Namen und Energie darunter auflisten.
         const pvTitle = document.getElementById('pfc-solar-title');
         const pvMain = document.getElementById('pfc-solar-main');
         const pvSub = document.getElementById('pfc-solar-sub');
@@ -2912,7 +2780,6 @@ class Energiefluss extends IPSModuleStrict
             }
         }
 
-        // Haus
         const homeMain = document.getElementById('pfc-home-main');
         const homeEnergy = document.getElementById('pfc-home-energy');
 
@@ -2939,7 +2806,6 @@ class Energiefluss extends IPSModuleStrict
                 : '';
         }
 
-        // Batterie: blau = Entladung Richtung Haus, grün = Laden Richtung Batterie.
         const batteryInfo = document.getElementById('pfc-info-battery');
         const batteryTitle = document.getElementById('pfc-battery-title');
         const batteryMain = document.getElementById('pfc-battery-main');
@@ -3011,7 +2877,6 @@ class Energiefluss extends IPSModuleStrict
             }
         }
 
-        // Wallbox
         const wallboxInfo = document.getElementById('pfc-info-wallbox');
         if (wallboxInfo) {
             wallboxInfo.style.display = d.hasWallbox ? '' : 'none';
@@ -3046,10 +2911,6 @@ class Energiefluss extends IPSModuleStrict
             }
         }
 
-        // Netz:
-        // Immer nur EIN Gesamtwert (Saldo) anzeigen.
-        // positiv = Netzbezug -> rot
-        // negativ = Einspeisung -> grün
         const gridInfo = document.getElementById('pfc-info-grid');
         const gridImportEl = document.getElementById('pfc-grid-import');
         const gridExportEl = document.getElementById('pfc-grid-export');
@@ -3058,7 +2919,6 @@ class Energiefluss extends IPSModuleStrict
         const isExport = grid < 0;
         const gridColor = isExport ? AC.export : AC.import;
 
-        // Oben nur die gesamte aktuelle Netzleistung.
         if (gridImportEl) {
             gridImportEl.textContent = fmt(Math.abs(grid));
             gridImportEl.style.color = gridColor;
@@ -3070,7 +2930,6 @@ class Energiefluss extends IPSModuleStrict
             gridExportEl.style.display = 'none';
         }
 
-        // Darunter Bezug / Einspeisung mit den vorhandenen Energiewerten.
         if (gridSub) {
             const energy = [];
             if (d.gridImportEnergy) {
@@ -3091,13 +2950,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox) {
-        // Nur für die Hausansicht:
-        // Die Wallbox wird separat dargestellt. Deshalb ihre Tagesenergie
-        // auch aus der angezeigten Hausenergie herausrechnen, analog zur
-        // bereits separat behandelten Wallbox-Leistung.
-        //
-        // d.houseEnergy selbst wird NICHT verändert. Damit bleiben sämtliche
-        // berechneten IP-Symcon-Variablen und die technische Ansicht unberührt.
+
         const visualHouseEnergy = Math.max(
             Number(d.houseEnergy || 0) -
             (
@@ -3137,12 +2990,9 @@ class Energiefluss extends IPSModuleStrict
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
 
-        // Modulkonvention:
-        // Batterie positiv = Entladen, negativ = Laden.
         const batteryCharge = Math.max(-batteryTotal, 0);
         const batteryDischarge = Math.max(batteryTotal, 0);
 
-        // Netz positiv = Bezug, negativ = Einspeisung.
         const gridImport = Math.max(grid, 0);
         const gridExport = Math.max(-grid, 0);
 
@@ -3160,15 +3010,11 @@ class Energiefluss extends IPSModuleStrict
             'sensor.symcon_battery_charge': pfcState(batteryCharge),
             'sensor.symcon_battery_discharge': pfcState(batteryDischarge),
 
-            // Deskriptoren:
             'sensor.symcon_grid': pfcState(Math.abs(grid)),
             'sensor.symcon_battery_soc': pfcState(mainSoc, '%'),
             'sensor.symcon_home': pfcState(haus)
         };
 
-        // Die power-flow-card liest die Leitungsfarben aus ihrer Config.
-        // Deshalb nach einer Farbänderung die Config mit den aktuellen
-        // AC-Farben erneut setzen, bevor die neuen Zustände übergeben werden.
         if (typeof pfcCard.setConfig === 'function') {
             pfcCard.setConfig(createPfcConfig());
         }
@@ -3189,9 +3035,6 @@ class Energiefluss extends IPSModuleStrict
         applyPfcBackgroundColors(d);
         applyPfcOptionalLayers(d, batteries, wallbox);
 
-        // Upstream updateFlow() wird bereits vom hass-Setter ausgelöst.
-        // Für den Fall eines noch laufenden Initialisierungszyklus nochmals
-        // nach dem nächsten Frame anwenden.
         requestAnimationFrame(() => {
             if (pfcCard && pfcCard.isInitialized && typeof pfcCard.updateFlow === 'function') {
                 pfcCard.updateFlow();
@@ -3201,7 +3044,6 @@ class Energiefluss extends IPSModuleStrict
                     }
         });
     }
-
 
     function techRow(name, value, detail = '', color = '') {
         const style = color ? ` style="color:${color}"` : '';
@@ -3221,7 +3063,6 @@ class Energiefluss extends IPSModuleStrict
             .replaceAll("'", '&#039;');
     }
 
-    // ---------- Originale Sunsynk Power Flow Card ----------
     let sunsynkCard = null;
     let sunsynkInitPromise = null;
     let sunsynkPending = null;
@@ -3295,15 +3136,7 @@ class Energiefluss extends IPSModuleStrict
             }
 
             fixSunsynkContainer() {
-                /*
-                 * Die originale Sunsynk-Funktion renderIcon() setzt im
-                 * foreignObject einen DIV mit position:fixed. Außerhalb von
-                 * Home Assistant kann dieser DIV dadurch am Bildschirmrand
-                 * statt innerhalb des SVG-Platzhalters landen.
-                 *
-                 * Nur diese eine Eigenschaft korrigieren. x/y sowie Breite
-                 * und Höhe des foreignObject bleiben vollständig bei Sunsynk.
-                 */
+
                 const container = this.parentElement;
 
                 if (container) {
@@ -3343,11 +3176,6 @@ class Energiefluss extends IPSModuleStrict
 
                 this.fixSunsynkContainer();
 
-                /*
-                 * Home Assistants ha-icon besitzt selbst eine definierte
-                 * Fläche. Diese minimale Größe benötigt auch der Symcon-
-                 * Ersatz, damit das Font-Icon überhaupt sichtbar wird.
-                 */
                 this.style.setProperty(
                     'display',
                     'inline-flex',
@@ -3378,8 +3206,7 @@ class Energiefluss extends IPSModuleStrict
                     '1',
                     'important'
                 );
-                // Alle Verbraucher-Icons verwenden unabhängig vom
-                // gewählten Symbol dieselbe konfigurierte Verbraucherfarbe.
+
                 this.style.setProperty(
                     'color',
                     AC.room,
@@ -3422,13 +3249,6 @@ class Energiefluss extends IPSModuleStrict
                     'important'
                 );
 
-                /*
-                 * /icons.js stellt Font Awesome als JavaScript-Renderer bereit.
-                 * Die CSS-Klassen allein greifen innerhalb des Shadow DOM der
-                 * Sunsynk-Karte nicht zuverlässig. Deshalb wird das <i> direkt
-                 * in ein Inline-SVG umgewandelt. Dieses SVG benötigt anschließend
-                 * keine Font-Awesome-CSS-Regeln mehr.
-                 */
                 this.renderFontAwesomeSvg();
             }
 
@@ -3531,24 +3351,14 @@ class Energiefluss extends IPSModuleStrict
                         ? viewBox[3]
                         : 512;
 
-                // Das Icon etwas kleiner als den von Sunsynk
-                // vorgesehenen Platzhalter darstellen und mittig halten.
                 const iconScaleFactor = 0.82;
                 const scale = Math.min(
                     width / vbWidth,
                     height / vbHeight
                 ) * iconScaleFactor;
 
-                // Kleiner vertikaler Abstand zur Leistungsbox:
-                // das Icon 3 px nach oben verschieben.
                 const iconOffsetY = -3;
 
-                /*
-                 * Die horizontale Position vollständig von Sunsynk übernehmen.
-                 * Der von Sunsynk erzeugte foreignObject-Platzhalter sitzt
-                 * bereits an der für die jeweilige Ansicht vorgesehenen Stelle.
-                 * Wir verändern daher nur Größe und vertikalen Abstand.
-                 */
                 const translateX =
                     x + ((width - (vbWidth * scale)) / 2) -
                     (vbX * scale);
@@ -3627,12 +3437,6 @@ class Energiefluss extends IPSModuleStrict
                     foreignObject.nextSibling
                 );
 
-                /*
-                 * Auf Mobilgeräten ist HTML in SVG-foreignObject unzuverlässig.
-                 * Nach der Übernahme als echtes SVG wird der HTML-Platzhalter
-                 * deshalb ausgeblendet. Position und Größe stammen weiterhin
-                 * vollständig von Sunsynk.
-                 */
                 foreignObject.style.setProperty(
                     'display',
                     'none',
@@ -3653,9 +3457,6 @@ class Energiefluss extends IPSModuleStrict
                                 node: this
                             });
 
-                            // i2svg arbeitet teilweise asynchron. Die Farbe
-                            // deshalb unmittelbar und nochmals kurz danach
-                            // auf das tatsächlich erzeugte SVG anwenden.
                             this.applyConsumerColourToSvg();
 
                             [0, 30, 120].forEach(delay => {
@@ -3665,15 +3466,13 @@ class Energiefluss extends IPSModuleStrict
                                 }, delay);
                             });
                         } catch (_) {
-                            // Ein weiterer Renderdurchlauf versucht es erneut.
+
                         }
                     });
 
                     return;
                 }
 
-                // /icons.js kann beim ersten Sunsynk-Render noch nicht fertig
-                // initialisiert sein. Kurz warten, ohne die Karte zu blockieren.
                 if (attempt < 30 && this.isConnected) {
                     setTimeout(
                         () => this.renderFontAwesomeSvg(attempt + 1),
@@ -3722,9 +3521,6 @@ class Energiefluss extends IPSModuleStrict
             .replace(/\s+/g, '-')
             .replace(/[^a-z0-9-]/g, '');
 
-        // Sunsynk erzeugt daraus den vorhandenen ha-icon-Platzhalter.
-        // Unser kleiner Wrapper interpretiert den Namen anschließend als
-        // IP-Symcon-/Font-Awesome-Icon.
         return `mdi:${raw || 'plug'}`;
     }
 
@@ -3737,11 +3533,6 @@ class Energiefluss extends IPSModuleStrict
         const full = style === 'full';
         const compact = style === 'compact';
 
-        // Der originale Sunsynk-Compact-Cardstyle besitzt kein separates
-        // Batteriedatenfenster. Damit Compact trotzdem dieselben
-        // Batteriedetails wie Lite/Large und Full zeigt, wird nur der
-        // interne Cardstyle auf "lite" gesetzt. Die übrige Modullogik
-        // bleibt weiterhin Compact.
         const cardStyle = compact ? 'lite' : style;
 
         const showEnergyDetails = style !== 'compact';
@@ -3751,9 +3542,6 @@ class Energiefluss extends IPSModuleStrict
         const hasGrid = entityAvailable(d, 'gridPower');
         const hasWallbox = !!d.hasWallbox;
 
-        // Die Wallbox befindet sich bereits in der normalen Verbraucherliste.
-        // Verbraucher sind reine Lasten; negative Werte werden in der
-        // Sunsynk-Ansicht deshalb auf 0 W begrenzt.
         const configuredConsumers = groups
             .filter(group => group.hasPower)
             .map(group => ({
@@ -3765,21 +3553,12 @@ class Energiefluss extends IPSModuleStrict
                 )
             }));
 
-        // AUX bleibt von der Mindestleistung unberührt und verhält sich
-        // damit exakt wie vor Einführung der Anzeigeschwelle.
-        // AUX wird ausschließlich in Full / Full Wide separat dargestellt.
-        // In Compact / Lite (inkl. Wide) werden als AUX markierte Verbraucher
-        // wie normale Verbraucher behandelt, da diese Ansichten keinen
-        // eigenen AUX-Bereich besitzen.
         const auxGroups = full
             ? configuredConsumers
                 .filter(group => group.isAux === true)
                 .slice(0, 2)
             : [];
 
-        // Die Mindestleistung gilt ausschließlich für normale Verbraucher.
-        // Außerhalb von Full gehören damit auch als AUX markierte Einträge
-        // automatisch zu den normalen Verbrauchern.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -3787,7 +3566,6 @@ class Energiefluss extends IPSModuleStrict
                 group.value >= group.displayThreshold
             );
 
-        // Aktive normale Verbraucher zuerst, absteigend nach Leistung.
         const activeConsumers = normalConsumers
             .filter(group => Number(group.value || 0) > 0)
             .sort((a, b) =>
@@ -3795,7 +3573,6 @@ class Energiefluss extends IPSModuleStrict
                 Number(a.value || 0)
             );
 
-        // Freie Plätze werden mit inaktiven normalen Verbrauchern aufgefüllt.
         const inactiveConsumers = normalConsumers.filter(group =>
             Number(group.value || 0) <= 0
         );
@@ -3810,18 +3587,11 @@ class Energiefluss extends IPSModuleStrict
             ...inactiveConsumers
         ].slice(0, maxConsumers);
 
-        // Die Original-Sunsynk-Full-Ansicht behandelt exakt drei
-        // zusätzliche Verbraucher inkonsistent. Für diesen einen Fall
-        // verwenden wir intern die 4er-Geometrie und entfernen den
-        // unbenutzten vierten Slot nach dem Rendern vollständig.
         window.__symconFullThreeConsumers =
             full &&
             auxGroups.length === 0 &&
             activeGroups.length === 3;
 
-        // Nur diese Texte dürfen später geometrisch zentriert werden.
-        // Dadurch bleiben PV-Stringwerte, Spannungen, Ströme und sonstige
-        // Beschriftungen vollständig unangetastet.
         window.__symconVisibleConsumerNames = activeGroups
             .map(group => String(group?.name || '').trim())
             .filter(Boolean);
@@ -3833,22 +3603,18 @@ class Energiefluss extends IPSModuleStrict
         const entities = {};
         const addEntity = (key, entity, available = true) => { if (available) entities[key] = entity; };
 
-        // Originales Sunsynk-Feld für die gesamte AC-Wechselrichterleistung.
-        // Dieser Sensor stammt ausschließlich aus der in Symcon konfigurierten
-        // Eigenschaft „Wechselrichterleistung gesamt“.
         addEntity(
             'inverter_power_175',
             'sensor.symcon_inverter',
             entityAvailable(d, 'inverterPower') || !!d.inverterPowerAvailable
         );
-        // Die Sunsynk-Karte verwendet für die sichtbare
-        // Wechselrichter-/Kühlkörpertemperatur radiator_temp_91.
+
         addEntity(
             'radiator_temp_91',
             'sensor.symcon_inverter_temperature',
             entityAvailable(d, 'inverterTemperature')
         );
-        // Zweites Temperaturfeld der Originalkarte zeigt die zentrale DC-Temperatur.
+
         addEntity(
             'dc_transformer_temp_90',
             'sensor.symcon_inverter2_temperature',
@@ -3857,11 +3623,7 @@ class Energiefluss extends IPSModuleStrict
         addEntity('inverter_current_164', 'sensor.symcon_inverter_current_l1', entityAvailable(d, 'inverterCurrentL1'));
         addEntity('inverter_current_L2', 'sensor.symcon_inverter_current_l2', entityAvailable(d, 'inverterCurrentL2'));
         addEntity('inverter_current_L3', 'sensor.symcon_inverter_current_l3', entityAvailable(d, 'inverterCurrentL3'));
-        // grid_power_169 ist die AC-/Smartmeter-Leistung zwischen Netz und
-        // Wechselrichter. Hier darf nicht die Wechselrichter-Gesamtleistung
-        // verwendet werden, sonst zeigt die Smartmeter-Box einen viel zu hohen
-        // Wert und die Punkte laufen nach der WR-Leistung statt nach dem
-        // tatsächlichen Netzbezug bzw. der Rücklieferung.
+
         addEntity(
             'grid_power_169',
             'sensor.symcon_grid_power',
@@ -3923,16 +3685,13 @@ class Energiefluss extends IPSModuleStrict
             addEntity('battery_soc_184', 'sensor.symcon_battery_soc', activeBatteries[0].hasSoc);
             addEntity('battery_power_190', 'sensor.symcon_battery_power', activeBatteries[0].hasPower);
             if (full) {
-                // Full wird separat behandelt. Für Compact/Lite darf kein
-                // ungültiger Entity-Wert "none" übergeben werden, da dadurch
-                // das komplette Batteriefenster verschwinden kann.
+
                 entities['battery_current_191'] =
                     activeBatteries[0].hasCurrent
                         ? 'sensor.symcon_battery_current'
                         : 'none';
             } else {
-                // Exakt dasselbe Muster wie bei der Batteriespannung:
-                // Nur bei tatsächlich konfigurierter Variable hinzufügen.
+
                 addEntity(
                     'battery_current_191',
                     'sensor.symcon_battery_current',
@@ -3981,10 +3740,7 @@ class Energiefluss extends IPSModuleStrict
         });
 
         if (auxGroups.length > 0) {
-            // Der gemeinsame AUX-Zweig wird immer verwendet.
-            // Bei genau einem AUX-Verbraucher ist dies der große Haupt-AUX.
-            // Erst bei zwei AUX-Verbrauchern werden zusätzlich Aux1 und Aux2
-            // als die beiden kleinen Unterverbraucher eingeblendet.
+
             addEntity('aux_power_166', 'sensor.symcon_aux_total');
             addEntity(
                 'day_aux_energy',
@@ -4013,12 +3769,6 @@ class Energiefluss extends IPSModuleStrict
         addEntity('day_grid_export_77', 'sensor.symcon_grid_export_energy', d.gridExportEnergyValueAvailable);
         addEntity('day_load_energy_84', 'sensor.symcon_load_energy', d.houseEnergyAvailable);
 
-        // Die Originalkarte rendert zusätzliche Verbraucher nicht zuverlässig
-        // über <ha-icon>. Deshalb merken wir die tatsächlich angezeigten Icons
-        // und setzen sie nach dem Rendern direkt in die SVG-Verbraucherboxen.
-        // Einheitliche Farbe für Haus, Hausverbrauch und Leitung zum Haus.
-        // Dadurch kann die Verbraucherfarbe nicht mehr auf den Hauszweig
-        // durchschlagen.
         const houseSourceColour = dominantHouseSourceColour(
             Number(d.grid || 0),
             activePvs,
@@ -4030,8 +3780,6 @@ class Energiefluss extends IPSModuleStrict
 
             const name = String(group.name || '').trim();
 
-            // Nur bei der als Wallbox markierten AUX-Last den Fahrzeug-SOC
-            // direkt hinter dem Verbrauchernamen anzeigen.
             if (
                 auxGroups.length === 2 &&
                 group.isWallbox === true &&
@@ -4083,22 +3831,15 @@ class Energiefluss extends IPSModuleStrict
             },
             solar: {
                 colour: AC.solar,
-                // Die Solar-Tagesenergie gehört auch in der Compact-Ansicht
-                // in die obere PV-Anzeige. Nur die übrigen Detailenergien
-                // bleiben über showEnergyDetails in Compact ausgeblendet.
+
                 show_daily: entityAvailable(d, 'inverterDailyEnergy'),
                 mppts: Math.max(1, Math.min(6, activePvs.length || 1)),
                 animation_speed: Math.max(1, Math.round(9 / flowSpeedFactor)),
-                // Die Sunsynk-Karte besitzt nur einen gemeinsamen
-                // solar.max_power-Wert. Deshalb werden die je PV-Anlage
-                // konfigurierten Maximalleistungen addiert.
+
                 max_power: Math.max(1, Number(d.solarMaxPower || 1)),
                 auto_scale: false,
                 display_mode: entityAvailable(d, 'solarForecastRemaining') ? 2 : 1,
 
-                // Prozent-/Effizienzanzeige pro einzelner PV-Anlage.
-                // Die Originalkarte berechnet damit:
-                // aktuelle Leistung / konfigurierte Maximalleistung × 100.
                 pv1_max_power: Math.max(1, Number(activePvs[0]?.maxPower || 1)),
                 pv2_max_power: Math.max(1, Number(activePvs[1]?.maxPower || 1)),
                 pv3_max_power: Math.max(1, Number(activePvs[2]?.maxPower || 1)),
@@ -4113,8 +3854,6 @@ class Energiefluss extends IPSModuleStrict
             battery: {
                 count: Math.min(2, Math.max(1, activeBatteries.length)),
 
-                // Die Originalkarte erwartet die Batteriekapazität in Wh.
-                // Bei 0 wird die Restzeitanzeige von der Karte ausgeblendet.
                 energy: Math.max(
                     0,
                     Number(activeBatteries[0]?.capacityKWh || 0) * 1000
@@ -4123,10 +3862,7 @@ class Energiefluss extends IPSModuleStrict
                 shutdown_soc: Number(activeBatteries[0]?.maxDischargeSoc || 0) === 0 ? '0' : Math.max(0, Math.min(100, Math.round(Number(activeBatteries[0]?.maxDischargeSoc || 0)))),
                 soc_end_of_charge: 100,
                 hide_soc: false,
-                // Die Originalkarte verwendet battery.colour für den
-                // äußeren Batterierahmen und den Flusspunkt. Deshalb wird
-                // nur diese Farbe richtungsabhängig gesetzt. charge_colour
-                // und die dynamische SOC-Füllung bleiben unverändert.
+
                 colour: Number(activeBatteries[0]?.value || 0) > 0
                     ? AC.discharge
                     : AC.charge,
@@ -4139,16 +3875,13 @@ class Energiefluss extends IPSModuleStrict
                 linear_gradient: true,
                 animate: true,
                 show_absolute: true,
-                // Der PHP-Payload enthält bereits die normalisierte Leistung:
-                // negativ = Laden, positiv = Entladen. Deshalb darf die
-                // Sunsynk-Karte das Vorzeichen nicht nochmals umkehren.
+
                 invert_power: false,
-                // Flussrichtung gegenüber der bisherigen Sunsynk-Darstellung
-                // umdrehen. Farbe und Animation bleiben dabei zusammengehörig.
+
                 invert_flow: false
             },
             battery2: {
-                // Auch Batterie 2: Kapazität in Wh. 0 blendet die Zeit aus.
+
                 energy: Math.max(
                     0,
                     Number(activeBatteries[1]?.capacityKWh || 0) * 1000
@@ -4167,26 +3900,20 @@ class Energiefluss extends IPSModuleStrict
                 dynamic_colour: false,
                 linear_gradient: true,
                 animate: true,
-                // Auch Batterie 2 ist im Payload bereits normalisiert.
+
                 invert_power: false,
-                // Flussrichtung gegenüber der bisherigen Sunsynk-Darstellung
-                // umdrehen. Farbe und Animation bleiben dabei zusammengehörig.
+
                 invert_flow: false
             },
             load: {
-                // Hauszweig, Haussymbol, Bezeichnung und Leistungsbox verwenden
-                // dieselbe aktuell dominante Quellenfarbe.
+
                 colour: houseSourceColour,
                 off_colour: '#9e9e9e',
 
-                // Die Farbe wird oben eindeutig berechnet. Damit verhindert
-                // man, dass die Originalkarte zeitweise load.colour der
-                // zusätzlichen Verbraucher auf den Hauszweig überträgt.
                 dynamic_colour: false,
                 dynamic_icon: false,
                 show_daily: showEnergyDetails && d.houseEnergyAvailable,
-                // Maximal zwei markierte Verbraucher werden rechts im
-                // originalen AUX-Bereich der Sunsynk-Card dargestellt.
+
                 show_aux: auxGroups.length > 0,
                 show_daily_aux:
                     showEnergyDetails &&
@@ -4199,9 +3926,6 @@ class Energiefluss extends IPSModuleStrict
                         ? 4
                         : activeGroups.length,
 
-                // Genau ein markierter Verbraucher wird als großer Haupt-AUX
-                // dargestellt. Bei zwei Einträgen zeigt die Originalkarte
-                // die beiden kleinen Felder Aux1 und Aux2.
                 aux_loads: auxGroups.length >= 2 ? 2 : 0,
                 aux_name:
                     auxGroups.length === 1
@@ -4223,8 +3947,7 @@ class Energiefluss extends IPSModuleStrict
                     auxGroups.length >= 2
                         ? (auxDisplayName(auxGroups[1]) || 'Aux2')
                         : '',
-                // Haupt-AUX, Unterverbraucher, Linie, Icon, Werte und Text
-                // verwenden dieselbe konfigurierte Verbraucherfarbe.
+
                 aux_colour: AC.room,
                 aux_off_colour: AC.room,
                 aux_dynamic_colour: false,
@@ -4264,8 +3987,6 @@ class Energiefluss extends IPSModuleStrict
         const activeBatteries = batteries.filter(b => b.hasPower || b.hasSoc);
         const hasWallbox = !!d.hasWallbox;
 
-        // Auch im virtuellen Home-Assistant-Datenmodell negative
-        // Verbraucherwerte konsequent auf 0 W begrenzen.
         const configuredConsumers = groups
             .filter(group => group.hasPower)
             .map(group => ({
@@ -4277,12 +3998,6 @@ class Energiefluss extends IPSModuleStrict
                 )
             }));
 
-        // AUX bleibt von der Mindestleistung unberührt und verhält sich
-        // damit exakt wie vor Einführung der Anzeigeschwelle.
-        // Exakt dieselbe AUX-Logik wie in createSunsynkConfig:
-        // Nur Full / Full Wide besitzt einen separaten AUX-Bereich.
-        // In Compact / Lite werden AUX-markierte Einträge als normale
-        // Verbraucher behandelt.
         const fullLayout =
             currentTechnicalLayout.startsWith('full');
 
@@ -4292,8 +4007,6 @@ class Energiefluss extends IPSModuleStrict
                 .slice(0, 2)
             : [];
 
-        // Außerhalb von Full fallen AUX-markierte Einträge damit ganz normal
-        // durch den Verbraucherfilter samt Anzeigeschwelle.
         const normalConsumers = configuredConsumers
             .filter(group => !auxGroups.includes(group))
             .filter(group =>
@@ -4312,7 +4025,6 @@ class Energiefluss extends IPSModuleStrict
             Number(group.value || 0) <= 0
         );
 
-        // Exakt dieselbe Reihenfolge wie in createSunsynkConfig.
         const maxConsumers =
             fullLayout && auxGroups.length > 0
                 ? 2
@@ -4328,9 +4040,6 @@ class Energiefluss extends IPSModuleStrict
             ? Number(d.inverterDailyEnergy || 0)
             : 0;
 
-        // Die konfigurierte Prognosevariable liefert die erwartete
-        // Tagesproduktion insgesamt. Sunsynk erwartet bei remaining_solar
-        // jedoch nur die noch verbleibende Energie.
         const forecastTotal = Number(d.solarForecastRemaining || 0);
         const solarForecastRemaining = Math.max(
             (Number.isFinite(forecastTotal) ? forecastTotal : 0) -
@@ -4338,11 +4047,6 @@ class Energiefluss extends IPSModuleStrict
             0
         );
 
-        // Nur für Full / Full Wide:
-        // AUX-Verbraucher werden separat dargestellt und dürfen deshalb
-        // nicht nochmals in der angezeigten Hausleistung/-energie enthalten sein.
-        // Die zugrunde liegenden Payload-Werte und damit die berechneten
-        // IP-Symcon-Variablen bleiben vollständig unverändert.
         const auxTotalPower = auxGroups.reduce(
             (sum, group) =>
                 sum + Math.max(Number(group.value || 0), 0),
@@ -4486,7 +4190,6 @@ class Energiefluss extends IPSModuleStrict
         };
     }
 
-
     function removeUnusedFourthConsumerForThree(card) {
         if (
             !window.__symconFullThreeConsumers ||
@@ -4508,14 +4211,11 @@ class Energiefluss extends IPSModuleStrict
         };
 
         for (const root of roots) {
-            // Leistungswert und eventueller Zusatzwert des vierten Loads.
+
             root.querySelectorAll?.(
                 '#ess_load4_value, #ess_load4_value_extra'
             ).forEach(hideNode);
 
-            // Der vierte Name teilt sich in der Original-Card teilweise
-            // dieselbe ID mit dem dritten. Der rechte Text (x >= 412)
-            // gehört zum vierten Slot.
             root.querySelectorAll?.('[id="ess-load4"]').forEach(node => {
                 const x = Number(node.getAttribute?.('x'));
                 if (Number.isFinite(x) && x >= 412) {
@@ -4523,8 +4223,6 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
 
-            // Auch die beiden unteren Rahmen haben in der Original-Card
-            // teilweise dieselbe ID. Nur der rechte Rahmen ist Slot 4.
             root.querySelectorAll?.('rect[id="es-load4"]').forEach(rect => {
                 const x = Number(rect.getAttribute?.('x'));
                 if (Number.isFinite(x) && x >= 412) {
@@ -4532,7 +4230,6 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
 
-            // Standard-ha-icon des vierten Slots samt foreignObject entfernen.
             root.querySelectorAll?.(
                 'ha-icon.essload4-small-icon, .essload4-small-icon'
             ).forEach(icon => {
@@ -4551,9 +4248,6 @@ class Energiefluss extends IPSModuleStrict
                 hideNode(icon);
             });
 
-            // Falls unser Font-Awesome-Ersatz bereits als natives SVG
-            // aus dem foreignObject herauskopiert wurde, den rechten
-            // Load4-Klon ebenfalls sicher entfernen.
             root.querySelectorAll?.('[data-symcon-native-icon]').forEach(node => {
                 try {
                     const box = node.getBBox?.();
@@ -4569,7 +4263,6 @@ class Energiefluss extends IPSModuleStrict
             });
         }
     }
-
 
     function positionLiteDailyEnergyAtCardPosition(card) {
         if (!card || !card.shadowRoot) return;
@@ -4634,12 +4327,8 @@ class Energiefluss extends IPSModuleStrict
         if (!card) return;
         await card.updateComplete;
 
-        // Ein gemeinsamer Durchlauf für alle visuellen Nachkorrekturen.
         applySunsynkVisualFixes(card, d);
 
-        // Lit rendert bei jeder neuen hass-Zuweisung Teile des Shadow-DOM neu.
-        // Nach tatsächlichen DOM-Änderungen die visuellen Korrekturen erneut
-        // gesammelt anwenden. Zusätzliche Timer sind dafür nicht mehr nötig.
         if (!card.__symconVisualObserver && card.shadowRoot) {
             let scheduled = false;
 
@@ -4655,10 +4344,6 @@ class Energiefluss extends IPSModuleStrict
                         card.__symconLastData || d
                     );
 
-                    // Die Sunsynk-Card rendert Autarkie und Verhältnis bei
-                    // Änderungen ihres Shadow-DOM teilweise erneut. Deshalb
-                    // unsere getrennten Werte nach jedem Renderdurchlauf
-                    // wieder einsetzen.
                     const ratioContext =
                         card.__symconRatioContext;
 
@@ -4713,8 +4398,6 @@ class Energiefluss extends IPSModuleStrict
         visit(root);
         return roots;
     }
-
-
 
     function applyAuxVisualOverrides(card, d) {
         if (!card || !card.shadowRoot || !d) return;
@@ -4782,17 +4465,13 @@ class Energiefluss extends IPSModuleStrict
         };
 
         if (configuredAux.length === 1) {
-            // Auch beim einzelnen AUX-Verbraucher den Fahrzeug-SOC
-            // ausschließlich direkt hinter dem Wallbox-Namen anzeigen.
+
             setLabel(
                 '#aux_one',
                 configuredAux[0],
                 configuredAux[0]?.isWallbox === true
             );
 
-            // Die Card enthält für den Haupt-AUX mehrere alternative
-            // Originalsymbole. Bei einem frei konfigurierten Verbrauchericon
-            // dürfen diese nicht zusätzlich sichtbar bleiben.
             [
                 '#aux_aux_default',
                 '#aux_aux_generator',
@@ -4825,8 +4504,6 @@ class Energiefluss extends IPSModuleStrict
                 configuredAux[1]?.isWallbox === true
             );
 
-            // AUX1 und AUX2 werden vollständig ohne Icon dargestellt.
-            // Es wird kein ungültiger Icon-Name an die Card übergeben.
             [
                 '.aux-small-icon-1',
                 '.aux-small-icon-2',
@@ -4853,10 +4530,6 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
 
-            // Der Wallbox-SOC steht bereits direkt hinter dem Namen.
-            // Deshalb alle separaten SOC-/Zusatztexte der Original-Card
-            // für genau diesen AUX entfernen, damit er nicht zusätzlich
-            // vor dem Namen erscheint.
             [
                 {
                     group: configuredAux[0],
@@ -4904,7 +4577,6 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-
     function applyConfiguredBatteryStatus(card, d) {
         if (!card || !card.shadowRoot || !d) return;
 
@@ -4945,9 +4617,6 @@ class Energiefluss extends IPSModuleStrict
 
                 if (!node) continue;
 
-                // Nur schreiben, wenn sich der Text tatsächlich unterscheidet.
-                // Dadurch entsteht mit dem vorhandenen visuellen Observer
-                // keine Render- oder Mutation-Schleife.
                 if (String(node.textContent || '').trim() !== statusText) {
                     node.textContent = statusText;
                 }
@@ -4960,8 +4629,6 @@ class Energiefluss extends IPSModuleStrict
             }
         });
     }
-
-
 
     function compactBatteryValues(card, d) {
         if (!card || !card.shadowRoot || !d) return;
@@ -5108,9 +4775,6 @@ class Energiefluss extends IPSModuleStrict
             }
         };
 
-        // Compact / Large(Lite) haben stabile Batterie-Container.
-        // Diese Logik hat bereits zuverlässig funktioniert und wird deshalb
-        // bewusst getrennt vom Full-Layout behandelt.
         const processStableBox = (
             root,
             boxSelector,
@@ -5170,8 +4834,7 @@ class Energiefluss extends IPSModuleStrict
             rects.forEach(restoreFrame);
 
             if (!rows.length) {
-                // Ohne V/A/W gibt es auch keinen sinnvollen Datenrahmen.
-                // Nur den Rahmen ausblenden, der im selben Bereich sitzt.
+
                 rects.forEach(frame => {
                     try {
                         const fr = frame.getBoundingClientRect?.();
@@ -5244,8 +4907,6 @@ class Energiefluss extends IPSModuleStrict
             );
             const centre = originalY + originalH / 2;
 
-            // Rahmen bewusst luftiger als bisher:
-            // 1 Zeile 32, 2 Zeilen 51, 3 Zeilen 70.
             const spacing = 19;
             const newHeight =
                 32 + ((rows.length - 1) * spacing);
@@ -5268,11 +4929,6 @@ class Energiefluss extends IPSModuleStrict
             });
         };
 
-        // Full hat je nach 1 oder 2 Batterien eine andere Original-Geometrie.
-        // Darum wird hier nicht mit festen x/y-Werten gearbeitet. Stattdessen
-        // wird der tatsächlich sichtbare Rahmen ermittelt, der die sichtbaren
-        // Batterie-V/A/W-Texte umschließt. Dadurch funktioniert derselbe Code
-        // für beide Full-Varianten.
         const processFull = root => {
             const measurements = [];
 
@@ -5294,8 +4950,6 @@ class Energiefluss extends IPSModuleStrict
 
                 candidates.forEach(rememberTextY);
 
-                // In Full existieren mehrere alternative Elemente mit
-                // denselben IDs. Nur die aktuell gerenderte Variante zählt.
                 candidates.forEach(node => {
                     if (!visibleNode(node)) return;
 
@@ -5367,8 +5021,6 @@ class Energiefluss extends IPSModuleStrict
 
                 if (!inside.length) return;
 
-                // Ein Datenrahmen muss deutlich breiter als der Text selbst
-                // sein. Dadurch fallen kleine Hintergrund-/Statusrechtecke weg.
                 const minTextLeft = Math.min(
                     ...inside.map(item => item.screen.left)
                 );
@@ -5393,9 +5045,6 @@ class Energiefluss extends IPSModuleStrict
 
             if (!frameCandidates.length) return;
 
-            // Jedem Messwert den kleinsten Rahmen zuordnen, der ihn umschließt.
-            // Bei einer Batterie ergibt das den einzelnen Full-Rahmen; bei zwei
-            // Batterien automatisch die von der Card verwendete zweite Geometrie.
             const frameMap = new Map();
 
             measurements.forEach(item => {
@@ -5426,9 +5075,6 @@ class Energiefluss extends IPSModuleStrict
 
                 if (!nodes.length) return;
 
-                // Zeilen anhand der realen Y-Position gruppieren.
-                // Bei zwei Batterien dürfen zwei Werte nebeneinander in
-                // derselben Zeile stehen und behalten ihre X-Position.
                 const ordered = [...nodes].sort(
                     (a, b) => a.cy - b.cy
                 );
@@ -5473,7 +5119,6 @@ class Energiefluss extends IPSModuleStrict
                 const centre =
                     originalY + originalH / 2;
 
-                // Gleiche luftige Proportion wie Compact/Large.
                 const spacing = 19;
                 const newHeight =
                     32 + ((rows.length - 1) * spacing);
@@ -5539,8 +5184,6 @@ class Energiefluss extends IPSModuleStrict
     function compactSmartMeterValues(card, d) {
         if (!card || !card.shadowRoot || !d) return;
 
-        // Dynamische Box-Geometrie ausschließlich in Full / Full Wide.
-        // Compact und Lite bleiben vollständig bei der Original-Sunsynk-Geometrie.
         const isFullLayout =
             currentTechnicalLayout === 'full' ||
             currentTechnicalLayout === 'full-wide';
@@ -5548,11 +5191,6 @@ class Energiefluss extends IPSModuleStrict
 
         const roots = getOpenShadowRoots(card.shadowRoot);
 
-        // Die Originalkarte reserviert feste Y-Positionen für L1/L2/L3,
-        // Frequenz und Gesamtleistung. Fehlt dazwischen ein Wert, entsteht
-        // deshalb optisch eine Leerzeile. Wir ordnen ausschließlich die
-        // tatsächlich konfigurierten Werte neu und zentrieren sie in der
-        // bestehenden Smartmeter-Box. Inhalt und Box-Geometrie bleiben gleich.
         const wanted = [
             ['inverter_voltage_154', entityAvailable(d, 'gridVoltageL1')],
             ['inverter_voltage_L2', entityAvailable(d, 'gridVoltageL2')],
@@ -5581,9 +5219,6 @@ class Energiefluss extends IPSModuleStrict
 
             if (!visible.length) continue;
 
-            // Smartmeter-Box: y=153..223. Die Originalkarte verwendet bei
-            // fünf Zeilen 164/177/190/203/216 (= 13 px Abstand). Genau diesen
-            // Abstand behalten wir bei und zentrieren weniger Zeilen vertikal.
             const spacing = 13;
             const centreY = 190;
             const firstY = centreY - ((visible.length - 1) * spacing / 2);
@@ -5593,11 +5228,6 @@ class Energiefluss extends IPSModuleStrict
                 node.removeAttribute?.('transform');
             });
 
-            // Auch der Smartmeter-Rahmen selbst folgt nun der Anzahl der
-            // tatsächlich sichtbaren Werte. Die Originalbox liegt bei
-            // x=234, y=153, width=70, height=70 und ist damit auf y=188
-            // zentriert. Diese Flussachse bleibt unverändert, damit die
-            // horizontalen Netzlinien weiterhin exakt in die Box laufen.
             const boxCentreY = 188;
             const boxHeight = Math.max(24, 18 + (visible.length - 1) * spacing);
             const boxY = boxCentreY - boxHeight / 2;
@@ -5606,9 +5236,7 @@ class Energiefluss extends IPSModuleStrict
             let meterBox = null;
 
             if (gridSvg) {
-                // Die Smartmeter-Box ist der 70x70-Rahmen bei x=234.
-                // Nicht über die Reihenfolge der übrigen Grid-Rechtecke gehen,
-                // damit Non-Essential-Load-Boxen unberührt bleiben.
+
                 meterBox = Array.from(gridSvg.querySelectorAll?.('rect') || [])
                     .find(rect => {
                         const x = Number(rect.getAttribute?.('x'));
@@ -5627,8 +5255,6 @@ class Energiefluss extends IPSModuleStrict
     function compactInverterValues(card, d) {
         if (!card || !card.shadowRoot || !d) return;
 
-        // Dynamische Box-Geometrie ausschließlich in Full / Full Wide.
-        // Compact und Lite bleiben vollständig bei der Original-Sunsynk-Geometrie.
         const isFullLayout =
             currentTechnicalLayout === 'full' ||
             currentTechnicalLayout === 'full-wide';
@@ -5636,11 +5262,6 @@ class Energiefluss extends IPSModuleStrict
 
         const roots = getOpenShadowRoots(card.shadowRoot);
 
-        // Die Originalkarte reserviert in der Wechselrichterbox feste Zeilen
-        // für Gesamtleistung sowie die Ströme L1/L2/L3. Nicht konfigurierte
-        // Phasen dürfen deshalb keinen sichtbaren Leerplatz hinterlassen.
-        // Es werden ausschließlich vorhandene Werte neu angeordnet; Inhalt,
-        // Farben und Geometrie der Box bleiben unverändert.
         const wanted = [
             ['inverter_power_175',
                 entityAvailable(d, 'inverterPower') ||
@@ -5670,15 +5291,8 @@ class Energiefluss extends IPSModuleStrict
 
             if (!visible.length) continue;
 
-            // Die WR-Werte liegen im Original ungefähr im Bereich y=174..214.
-            // Den vorhandenen 13-px-Zeilenabstand behalten wir bei. Zusätzlich
-            // wird nun auch der Rahmen selbst auf die tatsächlich sichtbaren
-            // Zeilen verkleinert bzw. vergrößert.
             const spacing = 13;
 
-            // Die seitliche Netz-/Smartmeter-Flusslinie liegt in der
-            // Originalkarte auf y=187. Die dynamische WR-Box bleibt deshalb
-            // unabhängig von ihrer Höhe exakt auf dieser Flussachse zentriert.
             const centreY = 187;
             const firstY = centreY - ((visible.length - 1) * spacing / 2);
 
@@ -5687,10 +5301,6 @@ class Energiefluss extends IPSModuleStrict
                 node.removeAttribute?.('transform');
             });
 
-            // Original: x=145.15, y=162, width=70, height=50/60.
-            // Pro sichtbarer Zeile werden 13 px benötigt, zusätzlich bleibt
-            // oben und unten genügend Innenabstand. Vier Zeilen ergeben damit
-            // praktisch wieder die originale 60-px-Box.
             const boxHeight = Math.max(24, 20 + (visible.length - 1) * spacing);
             const boxY = centreY - boxHeight / 2;
 
@@ -5704,10 +5314,6 @@ class Energiefluss extends IPSModuleStrict
                 box.setAttribute?.('height', String(boxHeight));
             }
 
-            // Alle an die WR-Box angrenzenden Flusslinien bis an den
-            // tatsächlichen Rahmen führen. Die Originalkarte verwendet oben
-            // y=162 und seitlich y=187. Durch die dynamische Höhe ändern sich
-            // nur Ober- und Unterkante; die seitliche Achse bleibt y=187.
             const boxTop = boxY;
             const boxBottom = boxY + boxHeight;
 
@@ -5717,8 +5323,7 @@ class Energiefluss extends IPSModuleStrict
 
             if (inverterPath) {
                 const current = String(inverterPath.getAttribute?.('d') || '');
-                // X-Koordinate aus dem Originalpfad beibehalten (wichtig für
-                // normale und Wide-Darstellung), nur den Start-Y anpassen.
+
                 const match = current.match(/^\s*M\s*([\d.]+)\s+[\d.]+\s+L\s*([\d.]+)\s+([\d.]+)/i);
                 if (match) {
                     inverterPath.setAttribute?.(
@@ -5728,8 +5333,6 @@ class Energiefluss extends IPSModuleStrict
                 }
             }
 
-            // Obere Essential-Load-Leitung: ihr letztes Segment endet im
-            // Original an y=162. Dieses Ende auf die neue Oberkante setzen.
             const essentialPath = root.querySelector?.('#es-line');
             if (essentialPath) {
                 const current = String(essentialPath.getAttribute?.('d') || '');
@@ -5742,8 +5345,6 @@ class Energiefluss extends IPSModuleStrict
                 }
             }
 
-            // Falls AUX aktiv ist, startet auch dessen zweite Flusslinie an
-            // der WR-Oberkante. Nur den ersten M-Y-Wert ersetzen.
             const auxPath = root.querySelector?.('#aux-line2');
             if (auxPath) {
                 const current = String(auxPath.getAttribute?.('d') || '');
@@ -5766,8 +5367,6 @@ class Energiefluss extends IPSModuleStrict
             currentTechnicalLayout === 'full' ||
             currentTechnicalLayout === 'full-wide';
 
-        // In Full/Full Wide darf diese zusätzliche Anzeige nicht erscheinen.
-        // Ein aus Compact/Lite vorhandenes Overlay wird beim Umschalten entfernt.
         if (isFullLayout) {
             for (const root of roots) {
                 root.querySelectorAll?.(
@@ -5848,8 +5447,6 @@ class Energiefluss extends IPSModuleStrict
             powerNode.style?.setProperty('visibility', 'visible', 'important');
             powerNode.style?.setProperty('opacity', '1', 'important');
 
-            // Direkt oberhalb der ersten Spannungszeile positionieren.
-            // Die vorhandenen Spannungs- und Stromwerte werden nicht verändert.
             const x = Number(template.getAttribute?.('x'));
             const y = Number(template.getAttribute?.('y'));
 
@@ -5858,8 +5455,7 @@ class Energiefluss extends IPSModuleStrict
             }
 
             if (Number.isFinite(y)) {
-                // Gegenüber v51 um 4 px tiefer, damit der Abstand zur
-                // ersten Spannungszeile dem Abstand Spannung → Strom entspricht.
+
                 powerNode.setAttribute('y', String(y - 12));
                 powerNode.removeAttribute?.('transform');
             } else {
@@ -5910,12 +5506,6 @@ class Energiefluss extends IPSModuleStrict
         };
 
         for (const root of roots) {
-            /*
-             * Ausschließlich echte Wechselrichter-Elemente anfassen.
-             * Smartmeter-/Grid-Container werden bewusst nicht mehr über
-             * breit gefasste Selektoren wie [id*="inverter"] oder ganze
-             * gemeinsame SVG-Gruppen eingefärbt.
-             */
 
             const inverterGroups = new Set();
 
@@ -5934,7 +5524,6 @@ class Energiefluss extends IPSModuleStrict
                 });
             });
 
-            // Wechselrichtersymbol.
             inverterGroups.forEach(group => {
                 const id = String(group.id || '').toLowerCase();
 
@@ -5970,7 +5559,6 @@ class Energiefluss extends IPSModuleStrict
                 }
             });
 
-            // Rahmen der echten WR-Datenbox.
             [
                 '#inverter_data > rect',
                 '#inverter-data > rect',
@@ -5987,8 +5575,6 @@ class Energiefluss extends IPSModuleStrict
                 });
             });
 
-            // Nur eindeutig als Wechselrichterwerte identifizierte Texte.
-            // Smartmeter-Spannungen/-Ströme/-Frequenz werden nicht berührt.
             [
                 '#inverter_power_175',
                 '#inverter-power-175',
@@ -6009,8 +5595,6 @@ class Energiefluss extends IPSModuleStrict
                 });
             });
 
-            // Falls die WR-Leistung direkt oberhalb der WR-Ströme als
-            // eigenes Symcon-Overlay erzeugt wurde, ebenfalls einfärben.
             root.querySelectorAll?.(
                 '#symcon_inverter_power_overlay, ' +
                 '#symcon_inverter_power_fixed'
@@ -6031,14 +5615,12 @@ class Energiefluss extends IPSModuleStrict
             0
         );
 
-        // Im Modul bedeutet positive Batterieleistung: Entladen zum Haus.
         const batteryPower = batteries.reduce(
             (sum, battery) =>
                 sum + Math.max(Number(battery.value || 0), 0),
             0
         );
 
-        // Netz positiv = Bezug, negativ = Einspeisung.
         const gridPower = Math.max(Number(d.grid || 0), 0);
 
         const sources = [
@@ -6051,7 +5633,6 @@ class Energiefluss extends IPSModuleStrict
             ? sources[0].type
             : 'normal';
 
-        // Originale Pfade der Sunsynk-Karte.
         const paths = {
             normal:
                 'm15 13l-4 4v-3H2v-2h9V9l4 4M5 20v-4h2v2h10v-7.81l-5-4.5L7.21 10H4.22L12 3l10 9h-3v8H5Z',
@@ -6071,7 +5652,6 @@ class Energiefluss extends IPSModuleStrict
             root.querySelectorAll?.('path[d]').forEach(path => {
                 const current = String(path.getAttribute('d') || '').trim();
 
-                // Nur das originale Sunsynk-Haussymbol anfassen.
                 if (!knownPaths.has(current)) {
                     return;
                 }
@@ -6119,8 +5699,6 @@ class Energiefluss extends IPSModuleStrict
         for (const root of roots) {
             const houseNodes = new Set();
 
-            // Bekannte IDs der Hauptlast. Zusätzliche Verbraucher load1 ... load6
-            // werden ausdrücklich nicht erfasst.
             [
                 '#essential_power',
                 '#essential-power',
@@ -6147,8 +5725,6 @@ class Energiefluss extends IPSModuleStrict
                 });
             });
 
-            // Die sichtbare Bezeichnung „Hausverbrauch“ ist der zuverlässigste
-            // layoutunabhängige Anker. Nur ihre direkte SVG-Gruppe wird geprüft.
             root.querySelectorAll?.('text, tspan').forEach(labelNode => {
                 const shown = String(labelNode.textContent || '').trim();
 
@@ -6226,7 +5802,7 @@ class Energiefluss extends IPSModuleStrict
                         });
                     }
                 } catch (_) {
-                    // Unsichtbare oder noch nicht aufgebaute SVG-Knoten.
+
                 }
             });
 
@@ -6249,9 +5825,6 @@ class Energiefluss extends IPSModuleStrict
                     textNode.textContent || ''
                 ).trim();
 
-                // Ausschließlich exakt konfigurierte Verbrauchernamen
-                // zentrieren. PV-Stringwerte wie V/A/W sowie sämtliche
-                // anderen Texte bleiben an ihrer Originalposition.
                 if (!consumerNames.has(value)) {
                     return;
                 }
@@ -6276,8 +5849,6 @@ class Energiefluss extends IPSModuleStrict
                 boxes.forEach(candidate => {
                     const box = candidate.box;
 
-                    // Nur Beschriftungen in einem sinnvollen Bereich
-                    // unmittelbar über oder unter der Verbraucherbox.
                     const verticalDistance = Math.min(
                         Math.abs(textCenterY - box.y),
                         Math.abs(
@@ -6353,9 +5924,6 @@ class Energiefluss extends IPSModuleStrict
         for (const root of roots) {
             const boxes = [];
 
-            // Je nach Layout/Version heißen die Verbraucherboxen es-load1 ... es-load6.
-            // Wir verwenden zusätzlich alle passenden Rechtecke, damit auch doppelte IDs
-            // und leicht abweichende DOM-Strukturen der Originalkarte erfasst werden.
             root.querySelectorAll?.('rect[id^="es-load"], rect[id^="ess-load"]').forEach(rect => {
                 try {
                     const box = rect.getBBox();
@@ -6366,9 +5934,6 @@ class Energiefluss extends IPSModuleStrict
             const wattNodes = new Set();
             root.querySelectorAll?.('[id^="ess_load"][id$="_value"], [id^="ess-load"][id$="-value"]').forEach(node => wattNodes.add(node));
 
-            // Fallback: Die Watttexte anhand ihrer tatsächlichen Position innerhalb
-            // einer Verbraucherbox erkennen. Damit sind wir nicht mehr von den IDs
-            // der jeweiligen Karten-Version abhängig.
             root.querySelectorAll?.('text, tspan').forEach(node => {
                 const text = String(node.textContent || '').trim();
                 if (!/(?:^|\s)[−+\-]?\d[\d.,'’\s]*\s*(?:W|kW)$/i.test(text)) return;
@@ -6394,7 +5959,6 @@ class Energiefluss extends IPSModuleStrict
                 node.style?.setProperty('font-weight', '400', 'important');
                 node.style?.setProperty('font-variation-settings', '"wght" 400', 'important');
 
-                // Manche Varianten schreiben die sichtbare Farbe auf ein inneres tspan.
                 node.querySelectorAll?.('tspan').forEach(tspan => {
                     tspan.setAttribute?.('fill', consumerColour);
                     tspan.style?.setProperty('fill', consumerColour, 'important');
@@ -6409,16 +5973,10 @@ class Energiefluss extends IPSModuleStrict
         if (!card || !card.shadowRoot) return;
 
         const roots = getOpenShadowRoots(card.shadowRoot);
-        const consumerColour = AC.room; // Konfiguration „Verbraucher“
+        const consumerColour = AC.room;
 
-        // Die zusätzlichen Verbraucher load1 ... load6 behalten ihre
-        // konfigurierte Farbe „Verbraucher“. Hausverbrauch und
-        // Haussymbol werden separat dynamisch nach Hauptquelle eingefärbt.
         for (const root of roots) {
-            // Nur die Watt-Leistungswerte in den Verbraucherboxen dauerhaft
-            // auf die konfigurierte Farbe „Verbraucher“ festlegen.
-            // Die Original-Card setzt diese Texte bei Aktualisierungen erneut,
-            // deshalb erfolgt die Korrektur zusätzlich über eine lokale CSS-Regel.
+
             if (!root.getElementById?.('symcon-additional-load-watt-colours')) {
                 const wattStyle = document.createElement('style');
                 wattStyle.id = 'symcon-additional-load-watt-colours';
@@ -6459,8 +6017,6 @@ class Energiefluss extends IPSModuleStrict
                     const tag = String(node.tagName || '').toLowerCase();
                     const id = String(node.id || '');
 
-                    // Die Wertebox bleibt ungefüllt; nur ihr Rahmen bekommt
-                    // die Farbe „Verbraucher“.
                     if (tag === 'rect' && id === `es-load${i}`) {
                         node.setAttribute?.('fill', 'none');
                         node.style?.setProperty('fill', 'none', 'important');
@@ -6469,7 +6025,6 @@ class Energiefluss extends IPSModuleStrict
                         return;
                     }
 
-                    // Namen, Leistung und kWh erhalten dieselbe Verbraucherfarbe.
                     if (tag === 'text' || tag === 'tspan' || id === `ess-load${i}` || id.startsWith(`ess_load${i}_`)) {
                         node.setAttribute?.('fill', consumerColour);
                         node.style?.setProperty('fill', consumerColour, 'important');
@@ -6480,8 +6035,6 @@ class Energiefluss extends IPSModuleStrict
                         return;
                     }
 
-                    // Icons und zugehörige grafische Elemente der zusätzlichen
-                    // Verbraucher ebenfalls einheitlich einfärben.
                     if (['path', 'polygon', 'polyline', 'line', 'circle', 'ellipse'].includes(tag)) {
                         node.setAttribute?.('stroke', consumerColour);
                         node.style?.setProperty('stroke', consumerColour, 'important');
@@ -6497,9 +6050,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function updateSunsynkWallboxAuxInfo() {
-        // Fahrzeug-Zusatzdaten werden nicht als frei schwebende Box über
-        // die Originalgrafik gelegt. AUX-Name, Leistung und Energie stellt
-        // die Sunsynk-Karte selbst dar.
+
     }
 
     function clampPercent(value) {
@@ -6567,8 +6118,6 @@ class Energiefluss extends IPSModuleStrict
                 0
             );
 
-            // Momentane Autarkie: Anteil des Hausverbrauchs, der aktuell
-            // nicht aus dem Netz bezogen wird.
             autarky = housePower > 0
                 ? clampPercent(
                     ((housePower - gridImportPower) / housePower) * 100
@@ -6584,9 +6133,6 @@ class Energiefluss extends IPSModuleStrict
             );
             const ownPower = pvPower + batteryDischargePower;
 
-            // Momentaner Eigenverbrauch im Hybridsystem: PV-Leistung plus
-            // Batterieentladung gelten als eigene Leistung. Nur die aktuelle
-            // Netzeinspeisung vermindert den Eigenverbrauch.
             selfConsumption = ownPower > 0
                 ? clampPercent(
                     ((ownPower - gridExportPower) / ownPower) * 100
@@ -6598,7 +6144,6 @@ class Energiefluss extends IPSModuleStrict
             const gridExportEnergy = Number(d.gridExportEnergyValue || 0);
             const pvEnergy = Number(d.inverterDailyEnergy || 0);
 
-            // Tagesautarkie: Anteil des Tagesverbrauchs ohne Netzbezug.
             autarky = houseEnergy > 0
                 ? clampPercent(
                     ((houseEnergy - Math.max(gridImportEnergy, 0)) /
@@ -6606,16 +6151,6 @@ class Energiefluss extends IPSModuleStrict
                 )
                 : 0;
 
-            // Tages-Eigenverbrauch inklusive Batterie:
-            //
-            // Eigene abgegebene Energie =
-            // PV-Tagesenergie
-            // + Batterieentladung heute
-            // - Batterieladung heute.
-            //
-            // Der selbst genutzte Anteil ist die Hausenergie abzüglich
-            // des Netzbezugs. Damit wird auch eine Batterieentladung in der
-            // Nacht berücksichtigt.
             const batteryChargeEnergy = (
                 Array.isArray(batteries) ? batteries : []
             ).reduce(
@@ -6660,9 +6195,6 @@ class Energiefluss extends IPSModuleStrict
                 : 0;
         }
 
-        // Optional konfigurierte Prozentvariablen haben Vorrang vor
-        // der internen Berechnung. Ohne Auswahl bleibt das bisherige
-        // Berechnungsverhalten vollständig erhalten.
         if (d.autarkyVariableAvailable) {
             autarky = clampPercent(
                 Number(d.autarkyVariableValue || 0)
@@ -6687,9 +6219,6 @@ class Energiefluss extends IPSModuleStrict
         const autarkyText = `${autarky}%`;
         const selfConsumptionText = `${selfConsumption}%`;
 
-        // Nur echte Änderungen schreiben. Das verhindert, dass der
-        // MutationObserver durch unsere eigenen identischen Werte dauerhaft
-        // erneut ausgelöst wird.
         if (
             autarkyValue &&
             autarkyValue.textContent !== autarkyText
@@ -6718,7 +6247,6 @@ class Energiefluss extends IPSModuleStrict
             ratioLabel.textContent = 'Eigenverbrauch';
         }
 
-        // Lit kann unmittelbar nach unserem Zugriff nochmals rendern.
         if ((!autarkyValue || !ratioValue) && attempt < 20) {
             setTimeout(
                 () => applySunsynkRatios(
@@ -6766,8 +6294,6 @@ class Energiefluss extends IPSModuleStrict
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
 
-            // Wie in Lovelace: zuerst Konfiguration und hass setzen,
-            // anschließend das Element in den DOM einhängen.
             window.__symconHasWallbox = !!d.hasWallbox;
             card.setConfig(createSunsynkConfig(d, pvs, batteries, wallbox, groups));
             card.hass = createSunsynkHass(
@@ -6832,12 +6358,7 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function buildHouseView(d, grid, haus, pvs, batteries, wallbox) {
-        // Die originale Hausgrafik benötigt nur die aufsummierte Leistung.
-        // updatePowerFlowCard() summiert die übergebenen Strings selbst.
-        // Deshalb werden hier die einzelnen PV-Strings weitergereicht, damit
-        // die Infokachel ab 601 px Name, Leistung und Energie je String zeigen
-        // kann. Bis 600 px bleibt die Anzeige weiterhin auf die Gesamtsumme
-        // reduziert.
+
         updatePowerFlowCard(
             d,
             grid,
@@ -6848,18 +6369,6 @@ class Energiefluss extends IPSModuleStrict
         );
     }
 
-    /*
-     * Browserzustand nach demselben Prinzip wie beim Wärmepumpenmodul:
-     *
-     * Nicht schon beim Parsen des HTML auf localStorage zugreifen, sondern
-     * genau einmal beim Eintreffen des ersten echten Payloads. Erst danach
-     * wird die Karte mit setState() aufgebaut.
-     *
-     * Dadurch ist der Ablauf:
-     *   Payload -> Browserzustand laden -> Karte aufbauen
-     *
-     * Datenupdates ändern die lokal gewählte Ansicht anschließend nicht mehr.
-     */
     const VIEW_STORAGE_KEY = 'symcon-energiefluss-view';
     const TECHNICAL_LAYOUT_STORAGE_KEY =
         'symcon-energiefluss-technical-layout';
@@ -6873,113 +6382,93 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
         window.__EF_BROWSER_VIEW_INITIALIZED__ = true;
-        /*
-         * Einheitliche Speicherung in Browser UND Symcon-App:
-         * Eine Energiefluss-Instanz = ein eigener gespeicherter Zustand.
-         *
-         * Beispiel:
-         * /visu/36446/ -> instance-36446
-         */
-        const instanceScope = getInstanceStorageScope();
 
-        if (instanceScope) {
-            const instanceViewKey =
-                `symcon-energiefluss-${instanceScope}-view`;
-            const instanceLayoutKey =
-                `symcon-energiefluss-${instanceScope}-technical-layout`;
+        try {
+            const instanceScope = getInstanceStorageScope();
 
-            const storedView = window.localStorage.getItem(instanceViewKey);
-            const storedLayout = window.localStorage.getItem(instanceLayoutKey);
+            if (instanceScope) {
+                const instanceViewKey =
+                    `symcon-energiefluss-${instanceScope}-view`;
+                const instanceLayoutKey =
+                    `symcon-energiefluss-${instanceScope}-technical-layout`;
 
-            if (storedView === 'flow' || storedView === 'house') {
-                currentDisplayMode = storedView;
+                const storedView = window.localStorage.getItem(instanceViewKey);
+                const storedLayout = window.localStorage.getItem(instanceLayoutKey);
+
+                if (storedView === 'flow' || storedView === 'house') {
+                    currentDisplayMode = storedView;
+                }
+
+                if (
+                    storedLayout === 'compact'
+                    || storedLayout === 'compact-wide'
+                    || storedLayout === 'lite'
+                    || storedLayout === 'lite-wide'
+                    || storedLayout === 'full'
+                    || storedLayout === 'full-wide'
+                ) {
+                    currentTechnicalLayout = storedLayout;
+                }
+
+                widgetStorageScope = instanceScope;
+                widgetViewStorageKey = instanceViewKey;
+                widgetTechnicalLayoutStorageKey = instanceLayoutKey;
+                widgetDetectionReady = true;
+
+                updateTechnicalLayoutButtons();
+                updateDisplayModeButton();
+                return;
+            }
+
+            const browserView = window.localStorage.getItem(
+                'symcon-energiefluss-view'
+            );
+            const browserLayout = window.localStorage.getItem(
+                'symcon-energiefluss-technical-layout'
+            );
+
+            if (browserView === 'flow' || browserView === 'house') {
+                currentDisplayMode = browserView;
             }
 
             if (
-                storedLayout === 'compact'
-                || storedLayout === 'compact-wide'
-                || storedLayout === 'lite'
-                || storedLayout === 'lite-wide'
-                || storedLayout === 'full'
-                || storedLayout === 'full-wide'
+                browserLayout === 'compact'
+                || browserLayout === 'compact-wide'
+                || browserLayout === 'lite'
+                || browserLayout === 'lite-wide'
+                || browserLayout === 'full'
+                || browserLayout === 'full-wide'
             ) {
-                currentTechnicalLayout = storedLayout;
+                currentTechnicalLayout = browserLayout;
             }
-
-            widgetStorageScope = instanceScope;
-            widgetViewStorageKey = instanceViewKey;
-            widgetTechnicalLayoutStorageKey = instanceLayoutKey;
-            widgetDetectionReady = true;
 
             updateTechnicalLayoutButtons();
             updateDisplayModeButton();
-            return;
+
+        } catch (_) {
+            updateTechnicalLayoutButtons();
+            updateDisplayModeButton();
+        } finally {
+            const initialViewGuard = document.getElementById('ef-initial-view-guard');
+            if (initialViewGuard) {
+                initialViewGuard.remove();
+            }
         }
+    }
 
-        // Sicherheitsfallback, falls die Instanz-ID wider Erwarten nicht
-        // aus /visu/<ID>/ gelesen werden kann.
-        const browserView = window.localStorage.getItem(
-            'symcon-energiefluss-view'
-        );
-        const browserLayout = window.localStorage.getItem(
-            'symcon-energiefluss-technical-layout'
-        );
-
-        if (browserView === 'flow' || browserView === 'house') {
-            currentDisplayMode = browserView;
-        }
-
-        if (
-            browserLayout === 'compact'
-            || browserLayout === 'compact-wide'
-            || browserLayout === 'lite'
-            || browserLayout === 'lite-wide'
-            || browserLayout === 'full'
-            || browserLayout === 'full-wide'
-        ) {
-            currentTechnicalLayout = browserLayout;
-        }
-
-        updateTechnicalLayoutButtons();
-        updateDisplayModeButton();
-    
-        // Erst jetzt ist die instanzspezifisch gespeicherte Ansicht bekannt.
-        // Den Startschutz entfernen, damit niemals kurz die falsche Grundansicht erscheint.
-        const initialViewGuard = document.getElementById('ef-initial-view-guard');
-        if (initialViewGuard) {
-            initialViewGuard.remove();
-        }
-}
-
-
-    /*
-     * Kachelspezifische Ergänzung.
-     * Die festen Browser-Keys oben bleiben unverändert und werden sofort
-     * wie beim Wärmepumpenmodul geladen.
-     */
     let widgetStorageScope = null;
     let widgetViewStorageKey = null;
     let widgetTechnicalLayoutStorageKey = null;
     let widgetDetectionStarted = false;
     let widgetDetectionReady = false;
 
-    /*
-     * Symcon-App:
-     * Die HTML-Kachel läuft dort als eigenes Top-Level-Dokument. Es gibt
-     * deshalb weder frameElement noch Parent-Grid und somit keine Widget-ID.
-     *
-     * Dafür ist die Zielinstanz sofort aus /visu/<InstanzID>/ bekannt.
-     * Pro Energiefluss-Instanz wird deshalb ein eigener Zustand gespeichert.
-     */
     function getEnergyFlowInstanceID() {
         try {
-            // Im IPS-WebHook-Host ist /visu/<ID>/ nicht mehr Teil der URL.
-            // Die Modulinstanz wird deshalb vom PHP-WebHook explizit gesetzt.
+
             if (window.__EF_INSTANCE_ID__ != null && String(window.__EF_INSTANCE_ID__) !== '') {
                 return String(window.__EF_INSTANCE_ID__);
             }
 
-            // Direkte /visu/<ID>/ Darstellung weiterhin unterstützen.
             const match = window.location.pathname.match(/\/visu\/(\d+)\/?/);
             return match ? match[1] : null;
         } catch (_) {
@@ -7012,8 +6501,7 @@ class Energiefluss extends IPSModuleStrict
         };
 
         const getGridConfiguration = () => {
-            // Lokale Grid-Konfiguration bevorzugen: Sie entspricht exakt dem
-            // Layout dieses Browsers/Geräts.
+
             try {
                 const visuID = new URL(window.location.href).searchParams.get('visuID');
                 const keys = Object.keys(window.parent.localStorage || window.localStorage);
@@ -7032,7 +6520,7 @@ class Energiefluss extends IPSModuleStrict
                     }
                 }
             } catch (_) {
-                // Snapshot-Fallback folgt.
+
             }
 
             try {
@@ -7041,7 +6529,7 @@ class Energiefluss extends IPSModuleStrict
                     return parseMaybeJson(server.grid);
                 }
             } catch (_) {
-                // Kein Grid verfügbar.
+
             }
             return null;
         };
@@ -7108,8 +6596,6 @@ class Energiefluss extends IPSModuleStrict
                     height: widget.height * sy
                 };
 
-                // Fehler in Rastereinheiten; so bleibt die Bewertung unabhängig
-                // von Auflösung und Browser-Zoom.
                 let cost = (
                     Math.abs(fr.left - predicted.left) / Math.max(1, sx) +
                     Math.abs(fr.top - predicted.top) / Math.max(1, sy) +
@@ -7117,8 +6603,6 @@ class Energiefluss extends IPSModuleStrict
                     Math.abs(fr.height - predicted.height) / Math.max(1, sy)
                 );
 
-                // Wenn sowohl iframe als auch Grid-Widget ihr Symcon-Ziel kennen,
-                // darf ein anderes Ziel nicht geometrisch "gewinnen".
                 if (fr.targetID > 0 && widget.targetID > 0 && fr.targetID !== widget.targetID) {
                     cost += 10000;
                 }
@@ -7147,15 +6631,11 @@ class Energiefluss extends IPSModuleStrict
                 const currentTargetID = frameRects[currentIndex]?.targetID || 0;
                 if (currentTargetID > 0) {
                     const hasCurrentTarget = widgets.some(w => w.targetID === currentTargetID);
-                    // Nur anwenden, wenn die serverseitige Zielauflösung für diesen
-                    // Container tatsächlich Informationen geliefert hat.
+
                     const hasKnownTargets = widgets.some(w => w.targetID > 0);
                     if (hasKnownTargets && !hasCurrentTarget) return;
                 }
 
-                // Jede Frame/Widget-Kombination einmal als Transformationsanker
-                // testen. Der richtige Container erzeugt über alle sichtbaren
-                // iframes hinweg einen nahezu identischen Rastermaßstab.
                 frameRects.forEach((anchorFrame, anchorFrameIndex) => {
                     widgets.forEach(anchorWidget => {
                         if (anchorFrame.targetID > 0 && anchorWidget.targetID > 0 &&
@@ -7175,8 +6655,6 @@ class Energiefluss extends IPSModuleStrict
                         const assignments = new Array(frameRects.length).fill(null);
                         let totalCost = 0;
 
-                        // Den Anker fest zuordnen, anschließend die übrigen
-                        // Frames jeweils dem geometrisch besten freien Widget.
                         const anchorWidgetIndex = widgets.indexOf(anchorWidget);
                         assignments[anchorFrameIndex] = anchorWidget;
                         available.delete(anchorWidgetIndex);
@@ -7205,12 +6683,6 @@ class Energiefluss extends IPSModuleStrict
                             totalCost += bestCost;
                         }
 
-                        // Viele zusätzliche Widgets sind erlaubt, aber ein kleiner
-                        // Malus bevorzugt den Container, der die sichtbare Seite
-                        // tatsächlich am präzisesten beschreibt.
-                        // Ein ähnlich aussehender großer Container einer anderen Seite
-                        // darf nicht nur wegen eines Teilmusters gewinnen. Deshalb deutlich
-                        // stärker bestrafen, wenn sehr viele zusätzliche Widgets vorhanden sind.
                         totalCost += Math.max(0, widgets.length - frameRects.length) * 0.75;
                         const averageCost = totalCost / frameRects.length;
 
@@ -7227,14 +6699,13 @@ class Energiefluss extends IPSModuleStrict
 
             if (best && best.assignments[currentIndex]) {
                 const widgetId = best.assignments[currentIndex].widgetId;
-                // Nur hinreichend plausible Matches akzeptieren. Bei einem guten
-                // Grid-Match liegt der Wert typischerweise deutlich unter 1.
+
                 if (best.cost < 3.5) {
                     return `widget-${widgetId}`;
                 }
             }
         } catch (_) {
-            // Sicherer Fallback weiter unten.
+
         }
 
         return 'widget-fallback';
@@ -7260,8 +6731,6 @@ class Energiefluss extends IPSModuleStrict
                     widgetTechnicalLayoutStorageKey
                 );
 
-            // Existiert für diese Kachel bereits ein eigener Zustand,
-            // hat er Vorrang vor dem browserweiten Startwert.
             if (storedView === 'flow' || storedView === 'house') {
                 currentDisplayMode = storedView;
             }
@@ -7277,8 +6746,6 @@ class Energiefluss extends IPSModuleStrict
                 currentTechnicalLayout = storedLayout;
             }
 
-            // Bei einer bislang unbekannten Kachel den bereits korrekt
-            // geladenen Browserzustand als Ausgangswert übernehmen.
             if (storedView !== 'flow' && storedView !== 'house') {
                 window.localStorage.setItem(
                     widgetViewStorageKey,
@@ -7300,7 +6767,7 @@ class Energiefluss extends IPSModuleStrict
                 );
             }
         } catch (_) {
-            // Browserweiter Zustand bleibt funktionsfähig.
+
         }
 
         widgetDetectionReady = true;
@@ -7315,23 +6782,18 @@ class Energiefluss extends IPSModuleStrict
     }
 
     function startWidgetDetection() {
-        /*
-         * Bewusst deaktiviert:
-         * Der Zustand wird überall ausschließlich über die Energiefluss-
-         * Instanz-ID gespeichert. Keine Widget-/Grid-/Geometrie-Erkennung.
-         */
+
         return;
     }
 
     function storeTechnicalLayout() {
         try {
-            // Wie bei der Wärmepumpe immer sofort browserweit speichern.
+
             window.localStorage.setItem(
                 TECHNICAL_LAYOUT_STORAGE_KEY,
                 currentTechnicalLayout
             );
 
-            // Nach erkannter Kachel zusätzlich kachelspezifisch speichern.
             if (widgetTechnicalLayoutStorageKey) {
                 window.localStorage.setItem(
                     widgetTechnicalLayoutStorageKey,
@@ -7339,7 +6801,7 @@ class Energiefluss extends IPSModuleStrict
                 );
             }
         } catch (error) {
-            // LocalStorage ist optional.
+
         }
     }
 
@@ -7377,7 +6839,6 @@ class Energiefluss extends IPSModuleStrict
                 layoutButton.title
             );
 
-            // Der Text ist länger als das bisherige Einzelzeichen.
             layoutButton.style.width = '42px';
         }
 
@@ -7437,8 +6898,6 @@ class Energiefluss extends IPSModuleStrict
         updateTechnicalLayoutButtons();
         updateDisplayModeButton();
 
-        // Beide Ansichten bleiben auf dem von IP-Symcon
-        // vorgegebenen Hintergrund.
         const eflow = document.getElementById('eflow');
         if (eflow) {
             eflow.style.background = 'transparent';
@@ -7464,14 +6923,11 @@ class Energiefluss extends IPSModuleStrict
                     );
                 }
             } catch (error) {
-                // LocalStorage ist optional.
+
             }
 
             applyDisplayMode(currentDisplayMode);
 
-            // Die beiden Views haben unterschiedliche Zeichenflächen. Nach dem
-            // lokalen Umschalten deshalb nur neu skalieren – ohne ApplyChanges
-            // und ohne Änderung am Konfigurationsformular.
             if (lastStateData) {
                 updateLayout(
                     Array.isArray(lastStateData.groups) ? lastStateData.groups.length : 0,
@@ -7530,7 +6986,6 @@ class Energiefluss extends IPSModuleStrict
     updateTechnicalLayoutButtons();
     updateDisplayModeButton();
 
-    // ---------- Layout ----------
     let layoutWidth = 540;
 
     function updateLayout(groupCount, pvCount, batteryCount, showRightPanel, mode = 'flow', hasWallbox = false) {
@@ -7541,14 +6996,10 @@ class Energiefluss extends IPSModuleStrict
         let graphWidth;
 
         if (mode === 'house') {
-            // Die Hausgrafik besitzt weiterhin ihre feste 900x640-Zeichenfläche.
+
             graphWidth = 900;
         } else {
-            // Die originale Sunsynk-Karte muss exakt dieselbe Breite besitzen
-            // wie der Bereich, der anschließend durch fit() skaliert wird.
-            // Zuvor blieb #stage immer 1080 px breit, während #fit häufig nur
-            // 540 px breit war. Dadurch wurde die rechte Hälfte abgeschnitten
-            // und die Karte wirkte in IP-Symcon falsch skaliert.
+
             graphWidth = currentTechnicalLayout.endsWith('-wide')
                 ? 1080
                 : 540;
@@ -7562,8 +7013,6 @@ class Energiefluss extends IPSModuleStrict
         wrapEl.style.width = layoutWidth + 'px';
         rootEl.style.width = layoutWidth + 'px';
 
-        // Nur die technische Ansicht an die tatsächlich skalierte Breite
-        // angleichen. Die Hausansicht bleibt vollständig unverändert.
         if (stage) {
             stage.style.width = graphWidth + 'px';
         }
@@ -7573,7 +7022,6 @@ class Energiefluss extends IPSModuleStrict
         fit();
     }
 
-    // ---------- Zustand ----------
     function applyConfiguredColors(d) {
         if (d && d.colors) {
             Object.assign(AC, d.colors);
@@ -7581,8 +7029,6 @@ class Energiefluss extends IPSModuleStrict
             AC.batt = AC.charge;
             AC.room = d.colors.room || AC.room;
 
-            // Die Wallbox verwendet überall dieselbe Farbe wie
-            // „Weitere Verbraucher“.
             AC.wallbox = AC.room;
             AC.inverter = d.colors.inverter || AC.inverter;
         }
@@ -7618,10 +7064,6 @@ class Energiefluss extends IPSModuleStrict
         if (wallboxInfo) wallboxInfo.style.borderColor = AC.wallbox;
     }
 
-    // Momentane Leistungswerte werden intern nur in ganzen Watt
-    // weiterverarbeitet. Integer und Float bleiben als Eingabewerte erlaubt.
-    // Math.trunc() schneidet Nachkommastellen zur Null hin ab:
-    // 0.9 -> 0 W, -0.9 -> 0 W, 125.8 -> 125 W.
     function wholeWatts(value) {
         const numeric = Number(value);
         return Number.isFinite(numeric) ? Math.trunc(numeric) : 0;
@@ -7630,8 +7072,6 @@ class Energiefluss extends IPSModuleStrict
     function setState(d) {
         applyConfiguredColors(d);
 
-        // Ausschließlich Leistungswerte in W normalisieren.
-        // Energie, SOC, Spannung, Strom, Frequenz usw. bleiben unverändert.
         const grid = wholeWatts(d.grid);
         const imp = Math.max(grid, 0);
 
@@ -7662,7 +7102,6 @@ class Energiefluss extends IPSModuleStrict
         const pvTotal = pvs.reduce((sum, pv) => sum + (pv.value || 0), 0);
         const batteryTotal = batteries.reduce((sum, bat) => sum + (bat.value || 0), 0);
 
-        // Netzbezug positiv, Rücklieferung negativ.
         const calculatedHouseBalance = Math.max(
             pvTotal + batteryTotal + grid,
             0
@@ -7683,22 +7122,19 @@ class Energiefluss extends IPSModuleStrict
 
         let haus;
 
-        // Eine verknüpfte Hausleistungsvariable hat immer Vorrang.
         if (
             d.available?.housePowerConfigured &&
             Number.isFinite(Number(d.housePower))
         ) {
             haus = Math.max(wholeWatts(d.housePower), 0);
         } else if (houseCalculationMode === 'inverter-grid') {
-            // Wechselrichterleistung gesamt + Netzbezug − Netzeinspeisung.
+
             haus = calculatedHouseInverterGrid;
         } else {
-            // PV + Batterieentladung − Batterieladung
-            // + Netzbezug − Netzeinspeisung.
+
             haus = calculatedHouseBalance;
         }
 
-        // Neue technische Ansicht.
         const powerState = {
             ...d,
             grid,
@@ -7720,7 +7156,6 @@ class Energiefluss extends IPSModuleStrict
             groups
         );
 
-        // Alte SVG-Struktur bleibt intern nur für Abwärtskompatibilität erhalten.
         clearDynamicSources();
         buildPVs(pvs);
         buildBatteries(batteries);
@@ -7807,10 +7242,6 @@ class Energiefluss extends IPSModuleStrict
             }
         }
 
-        // Hausansicht V2:
-        // Die Wallbox wird separat dargestellt. Ihre positive Ladeleistung
-        // wird deshalb vom Hausverbrauch abgezogen, damit sie nicht doppelt
-        // als Hausverbrauch und Wallbox erscheint.
         const houseViewPower = Math.max(
             haus - (
                 d.hasWallbox
@@ -7828,7 +7259,7 @@ class Energiefluss extends IPSModuleStrict
             batteries,
             wallbox
         );
-        // Zustandsupdates ändern die lokal gewählte View nicht.
+
         applyDisplayMode(currentDisplayMode);
 
         updateLayout(
@@ -7852,11 +7283,8 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        // Wie bei der Wärmepumpe: den gespeicherten Browserzustand genau
-        // einmal unmittelbar vor dem ersten Aufbau der Karte laden.
         initializeBrowserViewState();
 
-        // Browseransicht sofort; Widget-Erkennung nur zusätzlich im Hintergrund.
         startWidgetDetection();
 
         lastStateData = d;
@@ -7866,9 +7294,6 @@ class Energiefluss extends IPSModuleStrict
     function refreshResponsiveState() {
         const compactNow = window.matchMedia('(max-width: 600px)').matches;
 
-        // Nur bei einem echten Wechsel zwischen den zwei vorhandenen
-        // Darstellungen neu aufbauen. So gibt es beim Ziehen keine alten
-        // Misch-/Zwischenanzeigen mehr.
         if (compactNow !== lastCompactLayout) {
             lastCompactLayout = compactNow;
 
@@ -7878,7 +7303,6 @@ class Energiefluss extends IPSModuleStrict
         }
     }
 
-    // ---------- Animation ----------
     let last = performance.now();
 
     function powerSpeed(w) {
@@ -7929,7 +7353,6 @@ class Energiefluss extends IPSModuleStrict
         requestAnimationFrame(frame);
     }
 
-    // ---------- Skalierung ----------
     function fit() {
         const host = document.getElementById('scale-host');
         const root = document.getElementById('scale-root');
@@ -7948,37 +7371,11 @@ class Energiefluss extends IPSModuleStrict
             return;
         }
 
-        // Hausansicht:
-        // Die komplette 900x640-Zeichenfläche inklusive Infoboxen wird
-        // proportional anhand der verfügbaren BREITE skaliert.
-        //
-        // Dadurch:
-        // - nutzt das Haus die gesamte HTML-Breite,
-        // - das Seitenverhältnis bleibt unverändert,
-        // - die Grafik wird nicht verzerrt,
-        // - alle Infoboxen bleiben an exakt derselben relativen Position,
-        //   weil sie innerhalb desselben house-stage mitskaliert werden.
-        //
-        // Klassische Ansicht:
-        // Weiterhin wie bisher vollständig in Breite UND Höhe einpassen.
         const houseMode = houseStage && houseStage.style.display !== 'none';
 
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
 
-        // Proportional skalieren.
-        //
-        // Energiefluss:
-        // Die gesamte verfügbare BREITE wird verwendet. Dadurch werden
-        // Kreise, Schrift, Icons, Linien und Abstände immer gemeinsam
-        // und gleichmäßig skaliert. Es gibt keinen zusätzlichen Zoomfaktor,
-        // der später zu Abschneiden oder ungenutzter Breite führen kann.
-        //
-        // Hausansicht:
-        // Weiterhin vollständig in Breite und Höhe einpassen.
-        // Größtmögliche proportionale Skalierung ohne Abschneiden.
-        // Wenn die Höhe reicht, wird die volle Breite genutzt. Ist die Höhe
-        // der begrenzende Faktor, wird entsprechend kleiner skaliert.
         const scale = Math.min(scaleX, scaleY);
 
         root.style.transform = `scale(${scale})`;
@@ -7986,15 +7383,8 @@ class Energiefluss extends IPSModuleStrict
         const scaledWidth = baseWidth * scale;
         const scaledHeight = baseHeight * scale;
 
-        // Energiefluss nutzt die maximale Breite exakt aus.
-        // Hausansicht bleibt bei eventuell vorhandener Restbreite zentriert.
         root.style.left = `${Math.max(0, (availableWidth - scaledWidth) / 2)}px`;
 
-        // Auf schmalen Handyansichten die proportional skalierte Grafik
-        // nach unten ausrichten. Dadurch landet der untere Rand der internen
-        // 640px-Zeichenfläche tatsächlich am unteren Rand des verfügbaren
-        // Grafikbereichs, statt durch vertikale Zentrierung Leerraum darunter
-        // zu erzeugen. Ab 601px bleibt die bisherige Zentrierung erhalten.
         root.style.top = `${Math.max(0, (availableHeight - scaledHeight) / 2)}px`;
     }
 
@@ -8072,7 +7462,6 @@ HTML;
             $requestPath = (string) (parse_url($requestUri, PHP_URL_PATH) ?? '');
             $hookPath = '/hook/' . $this->GetVisualizationWebHookBaseAddress();
 
-            // Nur exakt den für diese Instanz registrierten Hook bedienen.
             if ($requestPath !== $hookPath) {
                 http_response_code(404);
                 header('Content-Type: text/plain; charset=utf-8');
@@ -8089,9 +7478,7 @@ HTML;
             }
 
             if ($asset === 'visualization-host') {
-                // Vollständige Visualisierung unter normalem HTTP-Origin.
-                // Die Instanz-ID wird explizit in das Host-Dokument gegeben, damit
-                // jede Energiefluss-Instanz eigene View-/Layout-Storage-Keys nutzt.
+
                 $html = '<script>window.__EF_INSTANCE_ID__='
                     . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
                     . ';</script>'
@@ -8102,10 +7489,9 @@ HTML;
                 $html .= <<<'HTML'
 <script>
 
-
 window.addEventListener('message', function (event) {
     const message = event.data;
-    if (!message || message.__energieflussBridge !== true) {
+    if (event.source !== window.parent || !message || message.__energieflussBridge !== true) {
         return;
     }
 
@@ -8116,7 +7502,6 @@ window.addEventListener('message', function (event) {
         document.documentElement.setAttribute('data-theme', message.theme.dark ? 'dark' : 'light');
     }
 
-    // HostReady ist ausschließlich ein Handshake und niemals Anlagendaten.
     const payload = message.payload;
     if (!payload || payload.__energieflussHostReady === true) {
         return;
@@ -8127,7 +7512,6 @@ window.addEventListener('message', function (event) {
     }
 });
 
-// Nur dem Parent Bereitschaft melden. Nicht selbst als Energieflusszustand verarbeiten.
 try {
     window.parent.postMessage({__energieflussHostReady: true}, '*');
 } catch (_) {}
@@ -8163,10 +7547,6 @@ HTML;
                 throw new RuntimeException('Visualisierungsdatei konnte nicht gelesen werden: ' . $asset);
             }
 
-            // Die beiden Karten importieren Lit relativ als ./lit-core.min.js.
-            // Bei einem einzigen Hook mit Query-Parameter würde der Browser
-            // diesen relativen Import sonst neben /hook/ auflösen. Deshalb den
-            // Import auf die absolute URL desselben WebHooks umschreiben.
             if ($asset !== 'lit-core.min.js') {
                 $litUrl = $this->GetVisualizationModuleWebHookUrl('lit-core.min.js');
                 $source = str_replace('./lit-core.min.js', $litUrl, $source);
@@ -8457,7 +7837,6 @@ HTML;
             $weightedMinSoc / $totalCapacity
         );
 
-        // Positive Batterieleistung = Entladen zum Haus.
         if ($totalPower > 1.0) {
             $hours = $availableDischargeEnergy
                 / ($totalPower / 1000.0);
@@ -8476,7 +7855,6 @@ HTML;
             );
         }
 
-        // Negative Batterieleistung = Laden.
         if ($totalPower < -1.0) {
             $hours = $missingChargeEnergy
                 / (abs($totalPower) / 1000.0);
@@ -8629,8 +8007,6 @@ HTML;
             ? $payload['wallbox']
             : [];
 
-        // Leistungswerte werden im Modul immer in Watt geführt und deshalb
-        // auf ganze Watt gerundet. Energie- und Prozentwerte bleiben Float.
         $values = [
             'CalculatedHousePower' => [
                 'value' => round($housePower),
@@ -8711,10 +8087,6 @@ HTML;
             $tolerance = (float) $definition['tolerance'];
             $currentValue = (float) GetValue($variableID);
 
-            // Nur bei einer tatsächlichen Wertänderung schreiben.
-            // Leistungswerte sind ganze Watt und haben daher Toleranz 0.
-            // Bei Float-Werten verhindert eine kleine Toleranz unnötige
-            // Aktualisierungen durch Fließkommaabweichungen.
             if (abs($currentValue - $newValue) > $tolerance) {
                 $this->SetValue($ident, $newValue);
             }
@@ -8735,7 +8107,6 @@ HTML;
                 $runtimeVariableID
             );
 
-            // String nur aktualisieren, wenn sich der Text ändert.
             if ($currentRuntime !== $runtime) {
                 $this->SetValue(
                     'CalculatedBatteryRuntime',
@@ -8779,19 +8150,16 @@ HTML;
         return '';
     }
 
-
     private function ResolveVariableID(int $objectID): int
     {
         if ($objectID <= 0 || !IPS_ObjectExists($objectID)) {
             return 0;
         }
 
-        // Direkte Variable.
         if (IPS_VariableExists($objectID)) {
             return $objectID;
         }
 
-        // Links auflösen. Mehrere Link-Ebenen werden ebenfalls unterstützt.
         $visited = [];
         $currentID = $objectID;
 
@@ -8887,12 +8255,11 @@ HTML;
         if (is_array($producers)) {
             foreach ($producers as $producer) {
                 foreach ([
-                    // Neue Konfiguration: genau eine Zeile pro String.
+
                     'VariableID',
                     'VoltageVariableID',
                     'CurrentVariableID',
 
-                    // Alte Konfiguration bleibt zur Migration lesbar.
                     'String1PowerVariableID',
                     'String1VoltageVariableID',
                     'String1CurrentVariableID',
@@ -8985,15 +8352,7 @@ HTML;
 
     private function BuildPayload(): array
     {
-        // Netzleistung:
-        //
-        // Variante A – zwei getrennte Variablen:
-        //   Bezug positiv, Überschuss/Einspeisung positiv
-        //   Ergebnis = Bezug - Überschuss
-        //
-        // Variante B – eine gemeinsame bidirektionale Variable:
-        //   bisherige Modulkonvention bleibt erhalten und wird intern
-        //   auf positiv = Bezug / negativ = Einspeisung normalisiert.
+
         $gridBase = (float) $this->ReadVar('L1');
 
         $gridExportPowerID =
@@ -9004,9 +8363,7 @@ HTML;
             IPS_VariableExists($gridExportPowerID);
 
         if ($hasSeparateExportPower) {
-            // Bei getrennten Variablen ist L1 ausschließlich der Bezug.
-            // Die Option „Vorzeichen umkehren“ wirkt nur auf diese
-            // Bezugsvariable, falls der Sensor negative Werte liefert.
+
             if ($this->ReadPropertyBoolean('InvertGridPower')) {
                 $gridBase *= -1;
             }
@@ -9017,14 +8374,9 @@ HTML;
                 0.0
             );
 
-            // Wichtig: Überschuss wird vom Bezug abgezogen.
             $grid = $gridImportPower - $gridExportPower;
         } else {
-            // Eine gemeinsame Netzvariable:
-            // ursprüngliche Sensor-Konvention:
-            // positiv = Rücklieferung, negativ = Netzbezug.
-            // Interne Konvention:
-            // positiv = Netzbezug, negativ = Rücklieferung.
+
             $grid = $gridBase * -1;
 
             if ($this->ReadPropertyBoolean('InvertGridPower')) {
@@ -9036,9 +8388,6 @@ HTML;
         $housePvs = [];
         $batteries = [];
 
-        // PV-Strings: Eine Tabellenzeile entspricht genau einem String.
-        // Die Reihenfolge im Formular wird unverändert als PV1 bis PV6
-        // an die Sunsynk-Karte übergeben.
         $decodedPVs = json_decode(
             $this->ReadPropertyString('Producers'),
             true
@@ -9052,9 +8401,6 @@ HTML;
                     $source['VariableID'] ?? 0
                 );
 
-                // Abwärtskompatibilität für bisherige Anlagenzeilen:
-                // Falls keine neue Leistungsvariable vorhanden ist, wird
-                // der erste konfigurierte alte String übernommen.
                 if (
                     $powerVariableID <= 0 ||
                     !IPS_VariableExists($powerVariableID)
@@ -9149,13 +8495,8 @@ HTML;
             }
         }
 
-        // Die Hausgrafik erhält ebenfalls die einzelnen Strings. Die
-        // Energie stammt jedoch zentral aus der Wechselrichter-Liste.
         $housePvs = $pvs;
 
-
-
-        // Batterien.
         $decodedBatteries = json_decode($this->ReadPropertyString('Batteries'), true);
         if (is_array($decodedBatteries)) {
             foreach (array_slice($decodedBatteries, 0, 2) as $source) {
@@ -9267,7 +8608,6 @@ HTML;
             }
         }
 
-        // Verbrauchergruppen.
         $groups = [];
         $decoded = json_decode($this->ReadPropertyString('Groups'), true);
         if (is_array($decoded)) {
@@ -9294,14 +8634,9 @@ HTML;
 
                 $socText = '';
                 if ($hasSoc) {
-                    // GetValueFormatted unterstützt Boolean, Integer, Float
-                    // und String. Bei numerischen Variablen werden außerdem
-                    // Präfix, Suffix und Zuordnungstexte des Variablenprofils
-                    // übernommen, z. B. "69 %", "Voll" oder "Lädt".
+
                     $socText = trim((string) GetValueFormatted($socVariableID));
 
-                    // Sicherheitsrückfall, falls ein Profil keinen formatierten
-                    // Text liefert.
                     if ($socText === '') {
                         $socValue = GetValue($socVariableID);
                         $socText = is_bool($socValue)
@@ -9330,9 +8665,6 @@ HTML;
             }
         }
 
-        // Die erste als Wallbox markierte Verbraucherzeile liefert zusätzlich
-        // die Wallboxdaten für die Hausgrafik. In der technischen Ansicht bleibt
-        // sie ein ganz normaler Verbraucher und wird nach Leistung sortiert.
         $wallbox = [
             'name'        => 'Wallbox',
             'value'       => 0.0,
@@ -9366,9 +8698,6 @@ HTML;
             break;
         }
 
-
-        // Energiebilanz des Hauses in kWh:
-        // PV + Netzbezug - Einspeisung + Batterieentladung - Batterieladung.
         $gridImportEnergyID = $this->ReadPropertyInteger('GridImportEnergy');
         $gridExportEnergyID = $this->ReadPropertyInteger('GridExportEnergy');
 
@@ -9380,8 +8709,6 @@ HTML;
             $gridExportEnergyID > 0 &&
             IPS_VariableExists($gridExportEnergyID);
 
-        // Die PV-Tagesenergie wird weiter unten nach dem Auslesen aller
-        // Wechselrichter aus deren aufsummierter Tagesenergie übernommen.
         $pvEnergyTotal = 0.0;
         $hasPvEnergy = false;
 
@@ -9402,7 +8729,6 @@ HTML;
             $batteryDischargeEnergyTotal += (float) ($battery['dischargeEnergy'] ?? 0.0);
         }
 
-        // Ohne Batterie ist dieser Teil der Bilanz automatisch vollständig.
         if (count($batteries) === 0) {
             $hasBatteryEnergy = true;
         }
@@ -9410,12 +8736,6 @@ HTML;
         $houseEnergyAvailable = false;
         $houseEnergy = 0.0;
 
-        // Wechselrichter: Alle Listeneinträge werden zu Gesamtwerten addiert.
-        // Die beiden Temperaturwerte bleiben getrennt: WR1 wird auf dem
-        // bisherigen AC-Temperaturfeld, WR2 auf dem DC-Temperaturfeld der
-        // Sunsynk-Karte dargestellt. So geht keine Gerätetemperatur verloren.
-        // Sind noch keine Listeneinträge konfiguriert, bleiben die bisherigen
-        // Einzel-Eigenschaften als abwärtskompatibler Fallback aktiv.
         $inverterPower = 0.0;
         $inverterCurrentL1 = 0.0;
         $inverterCurrentL2 = 0.0;
@@ -9530,20 +8850,9 @@ HTML;
             ]];
         }
 
-        // Für sämtliche PV-Energieanzeigen gilt zentral die Summe der
-        // Tagesenergien aus der Wechselrichter-Liste.
         $pvEnergyTotal = $inverterDailyEnergy;
         $hasPvEnergy = $inverterDailyEnergyAvailable;
 
-        // Die Auswahl HouseCalculationMode gilt ausschließlich für die
-        // momentane Hausleistung in Watt.
-        //
-        // Für die Tagesenergie gilt:
-        // 1. Ist eine gültige HouseEnergy-Variable gewählt, wird deren Wert
-        //    direkt verwendet.
-        // 2. Andernfalls erfolgt die interne Bilanz:
-        //    PV + Netzbezug - Einspeisung
-        //    + Batterieentladung - Batterieladung.
         $houseEnergy = 0.0;
         $houseEnergyAvailable = false;
         $houseCalculationMode = $this->ReadPropertyString(
@@ -9579,9 +8888,6 @@ HTML;
             $houseEnergyAvailable = true;
         }
 
-        // Die beiden Temperaturfelder gehören zur zentralen
-        // Wechselrichterdarstellung der Sunsynk-Karte und werden nicht
-        // pro Eintrag der Wechselrichterliste summiert oder zugeordnet.
         $inverterACTemperatureID = $this->ReadPropertyInteger('InverterTemperature');
         $inverterDCTemperatureID = $this->ReadPropertyInteger('InverterDCTemperature');
         $inverterTemperatureAvailable = $inverterACTemperatureID > 0
