@@ -283,6 +283,16 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.13 (11.10.2026)
+
+- Der Start der Kachel in IPSView und der Symcon-App, einschließlich iOS, wurde stabilisiert. Die Darstellung startet erst nach dem vollständigen Laden der äußeren Kachel und erscheint mit der fertig aufgebauten, konfigurierten Ansicht.
+- Die Visualisierung wird komprimiert direkt über das HTML-SDK bereitgestellt. WebHook und zusätzliche Serveradresse entfallen; lokale Verbindungen und Symcon Connect werden unterstützt.
+- Im App-Modus speichert Symcon Ansicht und Layout getrennt pro Modulinstanz. Mehrere Instanzen behalten unterschiedliche Ansichten. Geräte mit derselben Instanz teilen deren gespeicherte App-Ansicht; im Browser bleibt die Speicherung lokal.
+- Veraltete oder unvollständige Aktualisierungen überschreiben keine neueren Daten. Konfigurierte Geräte bleiben auch bei gültigen Nullwerten sichtbar.
+- Die Original-Cards bleiben unverändert und können weiterhin als Dateien ersetzt werden. Die Anpassungen für Symcon liegen in `module.php`.
+- Fehlen die Symcon-Symbole in der App, stehen lokale Ersatzsymbole für Ladesäule, Waschmaschine und Trockner bereit.
+- Codekommentare in `module.php` wurden entfernt; der Lizenzhinweis bleibt erhalten.
+
 ### Version 1.12 (22.09.2026)
 - Paralleles laufen lassen von mehreren Instanzen und individueller Ansicht funtkioniert wieder. 
 - Die Ladegeschwindigkeit der Kachel wurde verbessert.
