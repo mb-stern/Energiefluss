@@ -105,6 +105,7 @@ class Energiefluss extends IPSModuleStrict
 
         $this->RegisterPropertyString('HouseColorJson', '');
 
+        $this->RegisterPropertyBoolean('ShowFlowPoints', true);
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
         $this->SetVisualizationType(
@@ -732,6 +733,11 @@ class Energiefluss extends IPSModuleStrict
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryCharge', 'caption' => 'Batterie laden', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorBatteryDischarge', 'caption' => 'Batterie entladen', 'allowTransparent' => false],
                         ['type' => 'SelectColor', 'name' => 'ColorConsumers', 'caption' => 'Verbraucher', 'allowTransparent' => false],
+                        [
+                            'type' => 'CheckBox',
+                            'name' => 'ShowFlowPoints',
+                            'caption' => 'Animierte Flusspunkte anzeigen',
+                        ],
                         [
                             'type' => 'HorizontalSlider',
                             'name' => 'FlowSpeedPercent',
@@ -2042,6 +2048,8 @@ HTML;
     };
 
     let flowSpeedFactor = 1.0;
+    let flowPointsEnabled = true;
+    let flowAnimationFrame = 0;
 
     const NSc = 'http://www.w3.org/2000/svg';
     const RR = 38;
@@ -2519,6 +2527,8 @@ HTML;
             return;
         }
 
+        card.toggleAttribute('data-flow-points-disabled', !flowPointsEnabled);
+
         if (!card.shadowRoot.getElementById('symcon-pfc-overrides')) {
             const style = document.createElement('style');
             style.id = 'symcon-pfc-overrides';
@@ -2534,6 +2544,11 @@ HTML;
                     box-shadow: none !important;
                     border: 0 !important;
                     overflow: hidden !important;
+                }
+
+                :host([data-flow-points-disabled]) .anim-line {
+                    animation: none !important;
+                    opacity: 0 !important;
                 }
 
                 #svg-overlay,
@@ -4030,6 +4045,7 @@ HTML;
             decimal_places: 0,
             decimal_places_energy: 2,
             dynamic_line_width: true,
+            disable_animations: d.showFlowPoints === false,
             max_line_width: 5,
             min_line_width: 2,
             inverter: {
@@ -7268,6 +7284,17 @@ HTML;
             AC.inverter = d.colors.inverter || AC.inverter;
         }
 
+        flowPointsEnabled = d.showFlowPoints !== false;
+        const dots = document.getElementById('dots');
+        if (dots) dots.style.display = flowPointsEnabled ? '' : 'none';
+        if (!flowPointsEnabled && flowAnimationFrame) {
+            cancelAnimationFrame(flowAnimationFrame);
+            flowAnimationFrame = 0;
+        } else if (flowPointsEnabled && !flowAnimationFrame) {
+            last = performance.now();
+            flowAnimationFrame = requestAnimationFrame(frame);
+        }
+
         const speedPercent = Number(d && d.flowSpeedPercent);
         flowSpeedFactor = Number.isFinite(speedPercent)
             ? Math.max(0.25, Math.min(3.0, speedPercent / 100))
@@ -7589,13 +7616,14 @@ HTML;
     }
 
     function frame(now) {
-        if (!rendererActive()) return;
+        flowAnimationFrame = 0;
+        if (!rendererActive() || !flowPointsEnabled) return;
         const dt = (now - last) / 1000;
         last = now;
 
         animateEdges(dt, edgeState, lineEl, dotEl, edgePhase);
 
-        requestAnimationFrame(frame);
+        flowAnimationFrame = requestAnimationFrame(frame);
     }
 
     function fit() {
@@ -7662,7 +7690,7 @@ HTML;
     });
 
     fit();
-    requestAnimationFrame(frame);
+    flowAnimationFrame = requestAnimationFrame(frame);
 </script>
 HTML;
 
@@ -9233,6 +9261,7 @@ HTML;
             'wallbox'          => $wallbox,
             'hasWallbox'       => $hasWallbox,
             'groups'           => $groups,
+            'showFlowPoints' => $this->ReadPropertyBoolean('ShowFlowPoints'),
             'flowSpeedPercent' => $this->ReadPropertyInteger('FlowSpeedPercent'),
             'solarMaxPower'    => max(
                 1,

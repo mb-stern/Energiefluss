@@ -11,6 +11,9 @@ if (isset($argv[4])) {
     $module->RequestAction('SaveAppViewState', $argv[4]);
 }
 $mode = $argv[1] ?? 'tile';
+if (in_array($mode, ['no-flow', 'no-flow-tile'], true)) {
+    $module->setProperty('ShowFlowPoints', false);
+}
 if ($mode === 'tile') {
     echo $module->GetVisualizationTile();
     exit;
@@ -31,7 +34,7 @@ $module->setProperty('Producers', json_encode([
 $module->setProperty('Batteries', '[{"Name":"Speicher","VariableID":204,"SoCVariableID":205,"CapacityKWh":10}]');
 $module->setProperty('Inverters', '[{"Name":"WR","PowerVariableID":206}]');
 $module->setProperty('Groups', '[{"Name":"openWB","VariableID":207,"Icon":"charging-station","IsAux":true,"IsWallbox":true},{"Name":"Tumbler","VariableID":208,"Icon":"dryer"},{"Name":"Drucker","VariableID":209,"Icon":"print"}]');
-if ($mode === 'fresh-tile') {
+if (in_array($mode, ['fresh-tile', 'no-flow-tile'], true)) {
     echo $module->GetVisualizationTile();
     exit;
 }

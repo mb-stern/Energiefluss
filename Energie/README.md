@@ -255,6 +255,14 @@ mit automatischer Skalierung der Visualisierung.
 9. Darstellung anpassen
 10. Fertig
 
+## Flusspunkt-Animation
+
+Unter „Energiefluss - Farben“ lässt sich „Animierte Flusspunkte anzeigen“ ausschalten, um schwächere Geräte zu entlasten. Die Einstellung ist standardmäßig eingeschaltet und gilt pro Modulinstanz für alle Clients dieser Instanz. Sie schaltet die Flusspunkte der Technikansicht und die bewegten Impulse der Hausansicht aus; Linien, Messwerte und die Batterieanzeige bleiben erhalten. Andere Instanzen können die Animation unabhängig davon weiter anzeigen. Die eingestellte Animationsgeschwindigkeit bleibt beim Ausschalten gespeichert.
+
+Die eingebundene Originaldatei der Sunsynk Power Flow Card stammt aus Version [7.4.2](https://github.com/slipx06/sunsynk-power-flow-card/releases/tag/v7.4.2). Sie bleibt unverändert austauschbar; die Symcon-Anpassungen und die Zuordnung der Einstellung liegen in `module.php`.
+
+`node tests/visualization-animation.cjs` prüft ein- und ausgeschaltete Flusspunkte in allen sechs Techniklayouts, das Anhalten der Hausansicht-Impulse, laufende Messwertaktualisierungen und unabhängige Instanzeinstellungen.
+
 ## Skalierung der Technikansicht
 
 Die Skalierung richtet sich nach dem tatsächlichen SVG-Seitenverhältnis der Original-Card. Compact, Lite und Full bleiben jeweils in normaler und breiter Darstellung verfügbar. Eine geringere Kachelhöhe verkleinert die Grafik erst, wenn sie sonst nicht mehr vollständig hineinpasst. Das Seitenverhältnis und die getrennten Ansichten pro Instanz bleiben erhalten.
@@ -295,6 +303,9 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 ### Version 1.14 (25.10.2026)
 - Die Energiefluss-Kachel lässt sich ab Symcon 9.1 maximieren.
+- Verschieben und Neuladen der Kacheln mit getrennten Instanzansichten stabilisiert.
+- Skalierung an das tatsächliche Seitenverhältnis der Original-Card angepasst.
+- Originale Sunsynk Power Flow Card auf 7.4.2 aktualisiert; Flusspunkt-Animation pro Instanz abschaltbar.
 
 ### Version 1.13 (11.10.2026)
 - Die Visu läuft nun auch unter IPS-View.
@@ -367,7 +378,7 @@ Dieses Projekt steht unter der **MIT-Lizenz**.
 Es enthält Komponenten der folgenden Open-Source-Projekte:
 
 - Power Flow Card – MIT License
-- Sunsynk Power Flow Card – Apache License 2.0
+- Sunsynk Power Flow Card – MIT License
 - Lit – BSD-3-Clause
 
-Die jeweiligen Copyright- und Lizenzhinweise der Originalprojekte befinden sich im Verzeichnis `licenses/`.
+Die jeweiligen Copyright- und Lizenzhinweise der Originalprojekte befinden sich im Verzeichnis `assets/vendor/LICENCES/`.
