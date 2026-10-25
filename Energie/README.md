@@ -255,6 +255,10 @@ mit automatischer Skalierung der Visualisierung.
 9. Darstellung anpassen
 10. Fertig
 
+## Maximierte Kachel ab Symcon 9.1
+
+Ab Symcon 9.1 steht die Energiefluss-Darstellung auch in der maximierten Kachel zur Verfügung. Dazu muss in den visuellen Einstellungen der Instanz bzw. ihrer Verknüpfung „Maximieren-Button anzeigen“ aktiviert sein. Nach einem Modulupdate die Konfiguration bestehender Instanzen einmal übernehmen, damit die neue Visualisierungsart gesetzt wird. Ältere Symcon-Versionen behalten die normale HTML-Kachel. Die gespeicherten Ansichten pro Instanz bleiben erhalten.
+
 ## IPSView-App
 
 PHP liest die unveränderten Originaldateien aus `assets/vendor/` und bettet sie zusammen mit der Darstellung als ein gzip-komprimiertes Paket in das HTML-SDK-Kachel-HTML ein. Die Browser-/WebView-Laufzeit entpackt dieses Paket mit `DecompressionStream` und lädt die JavaScript-Module über lokale Blob-URLs. Die Darstellung benötigt keinen WebHook und keine Serveradresse. Eine bestehende Symcon-Verbindung reicht somit auch bei Zugriff über Symcon Connect; die tatsächliche mobile IPSView-Laufzeit muss gzip-Dekomprimierung und Blob-Module unterstützen. Ältere Laufzeiten ohne gzip-Unterstützung zeigen eine konkrete Fehlermeldung.
@@ -282,6 +286,9 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 ---
 
 # 📦 Versionen
+
+### Version 1.14 (25.10.2026)
+- Die Energiefluss-Kachel lässt sich ab Symcon 9.1 maximieren.
 
 ### Version 1.13 (11.10.2026)
 - Die Visu läuft nun auch unter IPS-View.

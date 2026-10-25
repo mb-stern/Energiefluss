@@ -22,6 +22,9 @@ $first = new Energiefluss(12345);
 $second = new Energiefluss(12346);
 $first->Create();
 $second->Create();
+check($first->visualizationType === 1, 'Legacy Symcon must keep normal HTML visualization without newer constants');
+$second->ApplyChanges();
+check($second->visualizationType === 1, 'Applying settings must remain compatible with older Symcon versions');
 $tile = $first->GetVisualizationTile();
 function tileBundle(string $tile): array
 {
@@ -95,3 +98,12 @@ $tile = $first->GetVisualizationTile();
 check(!str_contains($tile, '<script>throw new Error("injected")'), 'Label enters the cached tile script context');
 check(!str_contains($first->GetConfigurationForm(), 'VisualizationBaseUrl'), 'Manual address field reintroduced');
 echo "PASS: labels kept as data and no manual address setting\n";
+
+define('INSTANCE_VISUALIZATION_TYPE_HTML_FULLSCREEN', 2);
+$fullscreen = new Energiefluss(12347);
+$fullscreen->Create();
+check($fullscreen->visualizationType === 2, 'Symcon 9.1 must use HTML for both normal and maximized tiles');
+$second->ApplyChanges();
+check($second->visualizationType === 2, 'Existing instances must enable maximized HTML when settings are applied');
+check(appState($second) === ['view' => 'flow', 'layout' => 'full'], 'Enabling maximized HTML must preserve the instance view');
+echo "PASS: legacy compatibility, Symcon 9.1 maximized HTML and existing instance upgrade without losing its view\n";

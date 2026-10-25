@@ -89,6 +89,17 @@ const fixture = (mode, token = '', id = 32101, state = {view:'flow',layout:'full
             let frame = await rendered(first);
             const actual = await frame.evaluate(() => ({view:currentDisplayMode,layout:currentTechnicalLayout,pvs:lastStateData.pvs.map(pv=>pv.value),battery:lastStateData.batteries[0].value,theme:document.documentElement.dataset.theme,injected:window.injected}));
             assert.deepEqual(actual,{view:'flow',layout:'full',pvs:[2398,1971],battery:2457,theme:'dark',injected:undefined});
+            const tileViewport = first.viewportSize();
+            for (const viewport of [{width:1920,height:1080},tileViewport]) {
+                await first.setViewportSize(viewport);
+                await frame.waitForFunction(()=>Math.abs(innerWidth-parent.innerWidth)<2 && Math.abs(innerHeight-parent.innerHeight)<2);
+                const expanded = await frame.evaluate(() => {
+                    const bounds = document.getElementById('eflow').getBoundingClientRect();
+                    return {width:bounds.width,height:bounds.height,viewportWidth:innerWidth,viewportHeight:innerHeight,view:currentDisplayMode,layout:currentTechnicalLayout,pv:Number(document.querySelector('sunsynk-power-flow-card').hass.states['sensor.symcon_pv1'].state)};
+                });
+                assert.ok(Math.abs(expanded.width-expanded.viewportWidth)<2 && Math.abs(expanded.height-expanded.viewportHeight)<2,'Visualization must fill its available area after maximizing and restoring');
+                assert.deepEqual({view:expanded.view,layout:expanded.layout,pv:expanded.pv},{view:'flow',layout:'full',pv:2398});
+            }
             await frame.waitForFunction(() => visibleSamples.length > 0);
             for (const sample of await frame.evaluate(() => visibleSamples)) {assert.equal(sample.pvs,2);assert.equal(sample.batteries,1);assert.equal(sample.layout,'full');assert.equal(Number(sample.pv1),2398);}
             if (native) assert.ok(await frame.locator('[data-symcon-icon="charging-station"]').count());
@@ -146,7 +157,7 @@ const fixture = (mode, token = '', id = 32101, state = {view:'flow',layout:'full
                 await legacy.waitForFunction(()=>!document.getElementById('ef-load-retry').hidden);
                 assert.match(await legacy.locator('#ef-load-status').innerText(),/gzip/);
             }
-            console.log('PASS: '+transport+' without WebHook, immediate embedded state without startup requestAction, both original cards, isolated views, reloads after page return, zeros, escaped labels and live SDK updates');
+            console.log('PASS: '+transport+' without WebHook, immediate embedded state without startup requestAction, maximizing and restoring, both original cards, isolated views, reloads after page return, zeros, escaped labels and live SDK updates');
             await context.close();
         }
     } finally {await browser.close();}

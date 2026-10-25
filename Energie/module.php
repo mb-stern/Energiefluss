@@ -107,12 +107,18 @@ class Energiefluss extends IPSModuleStrict
 
         $this->RegisterPropertyInteger('FlowSpeedPercent', 100);
 
-        $this->SetVisualizationType(1);
+        $this->SetVisualizationType(
+            defined('INSTANCE_VISUALIZATION_TYPE_HTML_FULLSCREEN') ? INSTANCE_VISUALIZATION_TYPE_HTML_FULLSCREEN : 1
+        );
     }
 
     public function ApplyChanges(): void
     {
         parent::ApplyChanges();
+
+        $this->SetVisualizationType(
+            defined('INSTANCE_VISUALIZATION_TYPE_HTML_FULLSCREEN') ? INSTANCE_VISUALIZATION_TYPE_HTML_FULLSCREEN : 1
+        );
 
         try {
             foreach ($this->GetMessageList() as $senderID => $messages) {
