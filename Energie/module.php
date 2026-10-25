@@ -4544,6 +4544,7 @@ HTML;
         if (!rendererActive()) return;
 
         applySunsynkVisualFixes(card, d);
+        fit();
 
         if (!card.__symconVisualObserver && card.shadowRoot) {
             let scheduled = false;
@@ -4575,6 +4576,7 @@ HTML;
                             ratioContext.batteries
                         );
                     }
+                    fit();
                 });
             });
 
@@ -4582,7 +4584,7 @@ HTML;
                 childList: true,
                 subtree: true,
                 attributes: true,
-                attributeFilter: ['style', 'class', 'fill', 'stroke']
+                attributeFilter: ['style', 'class', 'fill', 'stroke', 'viewBox']
             });
         }
     }
@@ -6604,6 +6606,7 @@ HTML;
         if (!rendererActive()) return;
         if (card) card.style.removeProperty('opacity');
         initialCardsReady.add(mode);
+        fit();
         revealInitialView();
     }
 
@@ -7605,7 +7608,16 @@ HTML;
         }
 
         const baseWidth = layoutWidth;
-        const baseHeight = 640;
+        const houseMode = houseStage && houseStage.style.display !== 'none';
+        const viewBox = !houseMode && sunsynkCard?.shadowRoot?.querySelector('svg')?.viewBox?.baseVal;
+        const baseHeight = viewBox?.width > 0 && viewBox?.height > 0
+            ? baseWidth * viewBox.height / viewBox.width
+            : 640;
+
+        for (const id of ['scale-root', 'wrap', 'fit', 'stage']) {
+            const element = document.getElementById(id);
+            if (element) element.style.height = baseHeight + 'px';
+        }
 
         const availableWidth = host.clientWidth;
         const availableHeight = host.clientHeight;
@@ -7613,8 +7625,6 @@ HTML;
         if (availableWidth <= 0 || availableHeight <= 0) {
             return;
         }
-
-        const houseMode = houseStage && houseStage.style.display !== 'none';
 
         const scaleX = availableWidth / baseWidth;
         const scaleY = availableHeight / baseHeight;
