@@ -31,6 +31,6 @@ Dieses Modul verwendet folgende Open-Source-Komponenten:
 | Power Flow Card (LordGuenni) | MIT | Hausgrafik |
 | Lit (Google LLC) | BSD-3-Clause | Web Components Framework |
 
-Die vollständigen Lizenztexte befinden sich im Verzeichnis `licenses/`.
+Die vollständigen Lizenztexte befinden sich im Verzeichnis `Energie/assets/vendor/LICENCES/`.
 
 Alle Rechte an den jeweiligen Drittkomponenten verbleiben bei deren ursprünglichen Autoren.

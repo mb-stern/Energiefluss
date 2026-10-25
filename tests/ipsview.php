@@ -99,6 +99,17 @@ check(!str_contains($tile, '<script>throw new Error("injected")'), 'Label enters
 check(!str_contains($first->GetConfigurationForm(), 'VisualizationBaseUrl'), 'Manual address field reintroduced');
 echo "PASS: labels kept as data and no manual address setting\n";
 
+check(currentHostState($first)['showFlowPoints'] === true, 'Existing instances must keep flow animations enabled by default');
+$first->setProperty('FlowSpeedPercent', 135);
+$first->setProperty('ShowFlowPoints', false);
+$disabled = currentHostState($first);
+check($disabled['showFlowPoints'] === false && $disabled['flowSpeedPercent'] === 135, 'Disabling dots must preserve animation speed');
+check(tileBundle($first->GetVisualizationTile())['payload']['showFlowPoints'] === false, 'Initial tile must honor disabled flow animations');
+check(currentHostState($second)['showFlowPoints'] === true, 'Animation preference leaked into another instance');
+check(appState($first) === ['view' => 'house', 'layout' => 'compact-wide'], 'Animation preference overwrote the saved view');
+check(str_contains($first->GetConfigurationForm(), 'ShowFlowPoints'), 'Flow animation option is missing from the configuration');
+echo "PASS: animation option enabled by default, disabled start state, preserved speed and independent instance views\n";
+
 define('INSTANCE_VISUALIZATION_TYPE_HTML_FULLSCREEN', 2);
 $fullscreen = new Energiefluss(12347);
 $fullscreen->Create();
