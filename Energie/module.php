@@ -1038,6 +1038,8 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
 <script>
 (function () {
     try {
+    const tileWindow = window, tileDocument = document, tileFrame = window.frameElement;
+    const tileActive = () => !tileWindow.closed && tileWindow.document === tileDocument && (!tileFrame || tileFrame.isConnected);
     const packed = document.getElementById('ef-bundle-data').textContent.replace(/\s+/g, '');
     const grid = __GRID_JSON__;
     const frame = document.createElement('iframe');
@@ -1059,7 +1061,9 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
         return {dark: !!(window.matchMedia && window.matchMedia('(prefers-color-scheme: dark)').matches)};
     }
     function fail(message) {
+        if (!tileActive()) return;
         clearTimeout(timer);
+        frame.classList.add('ef-starting');
         ready = false;
         status.textContent = message;
         status.hidden = false;
@@ -1070,9 +1074,10 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
             && Array.isArray(data.pvs) && Array.isArray(data.batteries) && Array.isArray(data.groups);
     }
     function sync() {
-        if (ready) frame.contentWindow.postMessage({__energieflussBridge:true,requestId,payload:last,grid,theme:theme(),viewState:appMode ? viewState : null}, '*');
+        if (tileActive() && ready && frame.isConnected && frame.contentWindow) frame.contentWindow.postMessage({__energieflussBridge:true,requestId,payload:last,grid,theme:theme(),viewState:appMode ? viewState : null}, '*');
     }
     function send(data) {
+        if (!tileActive()) return;
         if (!valid(data) || (last && data.stateVersion < last.stateVersion)) return;
         last = data;
         if (!viewEdited && data.viewState) viewState = data.viewState;
@@ -1126,9 +1131,9 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
         retryButton.hidden = true;
         try {
             await waitForTile();
-            if (current !== requestId) return;
+            if (!tileActive() || current !== requestId) return;
             const bundle = await getBundle();
-            if (current !== requestId) return;
+            if (!tileActive() || current !== requestId) return;
             if (!last) send(bundle.payload);
             const boot = {requestId:current,appMode,viewState:appMode ? (viewState || bundle.viewState) : null,payload:last,theme:theme(),grid};
             const json = JSON.stringify(boot).replaceAll('<', '\\u003c');
@@ -1161,6 +1166,7 @@ window.addEventListener('unhandledrejection', event => window.__energieflussStar
         try {Promise.resolve(requestAction('SaveAppViewState', JSON.stringify(state))).catch(() => fail('Die App-Ansicht konnte nicht gespeichert werden.'));} catch (_) {fail('Die App-Ansicht konnte nicht gespeichert werden.');}
     };
     window.handleMessage = function (value) {
+        if (!tileActive()) return;
         const data = typeof value === 'string' ? JSON.parse(value) : value;
         if (data?.command === 'reloadHtml') {startLoad(); return;}
         send(data);
@@ -1984,7 +1990,11 @@ HTML;
 </div>
 
 <script>
+    const rendererWindow = window, rendererDocument = document, rendererFrame = window.frameElement;
+    const rendererActive = () => !rendererWindow.closed && rendererWindow.document === rendererDocument && (!rendererFrame || rendererFrame.isConnected);
+
     function detectTheme() {
+        if (!rendererActive()) return;
 
         if (window.__EF_BRIDGE_THEME__ && typeof window.__EF_BRIDGE_THEME__.dark === 'boolean') {
             document.documentElement.setAttribute('data-theme', window.__EF_BRIDGE_THEME__.dark ? 'dark' : 'light');
@@ -2703,6 +2713,7 @@ HTML;
     }
 
     async function ensurePowerFlowCard() {
+        if (!rendererActive()) return null;
         if (pfcCard) {
             return pfcCard;
         }
@@ -2715,6 +2726,7 @@ HTML;
             try {
 
                 await import('__POWER_FLOW_MODULE_URL__');
+                if (!rendererActive()) return null;
                 if (!customElements.get('power-flow-card')) {
                     throw new Error('Die JS-Datei hat power-flow-card nicht registriert.');
                 }
@@ -2766,6 +2778,7 @@ HTML;
                 finishInitialCard('house', card);
                 return card;
             } catch (err) {
+                if (!rendererActive()) return null;
                 console.error('Power Flow Card konnte nicht initialisiert werden:', err);
 
                 if (pfcLoading) {
@@ -3114,6 +3127,7 @@ HTML;
     }
 
     function updatePowerFlowCard(d, grid, haus, pvs, batteries, wallbox) {
+        if (!rendererActive()) return;
 
         const visualHouseEnergy = Math.max(
             Number(d.houseEnergy || 0) -
@@ -4527,6 +4541,7 @@ HTML;
     async function applySunsynkViewOverrides(card, d = null) {
         if (!card) return;
         await card.updateComplete;
+        if (!rendererActive()) return;
 
         applySunsynkVisualFixes(card, d);
 
@@ -4534,10 +4549,12 @@ HTML;
             let scheduled = false;
 
             card.__symconVisualObserver = new MutationObserver(() => {
+                if (!rendererActive()) return;
                 if (scheduled) return;
                 scheduled = true;
 
                 requestAnimationFrame(() => {
+                    if (!rendererActive()) return;
                     scheduled = false;
 
                     applySunsynkVisualFixes(
@@ -6474,24 +6491,21 @@ HTML;
     ) {
         [0, 40, 120, 300].forEach(delay => {
             setTimeout(
-                () => applySunsynkRatios(
-                    card,
-                    d,
-                    grid,
-                    haus,
-                    pvs,
-                    batteries
-                ),
+                () => {
+                    if (rendererActive()) applySunsynkRatios(card, d, grid, haus, pvs, batteries);
+                },
                 delay
             );
         });
     }
 
     async function ensureSunsynkCard(d, grid, haus, pvs, batteries, wallbox, groups) {
+        if (!rendererActive()) return null;
         if (sunsynkCard) return sunsynkCard;
         if (sunsynkInitPromise) return sunsynkInitPromise;
         sunsynkInitPromise = (async () => {
             await loadOriginalSunsynkModule();
+            if (!rendererActive()) return null;
             const host = document.getElementById('sunsynk-host');
             const card = document.createElement('sunsynk-power-flow-card');
             card.style.opacity = '0';
@@ -6518,6 +6532,7 @@ HTML;
                 batteries
             };
             await applySunsynkViewOverrides(card, d);
+            if (!rendererActive()) return null;
             scheduleSunsynkRatios(card, d, grid, haus, pvs, batteries);
             updateSunsynkWallboxAuxInfo(card, d, wallbox);
             document.getElementById('sunsynk-loading').style.display = 'none';
@@ -6529,6 +6544,7 @@ HTML;
             finishInitialCard('flow', card);
             return card;
         })().catch(err => {
+            if (!rendererActive()) return null;
             console.error('Sunsynk-Karte:', err);
             const loading = document.getElementById('sunsynk-loading');
             const error = document.getElementById('sunsynk-error');
@@ -6585,6 +6601,7 @@ HTML;
     const initialCardsReady = new Set();
 
     function finishInitialCard(mode, card = null) {
+        if (!rendererActive()) return;
         if (card) card.style.removeProperty('opacity');
         initialCardsReady.add(mode);
         revealInitialView();
@@ -7285,6 +7302,7 @@ HTML;
     }
 
     function setState(d) {
+        if (!rendererActive()) return;
         applyConfiguredColors(d);
 
         const grid = wholeWatts(d.grid);
@@ -7492,6 +7510,7 @@ HTML;
     let lastCompactLayout = window.matchMedia('(max-width: 600px)').matches;
 
     function handleMessage(data) {
+        if (!rendererActive()) return;
         const d = typeof data === 'string' ? JSON.parse(data) : data;
 
         if (d && d.command === 'reloadHtml') {
@@ -7513,6 +7532,7 @@ HTML;
     }
 
     function refreshResponsiveState() {
+        if (!rendererActive()) return;
         const compactNow = window.matchMedia('(max-width: 600px)').matches;
 
         if (compactNow !== lastCompactLayout) {
@@ -7566,6 +7586,7 @@ HTML;
     }
 
     function frame(now) {
+        if (!rendererActive()) return;
         const dt = (now - last) / 1000;
         last = now;
 
@@ -7575,6 +7596,7 @@ HTML;
     }
 
     function fit() {
+        if (!rendererActive()) return;
         const host = document.getElementById('scale-host');
         const root = document.getElementById('scale-root');
 
@@ -7618,11 +7640,13 @@ HTML;
     }
 
     window.addEventListener('resize', () => {
+        if (!rendererActive()) return;
         fit();
         refreshResponsiveState();
         requestAnimationFrame(alignHomeInfoToSolarBottom);
     });
     window.addEventListener('load', () => {
+        if (!rendererActive()) return;
         fit();
         requestAnimationFrame(alignHomeInfoToSolarBottom);
     });
@@ -7677,7 +7701,9 @@ HTML;
     {
         $html = '<meta charset="utf-8"><script>window.__EF_BOOT__=__EF_BOOT_JSON__;window.__EF_INSTANCE_ID__='
             . json_encode((string) $this->InstanceID, JSON_THROW_ON_ERROR)
-            . ';window.addEventListener("error",event=>window.parent.postMessage({requestId:window.__EF_BOOT__.requestId,__energieflussHostError:"Energiefluss: "+(event.error?.message || event.message)},"*"));'
+            . ';(()=>{const owner=window,ownerDocument=document,ownerFrame=window.frameElement,boot=window.__EF_BOOT__;'
+            . 'window.addEventListener("error",event=>{if(owner.closed||owner.document!==ownerDocument||(ownerFrame&&!ownerFrame.isConnected))return;'
+            . 'window.parent.postMessage({requestId:boot.requestId,__energieflussHostError:"Energiefluss: "+(event.error?.message||event.message)},"*");});})();'
             . 'window.__EF_APP_MODE__=window.__EF_BOOT__.appMode;'
             . 'window.__EF_APP_VIEW_STATE__=window.__EF_BOOT__.viewState;'
             . 'window.__EF_BRIDGE_THEME__=window.__EF_BOOT__.theme;'
@@ -7692,6 +7718,7 @@ HTML;
 <script>
 
 window.addEventListener('message', function (event) {
+    if (!rendererActive()) return;
     const message = event.data;
     if (event.source !== window.parent || !message || message.__energieflussBridge !== true || message.requestId !== window.__EF_BOOT__.requestId) {
         return;
