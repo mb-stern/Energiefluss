@@ -6,14 +6,19 @@ class IPSModuleStrict
 {
     public array $messages = [];
     public bool $sendSucceeds = true;
+    public int $visualizationType = 0;
     private array $properties = [];
     private static array $attributes = [];
 
     public function __construct(public int $InstanceID) {}
     public function Create(): void {}
+    public function ApplyChanges(): void {}
+    protected function GetMessageList(): array { return []; }
+    protected function GetReferenceList(): array { return []; }
+    protected function GetIDForIdent(string $ident): int { return 0; }
     public array $removedHooks = [];
     protected function UnregisterHook(string $hook): bool { $this->removedHooks[] = $hook; return true; }
-    protected function SetVisualizationType(int $type): void {}
+    protected function SetVisualizationType(int $type): void { $this->visualizationType = $type; }
     protected function RegisterPropertyString(string $name, string $value): void { $this->properties[$name] = $value; }
     protected function RegisterPropertyInteger(string $name, int $value): void { $this->properties[$name] = $value; }
     protected function RegisterPropertyBoolean(string $name, bool $value): void { $this->properties[$name] = $value; }
@@ -29,6 +34,8 @@ class IPSModuleStrict
 }
 
 $testVariables = [];
+define('KR_READY', 10103);
+function IPS_GetKernelRunlevel(): int { return 0; }
 function IPS_VariableExists(int $id): bool { return array_key_exists($id, $GLOBALS['testVariables']); }
 function IPS_ObjectExists(int $id): bool { return false; }
 function GetValue(int $id): mixed { return $GLOBALS['testVariables'][$id]; }
