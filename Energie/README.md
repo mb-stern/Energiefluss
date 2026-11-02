@@ -255,6 +255,36 @@ mit automatischer Skalierung der Visualisierung.
 9. Darstellung anpassen
 10. Fertig
 
+## Flusspunkt-Animation
+
+Unter „Energiefluss - Farben“ lässt sich „Animierte Flusspunkte anzeigen“ ausschalten, um schwächere Geräte zu entlasten. Die Einstellung ist standardmäßig eingeschaltet und gilt pro Modulinstanz für alle Clients dieser Instanz. Sie schaltet die Flusspunkte der Technikansicht und die bewegten Impulse der Hausansicht aus; Linien, Messwerte und die Batterieanzeige bleiben erhalten. Andere Instanzen können die Animation unabhängig davon weiter anzeigen. Die eingestellte Animationsgeschwindigkeit bleibt beim Ausschalten gespeichert.
+
+Die eingebundene Originaldatei der Sunsynk Power Flow Card stammt aus Version [7.4.2](https://github.com/slipx06/sunsynk-power-flow-card/releases/tag/v7.4.2). Sie bleibt unverändert austauschbar; die Symcon-Anpassungen und die Zuordnung der Einstellung liegen in `module.php`.
+
+`node tests/visualization-animation.cjs` prüft ein- und ausgeschaltete Flusspunkte in allen sechs Techniklayouts, das Anhalten der Hausansicht-Impulse, laufende Messwertaktualisierungen und unabhängige Instanzeinstellungen.
+
+## Skalierung der Technikansicht
+
+Die Skalierung richtet sich nach dem tatsächlichen SVG-Seitenverhältnis der Original-Card. Compact, Lite und Full bleiben jeweils in normaler und breiter Darstellung verfügbar. Eine geringere Kachelhöhe verkleinert die Grafik erst, wenn sie sonst nicht mehr vollständig hineinpasst. Das Seitenverhältnis und die getrennten Ansichten pro Instanz bleiben erhalten.
+
+## Maximierte Kachel ab Symcon 9.1
+
+Ab Symcon 9.1 steht die Energiefluss-Darstellung auch in der maximierten Kachel zur Verfügung. Dazu muss in den visuellen Einstellungen der Instanz bzw. ihrer Verknüpfung „Maximieren-Button anzeigen“ aktiviert sein. Nach einem Modulupdate die Konfiguration bestehender Instanzen einmal übernehmen, damit die neue Visualisierungsart gesetzt wird. Ältere Symcon-Versionen behalten die normale HTML-Kachel. Die gespeicherten Ansichten pro Instanz bleiben erhalten.
+
+## IPSView-App
+
+PHP liest die unveränderten Originaldateien aus `assets/vendor/` und bettet sie zusammen mit der Darstellung als ein gzip-komprimiertes Paket in das HTML-SDK-Kachel-HTML ein. Die Browser-/WebView-Laufzeit entpackt dieses Paket mit `DecompressionStream` und lädt die JavaScript-Module über lokale Blob-URLs. Die Darstellung benötigt keinen WebHook und keine Serveradresse. Eine bestehende Symcon-Verbindung reicht somit auch bei Zugriff über Symcon Connect; die tatsächliche mobile IPSView-Laufzeit muss gzip-Dekomprimierung und Blob-Module unterstützen. Ältere Laufzeiten ohne gzip-Unterstützung zeigen eine konkrete Fehlermeldung.
+
+Während des Starts bleibt die Darstellung bis zur fertig angepassten Card verborgen. Der iframe behält dabei seine Größe und wird über Transparenz ausgeblendet, damit mobile WebViews ihn bereits initialisieren können. Die lokalen JavaScript-URLs bleiben für die Lebensdauer der Seite erhalten, auch wenn die App sie beim Verlassen der Kachel zwischenspeichert; beim endgültigen Entladen gibt der Browser sie frei. PHP liefert die aktuellen Messwerte und die gespeicherte App-Ansicht bereits im komprimierten Paket mit. Vor dem Entpacken wartet der Start auf das vollständige Laden der äußeren Kachel, ihren ersten Darstellungszyklus und eine gültige iframe-Größe. Erst danach wird die innere Darstellung einmal eingesetzt; die vorherige zusätzliche Leer-Navigation entfällt. Die Startüberwachung beginnt erst mit dem Einsetzen der inneren Darstellung. Es gibt keinen automatischen Neustart. Der Start benötigt keine zusätzliche `requestAction`-Anfrage oder SDK-Antwort. Das Paket liegt als eingebetteter Text außerhalb des kleinen Startskripts, sodass keine sehr große JavaScript-Zeile ausgeführt werden muss. JavaScript-Startfehler werden angezeigt. Weitere Messwerte und die gespeicherte App-Ansicht werden über die normalen HTML-SDK-Nachrichten aktualisiert; ältere oder unvollständige Nachrichten können neuere Daten nicht überschreiben. Wird Kachel-HTML von einem Client zwischengespeichert, können zunächst dessen ältere Messwerte erscheinen, bis eine aktuelle Nachricht eintrifft. Gültige Nullwerte werden weiterhin dargestellt. Beide Original-Cards bleiben unverändert und können weiterhin als Dateien ersetzt werden. Anpassungen für Symcon, einschließlich eines Ersatzspeichers bei gesperrtem `localStorage`, liegen in `module.php`. Fehlt die Symcon-Icon-Bibliothek, stehen in der App lokale SVG-Symbole für Ladesäule, Waschmaschine und Trockner bereit; andere nicht verfügbare Symbole erhalten einen Stecker als Ersatz.
+
+Die komprimierte Kachel umfasst derzeit ungefähr 476 KB und liegt unter dem beobachteten Symcon-Output-Buffer-Limit von 1.048.576 Bytes. Symcon überwacht dieses Limit selbst und zeigt bei einer Überschreitung seine vorhandene Fehlermeldung an.
+
+Beim Entfernen oder Ersetzen einer Kachel werden verspätete Aktualisierungen und nachlaufende Initialisierungen ihrer alten Darstellung verworfen. Fehler einer noch aktiven Darstellung bleiben sichtbar und lassen sich über „Erneut laden“ erneut prüfen.
+
+Ansicht und Techniklayout bleiben pro Modulinstanz getrennt. Im Browser werden sie weiterhin lokal gespeichert. Im App-Modus ohne Serveradresse speichert Symcon sie pro Instanz, sodass sie auch ohne `localStorage` nach dem erneuten Öffnen erhalten bleiben. Mehrere Instanzen können somit unterschiedliche Ansichten behalten; im App-Modus gilt die gespeicherte Ansicht einer Instanz für alle Clients, die diesen Modus verwenden.
+
+Die PHP-Regressionstests für eingebettete Originaldateien, die Kachelgröße, vollständige Startdaten und gespeicherte Ansichten lassen sich mit `php tests/ipsview.php` ausführen. `node tests/ipsview-browser.cjs` prüft mit Playwright und Chromium den App-Modus ohne Browseradresse, den Browser und eine simulierte Connect-Adresse, einschließlich des Starts ohne SDK-Anfrage, einer mobilen Bildschirmgröße und der Rückkehr zu einer zwischengespeicherten Kachel. `node tests/visualization-startup.cjs` prüft zusätzlich eine noch ladende äußere Kachel, eine Kachel ohne zugewiesene Größe und verzögertes Entpacken. In allen Fällen wird genau einmal gestartet und der jüngste SDK-Datenstand verwendet. `node tests/visualization-lifecycle.cjs` prüft DOM-Verschiebungen mit noch laufenden Modulimporten, verspätete Rückrufe entfernter Kacheln, echte Fehlermeldungen und Neuladen mit zwei getrennten Instanzansichten. `node tests/visualization-scaling.cjs` prüft die SVG-Flächennutzung aller sechs Techniklayouts, Größenänderungen, beide Schriftgrößen und den Wechsel zur Hausansicht mit einer unabhängigen zweiten Instanz. Optional lassen sich `PHP_BINARY` und `CHROMIUM_BINARY` setzen. Die Tests verwenden einen begrenzten Symcon-Teststub und ersetzen keinen Test in der nativen IPSView-App, der Symcon-App unter iOS oder über einen echten Connect-Tunnel.
+
 ---
 
 # ❤️ Credits
@@ -270,6 +300,23 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 ---
 
 # 📦 Versionen
+
+### Version 1.14 (25.10.2026)
+- Die Energiefluss-Kachel lässt sich ab Symcon 9.1 maximieren.
+- Verschieben und Neuladen der Kacheln mit getrennten Instanzansichten stabilisiert.
+- Skalierung an das tatsächliche Seitenverhältnis der Original-Card angepasst.
+- Originale Sunsynk Power Flow Card auf 7.4.2 aktualisiert; Flusspunkt-Animation pro Instanz abschaltbar.
+
+### Version 1.13 (11.10.2026)
+- Die Visu läuft nun auch unter IPS-View.
+- Es wird nun kein Webhook mehr für die Auslieferung der Sunsynk-Card verwendet.
+
+### Version 1.12 (22.09.2026)
+- Paralleles laufen lassen von mehreren Instanzen und individueller Ansicht funtkioniert wieder. 
+- Die Ladegeschwindigkeit der Kachel wurde verbessert.
+
+### Version 1.11 (16.09.2026)
+- Anpassungen um die IPS-View Kompatibilität zu erreichen.
 
 ### Version 1.10 (06.09.2026)
 - Zusätzlicher Code wird nun über einen Webhook und nicht mehr direkt ins html geladen, um die Output Buffer Fehlermeldung zu vermeiden.
@@ -331,7 +378,7 @@ Dieses Projekt steht unter der **MIT-Lizenz**.
 Es enthält Komponenten der folgenden Open-Source-Projekte:
 
 - Power Flow Card – MIT License
-- Sunsynk Power Flow Card – Apache License 2.0
+- Sunsynk Power Flow Card – MIT License
 - Lit – BSD-3-Clause
 
-Die jeweiligen Copyright- und Lizenzhinweise der Originalprojekte befinden sich im Verzeichnis `licenses/`.
+Die jeweiligen Copyright- und Lizenzhinweise der Originalprojekte befinden sich im Verzeichnis `assets/vendor/LICENCES/`.
