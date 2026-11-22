@@ -1550,7 +1550,7 @@ HTML;
     }
 
     #sunsynk-host { position:absolute; inset:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
-    #sunsynk-host sunsynk-power-flow-card { display:block; width:100%; height:100%; --ha-card-border-radius:0px; --ha-card-box-shadow:none; --ha-card-border-width:0px; --ha-card-background:transparent; --card-background-color:transparent; --primary-text-color:var(--w-text); --secondary-text-color:var(--w-text2); }
+    #sunsynk-host sunsynk-power-flow-card { display:block; width:100%; height:100%; --ha-card-background:transparent; --card-background-color:transparent; --primary-text-color:var(--w-text); --secondary-text-color:var(--w-text2); }
     #sunsynk-loading, #sunsynk-error { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--w-text2); font-size:16px; padding:20px; text-align:center; box-sizing:border-box; }
     #sunsynk-error { display:none; color:#ef5350; }
     .tech-card {
@@ -4535,28 +4535,8 @@ HTML;
         }
     }
 
-    function removeSunsynkOuterFrame(card) {
-        const root = card?.shadowRoot;
-        if (!root || root.getElementById('symcon-sunsynk-frame-overrides')) return;
-
-        const style = document.createElement('style');
-        style.id = 'symcon-sunsynk-frame-overrides';
-        style.textContent = `
-            ha-card,
-            .container.card {
-                border: none !important;
-                border-radius: 0 !important;
-                box-shadow: none !important;
-                outline: none !important;
-            }
-        `;
-        root.appendChild(style);
-    }
-
     function applySunsynkVisualFixes(card, d = null) {
         if (!card) return;
-
-        removeSunsynkOuterFrame(card);
 
         applyAdditionalLoadColours(card);
         removeUnusedFourthConsumerForThree(card);
