@@ -1550,7 +1550,7 @@ HTML;
     }
 
     #sunsynk-host { position:absolute; inset:0; overflow:hidden; display:flex; align-items:center; justify-content:center; }
-    #sunsynk-host sunsynk-power-flow-card { display:block; width:100%; height:100%; --ha-card-background:transparent; --card-background-color:transparent; --primary-text-color:var(--w-text); --secondary-text-color:var(--w-text2); }
+    #sunsynk-host sunsynk-power-flow-card { display:block; width:100%; height:100%; --ha-card-border-radius:0px; --ha-card-box-shadow:none; --ha-card-border-width:0px; --ha-card-background:transparent; --card-background-color:transparent; --primary-text-color:var(--w-text); --secondary-text-color:var(--w-text2); }
     #sunsynk-loading, #sunsynk-error { position:absolute; inset:0; display:flex; align-items:center; justify-content:center; color:var(--w-text2); font-size:16px; padding:20px; text-align:center; box-sizing:border-box; }
     #sunsynk-error { display:none; color:#ef5350; }
     .tech-card {
