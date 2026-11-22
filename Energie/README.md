@@ -301,6 +301,9 @@ für die Veröffentlichung ihrer hervorragenden Open-Source-Projekte.
 
 # 📦 Versionen
 
+### Version 1.15 (22.11.2026)
+- Feinanpassung: Äußere Umrandung, abgerundete Ecken und Schatten der technischen Energieflussansicht entfernt.
+
 ### Version 1.14 (25.10.2026)
 - Die Energiefluss-Kachel lässt sich ab Symcon 9.1 maximieren.
 - Verschieben und Neuladen der Kacheln mit getrennten Instanzansichten stabilisiert.

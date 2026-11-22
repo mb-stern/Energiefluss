@@ -4535,8 +4535,28 @@ HTML;
         }
     }
 
+    function removeSunsynkOuterFrame(card) {
+        const root = card?.shadowRoot;
+        if (!root || root.getElementById('symcon-sunsynk-frame-overrides')) return;
+
+        const style = document.createElement('style');
+        style.id = 'symcon-sunsynk-frame-overrides';
+        style.textContent = `
+            ha-card,
+            .container.card {
+                border: none !important;
+                border-radius: 0 !important;
+                box-shadow: none !important;
+                outline: none !important;
+            }
+        `;
+        root.appendChild(style);
+    }
+
     function applySunsynkVisualFixes(card, d = null) {
         if (!card) return;
+
+        removeSunsynkOuterFrame(card);
 
         applyAdditionalLoadColours(card);
         removeUnusedFourthConsumerForThree(card);
